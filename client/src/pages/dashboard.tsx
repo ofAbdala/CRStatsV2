@@ -133,7 +133,7 @@ export default function DashboardPage() {
               {mockBattles.map((battle) => (
                 <div 
                   key={battle.id} 
-                  className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-white/5 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-white/5 transition-colors cursor-pointer interactive-hover"
                 >
                   <div className="flex items-center gap-3">
                     <div className={cn(
@@ -163,7 +163,9 @@ export default function DashboardPage() {
                 </div>
               ))}
               <div className="pt-4 text-center">
-                <button className="text-sm text-primary hover:underline font-medium">Ver histórico completo</button>
+                <Link href="/decks">
+                  <button className="text-sm text-primary hover:underline font-medium transition-colors hover:text-primary/80">Ver histórico completo</button>
+                </Link>
               </div>
             </CardContent>
           </Card>

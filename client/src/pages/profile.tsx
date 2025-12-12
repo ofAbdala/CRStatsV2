@@ -107,7 +107,7 @@ export default function ProfilePage() {
                   <Zap className="w-3 h-3 text-primary" /> Análise avançada de decks
                 </li>
               </ul>
-              <Button className="w-full font-bold shadow-lg shadow-primary/20">
+              <Button className="w-full font-bold shadow-lg shadow-primary/20 interactive-hover">
                 <CreditCard className="w-4 h-4 mr-2" />
                 Fazer Upgrade para PRO
               </Button>
