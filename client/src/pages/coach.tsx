@@ -1,19 +1,40 @@
 import React, { useState, useRef, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Sparkles, User, Bot, Zap } from "lucide-react";
-import { mockChatHistory, Message } from "@/lib/mockData";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Send, Sparkles, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
 
 export default function CoachPage() {
-  const [messages, setMessages] = useState<Message[]>(mockChatHistory);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Olá! Sou seu Coach de Clash Royale. Posso te ajudar com estratégias, análise de decks, matchups e dicas para subir de troféus. Como posso ajudar hoje?",
+      timestamp: new Date().toISOString(),
+    },
+  ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => api.profile.get() as Promise<{ clashTag?: string }>,
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -21,39 +42,54 @@ export default function CoachPage() {
     }
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
-    const newUserMsg: Message = {
+    const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: input,
       timestamp: new Date().toISOString(),
     };
 
-    setMessages([...messages, newUserMsg]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsTyping(true);
+    setError(null);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const newAiMsg: Message = {
+    try {
+      const chatMessages = messages
+        .filter((m) => m.id !== "welcome")
+        .map((m) => ({ role: m.role, content: m.content }));
+      chatMessages.push({ role: "user", content: input });
+
+      const response = await api.coach.chat(chatMessages, profile?.clashTag);
+
+      const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Essa é uma ótima pergunta. Com base no seu deck atual, eu recomendaria focar em defender e contra-atacar. Seu deck é muito forte no Double Elixir, então tente jogar de forma passiva no primeiro minuto.",
-        timestamp: new Date().toISOString(),
+        content: response.message,
+        timestamp: response.timestamp,
       };
-      setMessages((prev) => [...prev, newAiMsg]);
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err: any) {
+      setError(err.message || "Falha ao gerar resposta. Tente novamente.");
+    } finally {
       setIsTyping(false);
-    }, 2000);
+    }
+  };
+
+  const handleSuggestion = (text: string) => {
+    setInput(text);
   };
 
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2">
+          <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2" data-testid="title-coach">
             Coach IA <span className="text-xs font-normal px-2 py-1 rounded bg-primary/20 text-primary uppercase tracking-wide">Beta</span>
           </h1>
           <p className="text-muted-foreground">Tire dúvidas sobre decks, matchups e estratégias.</p>
@@ -65,6 +101,7 @@ export default function CoachPage() {
               {messages.map((msg) => (
                 <div
                   key={msg.id}
+                  data-testid={`message-${msg.role}-${msg.id}`}
                   className={cn(
                     "flex gap-4 animate-in fade-in slide-in-from-bottom-2",
                     msg.role === "user" ? "flex-row-reverse" : "flex-row"
@@ -79,7 +116,7 @@ export default function CoachPage() {
                         <Sparkles className="w-5 h-5" />
                       </div>
                     ) : (
-                      <AvatarFallback>KS</AvatarFallback>
+                      <AvatarFallback>U</AvatarFallback>
                     )}
                   </Avatar>
                   
@@ -89,7 +126,7 @@ export default function CoachPage() {
                       ? "bg-primary text-primary-foreground rounded-tr-none" 
                       : "bg-muted rounded-tl-none"
                   )}>
-                    <p className="text-sm leading-relaxed">{msg.content}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     <span className="text-[10px] opacity-50 mt-2 block">
                       {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>
@@ -97,7 +134,7 @@ export default function CoachPage() {
                 </div>
               ))}
               {isTyping && (
-                <div className="flex gap-4">
+                <div className="flex gap-4" data-testid="typing-indicator">
                   <Avatar className="w-10 h-10 bg-primary/10 border border-primary/20">
                     <div className="flex items-center justify-center w-full h-full text-primary">
                       <Sparkles className="w-5 h-5" />
@@ -110,22 +147,31 @@ export default function CoachPage() {
                   </div>
                 </div>
               )}
+              {error && (
+                <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 p-3 rounded-lg" data-testid="error-message">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
               <div ref={scrollRef} />
             </div>
           </ScrollArea>
 
           <div className="p-4 border-t border-border bg-card/80">
-            <form onSubmit={handleSend} className="max-w-3xl mx-auto relative flex gap-2">
+            <form onSubmit={handleSend} className="max-w-3xl mx-auto relative flex gap-2" data-testid="chat-form">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Pergunte sobre seu deck ou uma batalha específica..."
                 className="h-12 pl-4 pr-12 bg-background/50 border-border shadow-inner"
+                data-testid="input-message"
+                disabled={isTyping}
               />
               <Button 
                 type="submit" 
                 size="icon" 
                 disabled={!input.trim() || isTyping}
+                data-testid="button-send"
                 className={cn(
                   "absolute right-2 top-2 h-8 w-8 transition-all",
                   input.trim() ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -134,10 +180,10 @@ export default function CoachPage() {
                 <Send className="w-4 h-4" />
               </Button>
             </form>
-            <div className="max-w-3xl mx-auto mt-2 flex justify-center gap-2">
-              <SuggestionPill onClick={() => setInput("Como counterar Megacavaleiro?")} text="Como counterar Megacavaleiro?" />
-              <SuggestionPill onClick={() => setInput("Analise minha última derrota")} text="Analise minha última derrota" />
-              <SuggestionPill onClick={() => setInput("Melhor deck para Arena 17")} text="Melhor deck para Arena 17" />
+            <div className="max-w-3xl mx-auto mt-2 flex justify-center gap-2 flex-wrap">
+              <SuggestionPill onClick={() => handleSuggestion("Como counterar Megacavaleiro?")} text="Como counterar Megacavaleiro?" />
+              <SuggestionPill onClick={() => handleSuggestion("Analise minha última derrota")} text="Analise minha última derrota" />
+              <SuggestionPill onClick={() => handleSuggestion("Melhor deck para Arena 17")} text="Melhor deck para Arena 17" />
             </div>
           </div>
         </Card>
@@ -150,6 +196,7 @@ function SuggestionPill({ text, onClick }: { text: string, onClick: () => void }
   return (
     <button 
       onClick={onClick}
+      data-testid={`suggestion-${text.substring(0, 10)}`}
       className="text-xs px-3 py-1 rounded-full bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 transition-colors"
     >
       {text}
