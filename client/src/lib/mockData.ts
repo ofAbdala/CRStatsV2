@@ -146,3 +146,28 @@ export const mockChatHistory: Message[] = [
     timestamp: new Date(Date.now() - 1000 * 60 * 58).toISOString(),
   }
 ];
+
+export const mockNotifications = [
+  { id: 1, title: "Meta Atualizado", description: "O meta mudou! Veja os novos decks dominantes.", time: "2h atrás", read: false, type: "info" },
+  { id: 2, title: "Treino Concluído", description: "Você completou o treino 'Defesa de Corredor'.", time: "5h atrás", read: true, type: "success" },
+  { id: 3, title: "Novo Recorde!", description: "Você atingiu 5900 troféus. Parabéns!", time: "1d atrás", read: true, type: "success" },
+];
+
+export const mockGoals = [
+  { id: 1, title: "Chegar na Arena 18", current: 5842, target: 6000, type: "trophies" },
+  { id: 2, title: "Vencer 5 partidas seguidas", current: 3, target: 5, type: "streak" },
+];
+
+export const mockFavorites = [
+  { tag: "#M0R74L", name: "Mortal", trophies: 7500, clan: "Team Liquid" },
+  { tag: "#V1P3R", name: "Viper", trophies: 7200, clan: "SK Gaming" },
+];
+
+export const mockRankings = [
+  { rank: 1, name: "Mohamed Light", tag: "#LIGHT", trophies: 9000, clan: "Light Clan", winRate: 85 },
+  { rank: 2, name: "Mugi", tag: "#MUGI", trophies: 8950, clan: "Crazy Raccoon", winRate: 82 },
+  { rank: 3, name: "Ian77", tag: "#IAN", trophies: 8900, clan: "SK Gaming", winRate: 80 },
+  { rank: 4, name: "LucasXGamer", tag: "#LUCAS", trophies: 8850, clan: "Team Queso", winRate: 79 },
+  { rank: 5, name: "Wallace", tag: "#WALL", trophies: 8800, clan: "SSG", winRate: 78 },
+];
+

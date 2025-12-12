@@ -1,0 +1,697 @@
+1. **Refinamento da Ideia**
+   Você quer um **único prompt**, agora **atualizado** com:
+
+* Todo o contexto de design (identidade visual, telas, landing pages etc.)
+* **Lista completa de features atuais**,
+* **Features futuras já planejadas**,
+* E um **roadmap prático** (ondas) – tudo embutido no prompt para o designer IA.
+
+Ou seja: o designer IA precisa enxergar o **estado real do CRStats hoje**, a visão futura e a ordem sugerida de execução, para priorizar o que vai aparecer em UI, fluxo, highlights na landing e diferenciação do plano PRO.
+
+---
+
+2. **Uso Estratégico de IA**
+   Esse prompt será usado em ferramentas tipo: Figma AI, Framer AI, v0, Uizard, Midjourney (para referências visuais) ou qualquer “designer IA” que gera layout/comps.
+   Com o conteúdo que você passou (features atuais, futuras e roadmap), o designer IA vai:
+
+* Saber **o que já existe** → o que precisa ser representado nas telas agora.
+* Entender **o que vem depois** → já deixar espaço/conceito para evolução, sem retrabalho grande.
+* Entender **prioridades de produto** → refletir isso em navegação, hierarquia visual e CTAs.
+
+---
+
+3. **Arquitetura Técnica Sugerida (versão MVP – lado design)**
+   No prompt, eu organizo o conteúdo em:
+
+* Contexto do produto + personas + estilo visual.
+* Design system (cores, tipografia, componentes).
+* Telas do app (dashboard, coach, settings, billing, community, auth).
+* Landing pages (duas variações).
+* **Seção nova:** features atuais, futuras e roadmap – exatamente o bloco que você passou, sem perder detalhe.
+
+---
+
+4. **Plano de MVP (foco em design)**
+   O designer IA deve, principalmente:
+
+* Priorizar telas relacionadas ao que **já está implementado no monorepo** (auth, billing, goals, favorites, notificações, settings, community, coach etc.).
+* Dar destaque visual forte pro **upgrade PRO** e pro **AI Coach**.
+* Usar as features futuras e o roadmap só para:
+
+  * Planejar espaço no layout.
+  * Guiar a evolução do design system.
+
+---
+
+5. **Validação de Mercado**
+   O prompt já orienta o designer IA a criar:
+
+* Landing com foco em benefícios do coach, PRO vs FREE, prova social e CTAs fortes.
+* Variação de landing focada em coach de IA como diferencial.
+  Isso te permite testar rapidamente qual narrativa traz mais cadastro/upgrade.
+
+---
+
+6. **Monetização SaaS**
+   O designer IA será instruído a:
+
+* Destacar o plano PRO em todos os pontos chave (dashboard, coach, billing, landing).
+* Criar componentes visuais específicos de upsell e comparativo de planos.
+* Refletir claramente as **features PRO vs FREE** com base na sua tabela de features atuais/futuras.
+
+---
+
+7. **Primeiros Passos Técnicos — PROMPT FINAL PARA O DESIGNER IA (ATUALIZADO)**
+
+Copie e cole o bloco abaixo direto na sua IA de design:
+
+Você é um DESIGNER DE PRODUTO & UI/UX especialista em SaaS e apps gamer.
+Sua tarefa é criar **todo o conceito visual e as telas principais** de um produto chamado **CRStats (CR Status)**.
+
+## CONTEXTO DO PRODUTO
+
+* CRStats é um **SaaS web** (desktop-first, mas responsivo para mobile).
+* Nicho: jogadores de **Clash Royale**.
+* Proposta: ser um **coach inteligente de IA** que lê as batalhas do jogador e dá dicas práticas para subir troféus.
+* Principais funções do produto:
+  1. Usuário cadastra e faz login.
+  2. Conecta sua **tag de jogador** de Clash Royale.
+  3. O sistema puxa **stats básicas** (troféus, arena, nome etc.) e **últimas batalhas**.
+  4. Um **chat de IA (coach)** responde perguntas do jogador e sugere treinos personalizados.
+  5. Existem 2 planos: **FREE** (limitado) e **PRO** (mais recursos e mensagens ilimitadas).
+
+O CRStats já possui **várias features reais implementadas** e um roadmap claro. Use isso para **guiar a arquitetura de navegação, hierarquia visual e CTAs**.
+
+---
+
+## MAPA FUNCIONAL (O QUE JÁ EXISTE, O QUE VEM AÍ E ROADMAP)
+
+Vou organizar tudo bonitinho em 3 partes:
+
+1. Features **atuais** (o que já existe hoje no CRStats)
+2. Features **futuras que já foram planejadas** nas fases/relatórios
+3. Um **roadmap prático** (ordem sugerida pra executar daqui pra frente)
+
+Use isso para:
+
+* Decidir o que aparece com mais destaque no dashboard, landing, coach, settings, billing.
+* Mostrar bem o **valor do PRO** visualmente.
+* Preparar o design para as próximas fases sem precisar refazer tudo.
+
+---
+
+## 1) Features ATUAIS do CRStats (estado atual do monorepo)
+
+### 🔐 Autenticação & Perfil de Usuário
+
+* Login / registro via **Supabase Auth (email + senha)**
+* Criação automática de **perfil (`profiles`)** no primeiro acesso:
+  * `displayName`, região, idioma, clashTag, role (`user` | `admin`)
+* Página **/auth/login** e **/auth/register**
+* Página **/settings/account**:
+  * Editar: displayName, região, idioma, clashTag
+  * Botão **Sair da Conta**
+* **DashboardHeader**:
+  * Mostra avatar com iniciais quando logado
+  * Botão “Entrar” quando guest
+
+---
+
+### 💳 Billing & Plano PRO (Stripe + Supabase)
+
+* Tabela **`subscriptions`** no Supabase com RLS:
+  * user_id, stripe_customer_id, stripe_subscription_id, plan (`pro`), status, current_period_end, cancel_at_period_end…
+* Integração Stripe:
+  * **Checkout Session**: `/api/billing/create-checkout-session`
+    * Exige login
+    * Envia `userId` no metadata
+  * **Webhook Stripe**: `/api/billing/webhook`
+    * `checkout.session.completed` → cria/atualiza assinatura no DB
+    * `customer.subscription.updated` / `deleted` → sincroniza status
+* API de status:
+  * `GET /api/billing/subscription` → retorna plano real (FREE/PRO, ativo ou não)
+* Hook + contexto:
+  * `useSubscriptionStatus`
+  * `ExperienceContext` expondo `isPro` e `plan` para o app inteiro
+* Página **/settings/billing**:
+  * Mostra status atual (FREE ou PRO)
+  * Data de renovação se PRO
+  * Botão “Upgrade” (checkout real funcionando)
+
+---
+
+### 🎯 Goals (Metas) & Favorites (Jogadores Favoritos)
+
+**Banco & API:**
+
+* Tabela `goals` (canônica):
+  * title, description, type, target_value, current_value, completed, completed_at, is_smart, timestamps…
+* Tabela `favorite_players` (canônica):
+  * user_id, player_tag, name, trophies, exp_level, label, is_default, order_index, timestamps…
+* API Goals:
+  * `GET /api/goals`
+  * `POST /api/goals`
+  * `PATCH /api/goals/[id]`
+  * `DELETE /api/goals/[id]`
+* API Favorites:
+  * `GET /api/favorites/players`
+  * `POST /api/favorites/players`
+  * `DELETE /api/favorites/players/[tag]`
+
+**Frontend / Hooks:**
+
+* `useGoals`:
+  * Guest → usa **localStorage**
+  * Logado → usa API + migração automática localStorage → Supabase
+* `useFavoritePlayers`:
+  * Mesmo esquema (guest local, logado backend)
+* Dashboard:
+  * Cards de **metas**, **jogadores favoritos** e progresso
+
+---
+
+### 🔔 Sistema de Notificações (In-App + Backend)
+
+**Banco:**
+
+* `notifications` (canônico)
+* `notification_preferences` (canônico)
+* RLS configurado + índices
+
+**API:**
+
+* `GET /api/notifications`
+* `POST /api/notifications`
+* `POST /api/notifications/[id]/read`
+* `POST /api/notifications/mark-all-read`
+* `DELETE /api/notifications/clear`
+* `GET /api/notifications/preferences`
+* `PATCH /api/notifications/preferences`
+
+**Frontend:**
+
+* Hook **`useNotificationsState`**:
+  * Busca do backend
+  * Migra notificações antigas do localStorage → Supabase
+  * **Optimistic updates**: marca como lida, limpar, etc
+  * Multi-dispositivo (mesmo user vê tudo sincronizado)
+* Hook **`use-notification-preferences`**
+* UI:
+  * **NotificationBell** no header (badge de não lidas)
+  * **NotificationsSheet** (drawer lateral)
+  * Página **/notifications** (centro de notificações, filtros por tipo, agrupamento por data)
+  * Página **/settings/notifications** (ativar/desativar tipos, canais)
+
+---
+
+### ⚙️ User Settings & Personalização
+
+**Banco:**
+
+* Tabela **`user_settings`** (canônica):
+  * theme (`light` | `dark` | `system`)
+  * preferred_language
+  * default_view
+  * show_advanced_stats
+  * notifications_enabled
+  * default_landing_page (`dashboard` | `community` | `goals` | `meta`…)
+  * hide_guest_banner
+  * extra (jsonb)
+
+**API:**
+
+* `GET /api/settings`
+* `PATCH /api/settings`
+
+**Frontend:**
+
+* Hook **`useUserSettings`**
+* Página **/settings/preferences**:
+  * Tema (claro/escuro/sistema)
+  * Idioma
+  * Landing page padrão pós-login
+  * Mostrar/ocultar stats avançados
+  * Mostrar/ocultar banner de convidado
+* Integrações:
+  * Redirect pós-login respeita `default_landing_page`
+  * `GuestBanner` respeita `hide_guest_banner`
+
+---
+
+### 🧱 Banco de Dados & Infra
+
+* Supabase **100% alinhado com migrations** (001–010)
+* Todas as migrations idempotentes (`db push` roda limpo)
+* Documentação:
+  * `schema_overview.md` com todas as tabelas, canonical vs legacy
+  * `new_env_setup.md` com passo a passo para novo ambiente
+* Canonical:
+  * profiles, subscriptions, goals, favorite_players, notifications, notification_preferences, user_settings, meta_decks_cache
+* Legacy isolado:
+  * `player_tags` (mobile only)
+
+---
+
+### 🌐 Perfis Públicos & Community Hub
+
+* Types:
+  * `PublicPlayerProfile`, `Clan`, `ClanMember`, `PublicClanProfile`…
+
+**APIs públicas:**
+
+* `GET /api/public/player/[tag]`
+* `GET /api/public/clan/[tag]`
+* `GET /api/community/player-rankings`
+* `GET /api/community/clan-rankings`
+* `GET /api/clash/player/[tag]/battles`
+
+**Páginas:**
+
+* `/p/[tag]` → **Perfil público do player**
+  * Nome, tag, clan, arena, troféus
+  * Stats básicas, histórico, CTA pra usar o app
+* `/clan/[tag]` → **Perfil público do clã**
+  * Nome, emblema, localização, tipo
+  * Pontuação, war trophies, membros, highlight dos top membros
+* `/community` → **Community Hub**
+  * Leaderboard de players
+  * Leaderboard de clans
+  * Meta decks (via `meta_decks_cache`)
+  * CTA pra criar conta / logar
+
+---
+
+### 🧠 AI Coach (Regra) + Battle Data Real
+
+* Types em `@crstatus/types/coach`
+* Domain em `@crstatus/domain/coach`:
+  * 7 grupos de insights:
+    * Tilt Management
+    * Goals Progress
+    * Consistency
+    * Deck & Meta
+    * Clan & Community
+    * Onboarding
+    * PRO Upsell
+  * `generateRuleBasedInsights(context)`
+  * `buildLLMPromptFromContext(context, summary)` (preparado pra LLM futuro)
+* Hook **`useBattleHistory(playerTag)`**:
+  * Busca `/api/clash/player/[tag]/battles`
+  * Reutilizado tanto na dashboard quanto no coach
+* Hook **`useCoachInsights`**:
+  * Usa auth + goals + favorites + **battle history real**
+  * Calcula:
+    * Win rate (últimas ~20 partidas)
+    * Streak de derrotas (tiltLevel)
+    * Tempo desde a última partida
+  * Gera um `AICoachSummary` com insights e severidades
+* UI:
+  * **AICoachCard** (component pronto pra entrar no dashboard)
+  * Página **/coach**:
+    * Headline
+    * Grid de stats agregadas
+    * Lista de insights com badges (info / warning / critical)
+    * Ações sugeridas para cada insight
+
+---
+
+### 📊 Dashboard UX & Navegação
+
+* `DashboardHeader`:
+  * Logo “CR Status”
+  * Navegação: Dashboard / Comunidade / Planos
+  * NotificationBell
+  * Estado de auth (Entrar / Avatar)
+  * Badge FREE/PRO + botão “Quero PRO” para FREE
+* `DashboardLayout`:
+  * Header único para todas as páginas de dashboard
+* `GuestBanner`:
+  * Aparece para guest explicando que os dados são locais
+  * CTA “Criar Conta”
+  * Pode ser ocultado (respeita `hide_guest_banner`)
+* `DashboardPage` dividido em seções:
+  1. Onboarding & Status (Arena, progresso, checklist)
+  2. Players & Insights (favoritos, insights, coach)
+  3. Goals & Trophy History
+  4. Meta & Community Preview
+  5. PRO Upsell (só FREE)
+
+---
+
+## 2) Features FUTURAS já planejadas nas fases
+
+Use esta parte para **preparar o design** para a evolução futura (sem necessariamente desenhar tudo agora, mas prevendo espaços, seções, CTAs):
+
+### 🔔 Notificações – Futuro
+
+* **Phase 9.4 – Real-Time Sync**
+  * Usar Supabase Realtime:
+    * Notificações aparecendo instantaneamente sem refresh
+    * Sincronizar “lido/não lido” em múltiplas abas / dispositivos
+* **Phase 9.5 – Email & Push**
+  * Email (SendGrid/Resend)
+  * Push (Firebase Cloud Messaging – FCM)
+  * Templates por tipo de notificação
+  * Respeitar `notification_preferences` + `user_settings`
+* **Phase 9.6 – Notificações avançadas**
+  * Notificações ricas (imagens, ações com botões)
+  * Agrupamento inteligente
+  * Prioridade/urgência
+
+---
+
+### 🔐 Auth – Futuro
+
+* **Phase 10.4 – Auth Enhancements**
+  * “Esqueci minha senha” (reset por email)
+  * Login social: Google, GitHub, Discord
+  * Forçar email verificado pra certas features
+  * Painel admin (ver perfis, roles)
+* **Phase 10.5 – Migração de dados extra**
+  * Amarrar tudo que ainda for “guest/local” ao novo user auth
+  * Melhorar onboarding (usar `onboardingCompletedAt` pra fluxos guiados)
+
+---
+
+### 💳 Billing – Futuro
+
+* **Customer Portal Stripe**
+  * Botão “Gerenciar assinatura” → abre portal do Stripe
+  * Usuário consegue trocar cartão, cancelar, alterar plano
+* **Experimentos / Retenção**
+  * Regras de retenção ligadas a assinatura
+  * Medir impacto de PRO na evolução do player
+
+---
+
+### 🎯 Goals & Favorites – Futuro
+
+* Endpoints extra:
+  * `updateLabel()` para favoritos
+  * `setDefaultFavorite()`
+  * `reorderFavorites()` (drag & drop)
+* Metas avançadas:
+  * “Smart goals” mais inteligentes
+  * Metas automáticas sugeridas pelo coach
+
+---
+
+### 🌐 Community / Clãs – Futuro
+
+* **Clan Goals & Challenges**
+  * Metas de clã (donations, guerras, ranking)
+  * Painel do clã com objetivos semanais/mensais
+* **War Tracking**
+  * Stats mais profundas de guerras de clans
+  * Histórico, comparação entre temporadas
+* **Clan Recruitment & Social**
+  * Página de descoberta de clãs
+  * Filtros (país, nível mínimo, idioma)
+
+---
+
+### 🧠 AI Coach – Futuro
+
+* **Phase 20+ (do relatório do Coach)**
+  * Integrar CoachCard direto na Dashboard (sessão fixa)
+  * Conectar **LLM de verdade**:
+    * Endpoint `POST /api/coach/llm`
+    * Usar `buildLLMPromptFromContext` como base
+    * Geração de insights textuais mais ricos e personalizados
+  * Histórico de coaching:
+    * “Diário” de insights: o que o coach falou e o que o player fez
+  * Sugestões orientadas a long-term:
+    * Planos semanais/mensais de treino
+
+---
+
+### 📱 Mobile / Experiência Cross-Device
+
+* Migrar mobile para usar:
+  * APIs canônicas (`favorite_players`, goals, notifications, coach, etc)
+* Depois:
+  * Eliminar `player_tags` legacy
+* Ajustes de UX mobile-first ainda mais focados em uso real em celular
+
+---
+
+## 3) Roadmap SUGERIDO (próximos passos práticos)
+
+Use esta sequência como **ordem de prioridade** na hora de destacar coisas no design (o que fica mais visível, o que vira CTA principal, etc).
+
+### 🟢 ONDA 1 – PRÉ-LANÇAMENTO (Testes & Deploy)
+
+Objetivo: Um **MVP estável** rodando em produção (Vercel).
+
+1. Testes locais completos do fluxo:
+   * Registrar → logar → conectar player (via tag)
+   * Favoritar jogadores
+   * Criar metas
+   * Ver dados no dashboard/coach
+   * Fazer upgrade PRO (Stripe test)
+   * Conferir notificações básicas
+2. Deploy Vercel:
+   * Configurar envs
+   * Testar no celular via URL pública
+3. Polimento de UX:
+   * Textos PT-BR
+   * Loading/erro melhores
+   * Onboarding simples
+
+---
+
+### 🟡 ONDA 2 – “V1 de Mercado”
+
+Objetivo: Aumentar **retenção** e **percepção de valor PRO**.
+
+1. Integrar AICoachCard na Dashboard (sessão dedicada).
+2. Refino de Goals & Coach juntos.
+3. Melhorar visual de /community.
+4. Stripe Customer Portal em /settings/billing.
+
+---
+
+### 🟠 ONDA 3 – Retenção & Notificações
+
+Objetivo: Garantir que quem entra, **volta**.
+
+1. Real-Time Notifications com Supabase Realtime.
+2. Email & Push (SendGrid/Resend + FCM).
+3. Auth Enhancements (esqueci senha, OAuth, email verificado).
+
+---
+
+### 🔴 ONDA 4 – AI Coach Pro & Monetização Forte
+
+Objetivo: Transformar o PRO em “no-brainer”.
+
+1. LLM no Coach (`/api/coach/llm`).
+2. Coaching History.
+3. Experimentos de pricing/upsell.
+
+---
+
+## PERSONAS PRINCIPAIS (PARA GUIAR TOM & VISUAL)
+
+* Jogador tryhard de Clash Royale (13–30 anos), quer subir troféus e chegar em arenas mais altas.
+* Gosta de interface bonita, “gamer”, mas não infantil.
+* Valoriza feedback claro e direto, e visual com números e gráficos simples.
+
+---
+
+## DIREÇÃO DE ESTILO VISUAL
+
+* Estilo: **gamer clean** – moderno, modo escuro com cor primária acesa.
+* Inspirações: dashboards de games, sites de e-sports, SaaS de analytics.
+* Evitar visual infantil; focar em algo semi-competitivo.
+* Linguagem: português BR.
+
+Sugestão:
+
+* Primária: azul ou roxo neon.
+* Background: cinza muito escuro (dark mode).
+* Tipografia:
+  * Títulos: fonte sem serifa forte, estilo tech/gamer.
+  * Corpo: fonte sem serifa limpa e legível.
+* Ícones minimalistas: cartas, coroas, espadas, gráficos.
+
+---
+
+## DESIGN SYSTEM QUE VOCÊ DEVE CRIAR
+
+Crie um **design system completo**, incluindo:
+
+1. **Paleta de cores**
+   * Primária, secundária, background, surface, borda, sucesso, erro, alerta.
+   * Versão para dark mode (prioridade) e light mode (opcional).
+
+2. **Tipografia**
+   * Escala: H1, H2, H3, H4, body, label, caption.
+   * Uso típico em dashboard, landing, cards, tables.
+
+3. **Componentes de UI**
+   * Botões: primário, secundário, ghost, desabilitado, hover/pressed.
+   * Inputs: texto, senha, com ícone, estados de erro/validação.
+   * Select / dropdown.
+   * Badges: FREE, PRO, status de batalha (vitória, derrota, empate), severidade de insight.
+   * Cards:
+     * Card de estatística (troféus, winrate, arena).
+     * Card de meta (goal).
+     * Card de jogador favorito.
+   * Tabelas:
+     * Tabela de batalhas recentes: Data, Resultado, Coroas, Arena, Oponente.
+     * Tabelas de rankings (players/clans).
+   * Layout de chat:
+     * Balão do usuário vs balão do coach (cores diferentes).
+     * Avatar do coach.
+     * Estado “digitando/carregando”.
+   * Navegação:
+     * Navbar com logo “CR Status”, links Dashboard / Community / Planos / Coach / Settings.
+     * Indicação de FREE vs PRO.
+   * Modais:
+     * Upgrade de plano.
+     * Confirmações (excluir meta, limpar notificações).
+
+---
+
+## TELAS DO PRODUTO (APP LOGADO)
+
+Crie layouts completos (desktop e mobile) para:
+
+### 1. Dashboard
+
+* Header com logo, navegação, NotificationBell, avatar, badge FREE/PRO.
+
+* Seções:
+  1. Onboarding & Status: arena atual, progresso, checklist simples.
+  2. Players & Insights: cards de favoritos + AICoachCard com insights principais.
+  3. Goals & Trophy History: metas atuais com progresso visual.
+  4. Meta & Community Preview: snippet com ranking/meta decks + CTA ir para /community.
+  5. PRO Upsell (se FREE): bloco com benefícios do PRO.
+
+* Estado sem tag conectada:
+  * Ilustração simples.
+  * Mensagem: “Conecte sua tag de Clash Royale para ver suas stats”.
+  * Botão “Adicionar tag” → /settings/account.
+
+### 2. Coach (/coach)
+
+* Layout tipo chat:
+  * Lista de mensagens (user/coach).
+  * Cards de insight com badges (info/warn/critical).
+* Área de stats agregadas no topo:
+  * Win rate recente.
+  * TiltLevel.
+  * Última partida há X horas.
+* Estado de plano:
+  * FREE: mostrar contador de mensagens restantes e banner de upgrade.
+  * PRO: destaque discreto (“Coach PRO ativo”).
+
+### 3. Settings (/settings/account, /settings/preferences, /settings/notifications, /settings/billing)
+
+* **Account**:
+  * DisplayName, região, idioma, clashTag, botão “Salvar”.
+  * Botão “Sair da conta”.
+* **Preferences**:
+  * Tema (claro/escuro/sistema).
+  * Idioma.
+  * Landing default (dashboard/community/goals/meta).
+  * Toggle “Stats avançadas”.
+  * Toggle “Mostrar banner de convidado”.
+* **Notifications**:
+  * Toggles por tipo de notificação.
+  * Explicação curta de cada tipo.
+* **Billing**:
+  * Card resumo do plano atual (FREE/PRO).
+  * Linha do tempo de cobrança / data de renovação.
+  * Botão “Upgrade para PRO”.
+  * Espaço para link “Gerenciar assinatura” (Customer Portal).
+
+### 4. Community (/community, /p/[tag], /clan/[tag])
+
+* /community:
+  * Tabs: “Players”, “Clans”, “Meta decks”.
+  * Leaderboards com cartões limpos e CTA “ver perfil”.
+* /p/[tag]:
+  * Perfil público do player: nome, tag, clan, arena, troféus.
+  * Stats básicas, histórico, botão “Ver mais no CRStats”.
+* /clan/[tag]:
+  * Perfil do clã: emblema, localização, tipo, war trophies.
+  * Lista de membros principais.
+  * Espaço futuro para metas do clã.
+
+### 5. Notifications (/notifications)
+
+* Lista de notificações com:
+  * Ícone por tipo.
+  * Título + mini descrição.
+  * Badge “novo”.
+* Filtros por tipo (goals, coach, billing, community).
+* Botão “Marcar tudo como lido”.
+* Empty state amigável.
+
+---
+
+## LANDING PAGES (MARKETING)
+
+Crie pelo menos **2 variações** (desktop e mobile).
+
+### Landing A – Foco “Subir Troféus”
+
+Seções:
+
+1. **Hero**
+   * Headline: “Suba troféus em Clash Royale com um coach de IA”.
+   * Subheadline: explicando que conecta a tag, analisa batalhas, gera dicas práticas.
+   * CTA primário: “Começar de graça”.
+   * CTA secundário: “Ver como funciona”.
+   * Mockup do dashboard + coach.
+
+2. **Como funciona** (4 passos)
+
+3. **Benefícios concretos**
+
+4. **Prova social** (espaços para depoimentos, logos de clãs)
+
+5. **Planos (FREE vs PRO)** com destaque visual para PRO.
+
+6. **Footer** com links básicos.
+
+### Landing B – Foco “Coach Inteligente 24/7”
+
+* Hero centrado em “Seu coach particular de Clash Royale, 24 horas por dia”.
+* Destaque em prints/ilustrações do chat do coach.
+* Seção mostrando exemplos de mensagens tipo:
+  * “Você está em tilt, faça uma pausa de X minutos.”
+  * “Seu deck está fraco contra aéreo, considere essas cartas…”
+
+---
+
+## ESTADOS ESPECIAIS
+
+Projete também:
+
+* Loading do dashboard (skeletons).
+* Error states (mensagem amigável + CTA “tentar de novo”).
+* Empty states:
+  * Sem batalhas ainda.
+  * Sem metas criadas.
+  * Sem jogadores favoritos.
+* Limite do plano FREE:
+  * Banner no coach + CTA para upgrade.
+  * Badge “PRO” em componentes bloqueados.
+
+---
+
+## ENTREGÁVEIS ESPERADOS DA SUA RESPOSTA (COMO DESIGNER IA)
+
+Ao responder este prompt, entregue:
+
+1. **Resumo da identidade visual** (paleta, tipografia, mood).
+2. **Design system resumido** com lista clara de componentes.
+3. **Descrições detalhadas de layout** para cada tela (desktop e mobile).
+4. **Sugestões de microcopy** (PT-BR) para:
+   * Hero, CTAs, mensagens de erro, empty states, upsell PRO.
+5. Estrutura das landings em seções bem definidas, pronta para ser implementada em Next.js + Tailwind (não precisa de código, apenas descrição clara da UI).
+
+Foque em clareza, consistência visual e alta conversão da landing para cadastro e upgrade para PRO.

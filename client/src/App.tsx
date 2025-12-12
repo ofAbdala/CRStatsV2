@@ -12,6 +12,9 @@ import CoachPage from "@/pages/coach";
 import ProfilePage from "@/pages/profile";
 import TrainingPage from "@/pages/training";
 import DecksPage from "@/pages/decks";
+import CommunityPage from "@/pages/community";
+import SettingsPage from "@/pages/settings";
+import PublicProfilePage from "@/pages/public-profile";
 import { CheckCircle2 } from "lucide-react"; // Import CheckCircle2 for Pricing Section
 
 function Router() {
@@ -24,7 +27,10 @@ function Router() {
       <Route path="/coach" component={CoachPage} />
       <Route path="/training" component={TrainingPage} />
       <Route path="/decks" component={DecksPage} />
+      <Route path="/community" component={CommunityPage} />
+      <Route path="/settings" component={SettingsPage} />
       <Route path="/profile" component={ProfilePage} />
+      <Route path="/p/:tag" component={PublicProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );
