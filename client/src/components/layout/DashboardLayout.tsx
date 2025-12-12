@@ -10,12 +10,17 @@ import {
   Menu,
   X,
   Target,
-  Layers
+  Layers,
+  Globe,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { mockNotifications } from "@/lib/mockData";
+import { Badge } from "@/components/ui/badge";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,7 +35,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: "Coach IA", href: "/coach", icon: MessageSquare },
     { name: "Treino", href: "/training", icon: Target },
     { name: "Decks", href: "/decks", icon: Layers },
-    { name: "Perfil", href: "/profile", icon: User },
+    { name: "Comunidade", href: "/community", icon: Globe },
+    { name: "Configurações", href: "/settings", icon: Settings },
   ];
 
   const SidebarContent = () => (
@@ -70,6 +76,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       <div className="mt-auto p-6 border-t border-sidebar-border">
+        <div className="bg-card/30 p-4 rounded-xl mb-4 border border-primary/20">
+          <h4 className="font-bold text-sm text-primary mb-1">Plano Free</h4>
+          <p className="text-xs text-muted-foreground mb-3">2/5 mensagens diárias</p>
+          <Link href="/settings?tab=billing">
+             <Button size="sm" className="w-full text-xs font-bold" variant="outline">Upgrade PRO</Button>
+          </Link>
+        </div>
+
         <Link href="/profile">
           <div className="flex items-center gap-3 mb-4 cursor-pointer p-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors">
             <Avatar className="w-8 h-8 border border-border">
@@ -78,7 +92,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Avatar>
             <div className="flex flex-col">
               <span className="text-sm font-medium text-sidebar-foreground">KingSlayer</span>
-              <span className="text-xs text-sidebar-foreground/60">Free Plan</span>
+              <span className="text-xs text-sidebar-foreground/60">Ver Perfil</span>
             </div>
           </div>
         </Link>
@@ -114,25 +128,69 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </span>
           </div>
         </Link>
-        <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="w-5 h-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64 border-r border-sidebar-border bg-sidebar">
-            <SidebarContent />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-2">
+          <NotificationsPopover />
+          <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-5 h-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-64 border-r border-sidebar-border bg-sidebar">
+              <SidebarContent />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* Main Content */}
       <main className="flex-1 md:ml-64 p-4 md:p-8 pt-20 md:pt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="max-w-6xl mx-auto">
+           {/* Desktop Header Actions */}
+           <div className="hidden md:flex justify-end mb-6 gap-4">
+             <NotificationsPopover />
+           </div>
           {children}
         </div>
       </main>
     </div>
   );
 }
+
+function NotificationsPopover() {
+  const unreadCount = mockNotifications.filter(n => !n.read).length;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon" className="relative">
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-background animate-pulse" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="p-4 border-b border-border">
+          <h4 className="font-bold">Notificações</h4>
+        </div>
+        <div className="max-h-[300px] overflow-y-auto">
+          {mockNotifications.map((notification) => (
+            <div key={notification.id} className={cn("p-4 border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer", !notification.read && "bg-primary/5")}>
+              <div className="flex justify-between items-start mb-1">
+                <h5 className="text-sm font-medium">{notification.title}</h5>
+                <span className="text-[10px] text-muted-foreground">{notification.time}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{notification.description}</p>
+            </div>
+          ))}
+        </div>
+        <div className="p-2 border-t border-border bg-muted/20">
+          <Button variant="ghost" size="sm" className="w-full text-xs">Marcar todas como lidas</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 
