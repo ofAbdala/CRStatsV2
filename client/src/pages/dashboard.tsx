@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "wouter";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { mockPlayer, mockBattles } from "@/lib/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
