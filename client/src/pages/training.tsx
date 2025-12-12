@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Target, Swords, Shield, Zap, CheckCircle2, Lock } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function TrainingPage() {
+  const [, setLocation] = useLocation();
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -48,16 +51,16 @@ export default function TrainingPage() {
           <h2 className="text-xl font-display font-bold mb-4 flex items-center gap-2">
             Treinos Avançados <Badge variant="secondary" className="text-xs">PRO</Badge>
           </h2>
-          <Card className="border-border/50 bg-card/30 border-dashed relative overflow-hidden">
-            <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+          <Card className="border-border/50 bg-card/30 border-dashed relative overflow-hidden group cursor-pointer" onClick={() => setLocation("/profile")}>
+            <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center transition-all group-hover:bg-background/50">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <Lock className="w-6 h-6 text-primary" />
               </div>
               <h3 className="text-lg font-bold mb-2">Desbloqueie o Potencial Máximo</h3>
               <p className="text-muted-foreground max-w-md mb-6">
                 Assinantes PRO têm acesso a cenários específicos de matchups e análise de replay quadro a quadro.
               </p>
-              <Button className="font-bold">Fazer Upgrade</Button>
+              <Button className="font-bold interactive-hover shadow-lg shadow-primary/20">Fazer Upgrade</Button>
             </div>
             
             <CardContent className="p-6 opacity-50 blur-sm pointer-events-none">
@@ -74,8 +77,10 @@ export default function TrainingPage() {
 }
 
 function DrillCard({ title, description, difficulty, type, progress, icon }: any) {
+  const [location, setLocation] = useLocation();
+
   return (
-    <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all hover:-translate-y-1">
+    <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all hover:-translate-y-1 cursor-pointer interactive-hover" onClick={() => setLocation("/coach")}>
       <CardHeader>
         <div className="flex justify-between items-start mb-2">
           <div className="p-2 rounded-lg bg-background border border-border">
@@ -100,7 +105,7 @@ function DrillCard({ title, description, difficulty, type, progress, icon }: any
         </div>
       </CardContent>
       <CardFooter>
-        <Button className="w-full" variant={progress === 100 ? "outline" : "default"}>
+        <Button className="w-full interactive-hover" variant={progress === 100 ? "outline" : "default"}>
           {progress === 100 ? (
             <>
               <CheckCircle2 className="w-4 h-4 mr-2" />

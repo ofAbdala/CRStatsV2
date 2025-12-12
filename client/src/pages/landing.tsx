@@ -62,13 +62,13 @@ export default function LandingPage() {
           
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
             <Link href="/auth?signup=true">
-              <Button size="lg" className="h-12 px-8 text-base font-bold shadow-lg shadow-primary/20">
+              <Button size="lg" className="h-12 px-8 text-base font-bold shadow-lg shadow-primary/20 interactive-hover">
                 Analisar meu Perfil
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
             <Link href="#features">
-              <Button variant="outline" size="lg" className="h-12 px-8 text-base">
+              <Button variant="outline" size="lg" className="h-12 px-8 text-base interactive-hover">
                 Ver Funcionalidades
               </Button>
             </Link>
@@ -87,21 +87,33 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            <FeatureCard 
-              icon={<TrendingUp className="w-6 h-6 text-primary" />}
-              title="Análise de Winrate"
-              description="Entenda quais cartas e decks estão funcionando melhor para você em cada meta."
-            />
-            <FeatureCard 
-              icon={<ShieldCheck className="w-6 h-6 text-secondary" />}
-              title="Coach de IA 24/7"
-              description="Converse com nosso coach inteligente para receber dicas específicas sobre matchups difíceis."
-            />
-            <FeatureCard 
-              icon={<Swords className="w-6 h-6 text-purple-400" />}
-              title="Revisão de Batalhas"
-              description="Identifique exatamente onde você errou em suas últimas derrotas e como corrigir."
-            />
+            <Link href="/auth?signup=true">
+              <div className="cursor-pointer">
+                <FeatureCard 
+                  icon={<TrendingUp className="w-6 h-6 text-primary" />}
+                  title="Análise de Winrate"
+                  description="Entenda quais cartas e decks estão funcionando melhor para você em cada meta."
+                />
+              </div>
+            </Link>
+            <Link href="/auth?signup=true">
+              <div className="cursor-pointer">
+                <FeatureCard 
+                  icon={<ShieldCheck className="w-6 h-6 text-secondary" />}
+                  title="Coach de IA 24/7"
+                  description="Converse com nosso coach inteligente para receber dicas específicas sobre matchups difíceis."
+                />
+              </div>
+            </Link>
+            <Link href="/auth?signup=true">
+              <div className="cursor-pointer">
+                <FeatureCard 
+                  icon={<Swords className="w-6 h-6 text-purple-400" />}
+                  title="Revisão de Batalhas"
+                  description="Identifique exatamente onde você errou em suas últimas derrotas e como corrigir."
+                />
+              </div>
+            </Link>
           </div>
         </div>
       </section>
@@ -135,12 +147,12 @@ export default function LandingPage() {
                 </li>
               </ul>
               <Link href="/auth?signup=true">
-                <Button variant="outline" className="w-full">Começar Grátis</Button>
+                <Button variant="outline" className="w-full interactive-hover">Começar Grátis</Button>
               </Link>
             </div>
 
             {/* Pro Plan */}
-            <div className="p-8 rounded-2xl bg-gradient-to-br from-card to-primary/5 border border-primary/50 flex flex-col relative overflow-hidden">
+            <div className="p-8 rounded-2xl bg-gradient-to-br from-card to-primary/5 border border-primary/50 flex flex-col relative overflow-hidden interactive-hover">
               <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
                 POPULAR
               </div>
@@ -163,7 +175,7 @@ export default function LandingPage() {
                 </li>
               </ul>
               <Link href="/auth?signup=true">
-                <Button className="w-full font-bold shadow-lg shadow-primary/20">Assinar Pro</Button>
+                <Button className="w-full font-bold shadow-lg shadow-primary/20 interactive-hover">Assinar Pro</Button>
               </Link>
             </div>
           </div>
@@ -182,7 +194,7 @@ export default function LandingPage() {
               Junte-se a milhares de jogadores que já estão subindo de arena com o CRStats.
             </p>
             <Link href="/auth?signup=true">
-              <Button size="lg" className="font-bold h-14 px-10 text-lg relative z-10">
+              <Button size="lg" className="font-bold h-14 px-10 text-lg relative z-10 interactive-hover shadow-lg shadow-primary/20">
                 Começar Agora Grátis
               </Button>
             </Link>
@@ -211,7 +223,7 @@ export default function LandingPage() {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
   return (
-    <div className="p-6 rounded-xl bg-card border border-border hover:border-primary/50 transition-colors group">
+    <div className="p-6 rounded-xl bg-card border border-border hover:border-primary/50 transition-all duration-300 group interactive-hover">
       <div className="w-12 h-12 rounded-lg bg-background border border-border flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
         {icon}
       </div>
