@@ -10,6 +10,9 @@ import OnboardingPage from "@/pages/onboarding";
 import DashboardPage from "@/pages/dashboard";
 import CoachPage from "@/pages/coach";
 import ProfilePage from "@/pages/profile";
+import TrainingPage from "@/pages/training";
+import DecksPage from "@/pages/decks";
+import { CheckCircle2 } from "lucide-react"; // Import CheckCircle2 for Pricing Section
 
 function Router() {
   return (
@@ -19,6 +22,8 @@ function Router() {
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/coach" component={CoachPage} />
+      <Route path="/training" component={TrainingPage} />
+      <Route path="/decks" component={DecksPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>

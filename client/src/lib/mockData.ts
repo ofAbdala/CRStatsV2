@@ -41,7 +41,7 @@ export interface Message {
 }
 
 // Mock Cards
-const mockCards: Card[] = [
+export const mockCards: Card[] = [
   { id: 1, name: "Hog Rider", level: 14, elixir: 4, rarity: "rare", image: "https://placehold.co/100x120/orange/white?text=Hog" },
   { id: 2, name: "Fireball", level: 13, elixir: 4, rarity: "rare", image: "https://placehold.co/100x120/orange/white?text=Fireball" },
   { id: 3, name: "Zap", level: 14, elixir: 2, rarity: "common", image: "https://placehold.co/100x120/blue/white?text=Zap" },
