@@ -1,0 +1,548 @@
+1. **Refinamento da Ideia**
+   O projeto é o **CRStats (CR Status)**, um SaaS de coaching inteligente para jogadores de Clash Royale.
+   Ele faz 3 coisas principais:
+
+* Puxa estatísticas do jogador (tag do Clash Royale) e organiza em um painel claro (troféus, winrate recente, decks mais usados).
+* Usa IA para analisar essas estatísticas e batalhas recentes, gerando dicas práticas (“treinos”) e respostas a perguntas do jogador.
+* Funciona como um SaaS: login, gestão de conta, plano gratuito limitado e plano pago com recursos avançados.
+
+---
+
+2. **Uso Estratégico de IA**
+   Como a IA entra no MVP:
+
+* **Coach em chat**: endpoint `/api/ai/coach` recebe a mensagem do jogador + contexto (estatísticas, últimas partidas) e chama a API da OpenAI com um prompt de “treinador de Clash Royale”.
+* **Treinos sugeridos**: endpoint `/api/ai/drills` gera uma lista de “tarefas de treino” (ex.: focar em defesa aérea, posição de certas cartas) com base nos problemas detectados nas stats.
+* **Resumo inteligente**: opcional no MVP+1, endpoint `/api/ai/summary` gera um mini-relatório do perfil do jogador.
+
+No código, a IA é sempre chamada no servidor (route handlers de Next.js), usando `OPENAI_API_KEY` guardado em variável de ambiente.
+
+---
+
+3. **Arquitetura Técnica Sugerida (versão MVP)**
+
+**Stack principal**
+
+* **Front/back:** Next.js 14+ com App Router, React 18, TypeScript estrito.
+* **Estilos:** Tailwind CSS.
+* **Banco:** Prisma ORM com **PostgreSQL** (ou SQLite em dev, através de `DATABASE_URL`).
+* **Auth:** NextAuth com Credentials (email/senha) + PrismaAdapter.
+* **Infra externamente configurável:**
+
+  * OpenAI API (`OPENAI_API_KEY`)
+  * API de dados de Clash Royale (`CLASH_API_KEY` – placeholder, sem dependência de provedor específico)
+  * Stripe (ou similar) para pagamentos (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`).
+
+**Principais entidades (Prisma)**
+
+* `User` – dados básicos do usuário SaaS.
+* `Account` / `Session` – estruturas do NextAuth.
+* `PlayerProfile` – perfil do jogador (tag, nome, troféus, arena, etc.).
+* `Battle` – batalhas recentes do jogador.
+* `AiDialog` / `AiMessage` – histórico de conversas com o coach.
+* `Subscription` – plano atual do usuário (FREE / PRO, status).
+
+**Rotas principais (App Router)**
+
+* Público:
+
+  * `/` – landing page (marketing)
+  * `/auth/login`, `/auth/register`
+* Logado (protegido por middleware de auth):
+
+  * `/dashboard` – visão geral de stats + últimas batalhas.
+  * `/coach` – chat com o coach de IA.
+  * `/profile` – gerenciar tag do jogador e dados básicos.
+  * `/billing` – gestão de assinatura (apenas estrutura no MVP, integração hard real pode ficar para depois).
+
+**APIs (route handlers)**
+
+* `/api/auth/[...nextauth]` – NextAuth.
+* `/api/player/connect` (POST) – salvar tag do jogador.
+* `/api/player/sync` (POST) – puxar dados da API externa e gravar em `PlayerProfile` e `Battle`.
+* `/api/ai/coach` (POST) – chamada à OpenAI com contexto do jogador.
+* `/api/subscription/status` (GET) – retornar plano do usuário.
+* `/api/subscription/upgrade` (POST) – criar sessão de checkout (stub no MVP, real no MVP+1).
+
+---
+
+4. **Plano de MVP**
+
+**Inclui no MVP:**
+
+* Landing page simples, explicando o produto e com CTA de cadastro.
+* Cadastro/login com email/senha (NextAuth + Credentials).
+* Tela de onboarding para informar a tag do Clash Royale.
+* Integração básica com API externa (simples: buscar stats gerais + últimas 10 batalhas).
+* Dashboard com:
+
+  * Troféus atuais, arena, nome do jogador.
+  * Winrate das últimas 10 batalhas.
+  * Lista das batalhas recentes em tabela simples.
+* Página de coach com chat:
+
+  * Caixa de texto + histórico de mensagens.
+  * Chamada à OpenAI com prompt bem definido em português.
+* Controle básico de plano:
+
+  * Flag `plan` em `Subscription` (FREE/PRO).
+  * No FREE, limitar: número de mensagens/dia no coach, por exemplo.
+
+**Deixar para depois (MVP+1 ou v2):**
+
+* Integração de pagamento real (Stripe com webhooks completos).
+* Charts avançados, filtros complexos, análise por temporada.
+* Múltiplos perfis de jogador por usuário.
+* Recursos “social” (comparar com amigos, ranking etc.).
+
+**Eliminar por enquanto:**
+
+* Qualquer coisa mobile nativa.
+* Multi-idioma avançado (começar só em PT-BR).
+* Modo “pro player” super detalhado.
+
+---
+
+5. **Validação de Mercado**
+
+Validação rápida com pouco código extra:
+
+* Landing page já no domínio principal, com:
+
+  * Explicação clara do benefício (“Suba troféus com um coach de IA que lê suas batalhas”).
+  * Um CTA de cadastro gratuito.
+* Rodar tráfego mínimo (ads ou posts em comunidades de Clash Royale / Discord / grupos).
+* Medir:
+
+  * Cliques na landing → cadastro.
+  * Porcentagem de usuários que conectam a tag.
+  * Uso do coach (número de mensagens).
+* Coletar feedback direto dentro do app com um mini formulário no dashboard (“o que mais te ajudaria a subir troféus agora?”).
+
+---
+
+6. **Monetização SaaS**
+
+Duas opções iniciais simples:
+
+1. **Free + PRO mensal**
+
+   * FREE:
+
+     * 1 perfil de jogador
+     * 10 mensagens/dia no coach
+     * Últimas 10 batalhas no histórico
+   * PRO (mensal em USD ou BRL):
+
+     * * mensagens ilimitadas no coach
+     * Histórico maior (últimos 60 dias)
+     * Drill de treino avançado (endpoint /api/ai/drills)
+
+2. **Lifetime Early Access (Lançamento)**
+
+   * Uma oferta limitada: pagamento único (ticket baixo) para acesso “PRO” por 12 meses, só para primeiros 50~100 usuários, usado apenas na fase inicial para validar disposição a pagar.
+
+---
+
+7. **Primeiros Passos Técnicos — PROMPT ONE-SHOT PARA REPLIT**
+
+Abaixo está um **prompt único** para você colar no Replit (ou em outro coder AI) para gerar a base completa do projeto em modo one-shot.
+
+Use exatamente o bloco abaixo como prompt:
+
+Você é um assistente de código atuando dentro do Replit.
+Quero que você CONSTRUA um projeto completo de SaaS chamado **CRStats (CR Status)**, um coach inteligente para jogadores de Clash Royale.
+
+## CONTEXTO DO PRODUTO
+
+CRStats é um SaaS onde:
+
+* Usuários se cadastram com email/senha.
+* Conectam sua tag de jogador de Clash Royale.
+* O sistema busca estatísticas básicas e últimas batalhas desse jogador.
+* Um “Coach de IA” responde perguntas e dá dicas usando as stats como contexto.
+* Há plano FREE e plano PRO (gating simples no backend).
+
+O foco é criar uma base sólida de código, enxuta, em **um único passo**, usando **TypeScript estrito** e **Next.js com App Router**.
+
+---
+
+## REQUISITOS DE STACK
+
+Use:
+
+* **Next.js 14+** (App Router, pasta `app/`).
+* **React 18**.
+* **TypeScript** com `"strict": true`.
+* **Tailwind CSS** para estilização.
+* **Prisma ORM**.
+* **Banco PostgreSQL** (use `DATABASE_URL` configurável; em dev pode ser SQLite, mas deixe pronto para Postgres).
+* **NextAuth** para autenticação com Credentials Provider.
+* Chamadas de IA via **OpenAI API** no backend, usando `OPENAI_API_KEY` (variável de ambiente).
+* Integração com API de Clash Royale por HTTP usando `CLASH_API_KEY` (placeholder, sem dependência de provedor específico).
+
+---
+
+## ESTRUTURA GERAL DO PROJETO
+
+Considere que você pode criar/editar arquivos livremente.
+Quero que você:
+
+1. **Configure o projeto**:
+   * `package.json` com scripts:
+     * `"dev": "next dev"`
+     * `"build": "next build"`
+     * `"start": "next start"`
+     * `"lint": "next lint"`
+   * Dependências principais:
+     * `next`, `react`, `react-dom`
+     * `typescript`, `@types/react`, `@types/node`
+     * `tailwindcss`, `postcss`, `autoprefixer`
+     * `prisma`, `@prisma/client`
+     * `next-auth`
+     * `bcrypt` (para hash de senha)
+     * `axios` (para chamadas HTTP externas, se necessário)
+   * Arquivos de config:
+     * `tsconfig.json` com `strict: true`.
+     * `next.config.mjs`.
+     * Config de Tailwind (`tailwind.config.ts`, `postcss.config.mjs`).
+     * `eslint` opcional, mas se criar, mantenha simples.
+
+2. **Configure o Tailwind**:
+   * Estender para usar uma paleta simples, nada exagerado.
+   * Aplicar classes globais em `app/globals.css`.
+   * Layout base em `app/layout.tsx` com `<html lang="pt-BR">` e um `<body>` com fonte padrão.
+
+3. **Defina a camada de dado com Prisma**:
+   * Criar `prisma/schema.prisma` com modelos:
+
+     ```prisma
+     datasource db {
+       provider = "postgresql" // ou "sqlite" em dev, mas deixe configurável via env
+       url      = env("DATABASE_URL")
+     }
+
+     generator client {
+       provider = "prisma-client-js"
+     }
+
+     model User {
+       id            String       @id @default(cuid())
+       name          String?
+       email         String       @unique
+       emailVerified DateTime?
+       passwordHash  String
+       image         String?
+       createdAt     DateTime     @default(now())
+       updatedAt     DateTime     @updatedAt
+
+       accounts      Account[]
+       sessions      Session[]
+       playerProfile PlayerProfile?
+       subscription  Subscription?
+       aiDialogs     AiDialog[]
+     }
+
+     model Account {
+       id                String  @id @default(cuid())
+       userId            String
+       type              String
+       provider          String
+       providerAccountId String
+       refresh_token     String? @db.Text
+       access_token      String? @db.Text
+       expires_at        Int?
+       token_type        String?
+       scope             String?
+       id_token          String? @db.Text
+       session_state     String?
+
+       user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+       @@unique([provider, providerAccountId])
+     }
+
+     model Session {
+       id           String   @id @default(cuid())
+       sessionToken String   @unique
+       userId       String
+       expires      DateTime
+
+       user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+     }
+
+     model VerificationToken {
+       identifier String
+       token      String   @unique
+       expires    DateTime
+
+       @@unique([identifier, token])
+     }
+
+     model PlayerProfile {
+       id           String    @id @default(cuid())
+       userId       String    @unique
+       playerTag    String    @unique
+       name         String?
+       clanName     String?
+       trophies     Int?
+       bestTrophies Int?
+       arena        String?
+       lastSyncAt   DateTime?
+
+       user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+       battles  Battle[]
+     }
+
+     model Battle {
+       id               String   @id @default(cuid())
+       playerProfileId  String
+       battleTime       DateTime
+       result           String   // "win" | "loss" | "draw"
+       crownDiff        Int?
+       arena            String?
+       deck             String?  // JSON string com as cartas do jogador
+       opponentTag      String?
+       opponentName     String?
+       opponentTrophies Int?
+
+       playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+     }
+
+     model AiDialog {
+       id        String      @id @default(cuid())
+       userId    String
+       title     String
+       createdAt DateTime    @default(now())
+
+       user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+       messages AiMessage[]
+     }
+
+     model AiMessage {
+       id        String   @id @default(cuid())
+       dialogId  String
+       role      String   // "user" | "assistant" | "system"
+       content   String   @db.Text
+       createdAt DateTime @default(now())
+
+       dialog AiDialog @relation(fields: [dialogId], references: [id], onDelete: Cascade)
+     }
+
+     model Subscription {
+       id                 String   @id @default(cuid())
+       userId             String   @unique
+       plan               String   // "FREE" | "PRO"
+       status             String   // "active" | "canceled" | "past_due" | etc.
+       stripeCustomerId   String?
+       stripeSubscriptionId String?
+       currentPeriodEnd   DateTime?
+
+       user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+     }
+     ```
+
+   * Gerar cliente Prisma (`npx prisma generate`) e preparar para migrações (usuário fará `prisma migrate` depois).
+
+4. **Configure o NextAuth**:
+   * Criar pasta `lib/` com:
+     * `lib/prismadb.ts` para instanciar `PrismaClient` (singleton).
+     * `lib/auth.ts` com configuração do NextAuth (Credentials Provider).
+
+   * O Credentials Provider deve:
+     * No cadastro, criar usuário com `passwordHash` usando `bcrypt`.
+     * No login, validar email + senha.
+
+   * Usar `PrismaAdapter` do `@next-auth/prisma-adapter`.
+
+5. **Rotas de App Router**:
+
+   ### Layouts base
+
+   * `app/layout.tsx`:
+     * Definir HTML, fonte, um layout com header simples se o usuário estiver logado, etc.
+   * `app/(marketing)/layout.tsx` (opcional) para landing pública.
+   * `app/(app)/layout.tsx` protegida (usar `getServerSession` e redirect se não logado).
+
+   ### Páginas públicas
+
+   * `app/page.tsx`:
+     * Landing page com:
+       * Hero explicando: “Suba troféus com um coach de IA que lê suas batalhas de Clash Royale”.
+       * Botões para Login / Cadastro.
+   * `app/auth/login/page.tsx`:
+     * Form de login (email, senha) chamando rota de auth NextAuth.
+   * `app/auth/register/page.tsx`:
+     * Form de cadastro (nome, email, senha, confirmação) com submit para rota custom de registro (`/api/auth/register`).
+
+   ### Páginas logadas
+
+   * `app/dashboard/page.tsx`:
+     * Mostrar:
+       * Card com nome do jogador, arena, troféus atuais.
+       * Winrate das últimas 10 batalhas (porcentagem).
+       * Tabela simples com últimas batalhas (data, resultado, crown diff).
+     * Se o usuário ainda não tiver `PlayerProfile`, mostrar call-to-action para página de conexão de tag.
+
+   * `app/profile/page.tsx`:
+     * Exibir e permitir editar:
+       * Nome do usuário SaaS.
+       * Campo para salvar/editar a tag do Clash Royale.
+     * Botão “Sincronizar dados” que chama `/api/player/sync`.
+
+   * `app/coach/page.tsx`:
+     * Interface de chat:
+       * Lista de mensagens (user / coach).
+       * Input de texto + botão “Enviar”.
+     * Essa página consome `/api/ai/coach`.
+
+   * `app/billing/page.tsx`:
+     * Mostrar plano atual (dados de `Subscription`).
+     * Botões:
+       * “Manter plano FREE” (nada faz além de mostrar info).
+       * “Quero PRO” que chama `/api/subscription/upgrade` (resposta pode ser apenas um link fake ou placeholder no MVP).
+
+---
+
+## ROTAS DE API (ROUTE HANDLERS)
+
+Crie handlers na pasta `app/api/**`:
+
+1. **Registro de usuário**
+   * `app/api/auth/register/route.ts` (POST):
+     * Recebe `{ name, email, password }`.
+     * Valida se email não existe.
+     * Hasheia senha com `bcrypt`.
+     * Cria usuário em `User`.
+     * Retorna sucesso ou erro apropriado.
+
+2. **NextAuth**
+   * `app/api/auth/[...nextauth]/route.ts` com a config do NextAuth usando `NextAuth(authOptions)`:
+     * `authOptions` extraídos de `lib/auth.ts`.
+
+3. **Conexão de jogador (`/api/player/connect`)**
+   * `app/api/player/connect/route.ts` (POST):
+     * Requer usuário autenticado (pegar sessão com `getServerSession`).
+     * Recebe `{ playerTag }`.
+     * Salva/atualiza `PlayerProfile` com essa tag, associando ao `userId`.
+     * Ainda NÃO chama API externa, apenas vincula.
+
+4. **Sincronização de dados de jogador (`/api/player/sync`)**
+   * `app/api/player/sync/route.ts` (POST):
+     * Requer usuário autenticado.
+     * Pega `playerTag` do `PlayerProfile` (se não houver, erro).
+     * Usa `CLASH_API_KEY` e um endpoint genérico (simulado) para:
+       * Buscar stats gerais (troféus, melhor temporada, arena etc.).
+       * Buscar últimas 10 batalhas.
+     * Atualiza `PlayerProfile` e cria registros em `Battle`.
+     * A resposta pode mockar a estrutura se não quiser amarrar a uma API real, mas deixe o código organizado para ser trocado depois.
+
+5. **Coach de IA (`/api/ai/coach`)**
+   * `app/api/ai/coach/route.ts` (POST):
+     * Requer usuário autenticado.
+
+     * Recebe `{ message, dialogId? }`.
+
+     * Busca `PlayerProfile` e últimas batalhas (por ex. 10).
+
+     * Monta um prompt do tipo:
+
+       > Você é um coach profissional de Clash Royale. Ajude o jogador a subir troféus.
+       > Use as seguintes estatísticas: [resumo de troféus, arena etc.]
+       > Use também este resumo das últimas batalhas: [resumo simples de vitórias/derrotas].
+       > Responda em português, dando dicas claras, diretas e aplicáveis.
+
+     * Chama a OpenAI API (modelo de chat) usando `OPENAI_API_KEY`.
+
+     * Salva a pergunta e resposta em `AiDialog` / `AiMessage`.
+
+     * Retorna a mensagem do coach para o frontend.
+
+6. **Subscription (gating simples)**
+   * `app/api/subscription/status/route.ts` (GET):
+     * Retorna o registro `Subscription` do usuário (ou cria `FREE` se não existir).
+   * `app/api/subscription/upgrade/route.ts` (POST):
+     * Apenas stub:
+       * Cria/atualiza Subscription como `plan = "PRO"` e `status = "active"`.
+       * Retorna sucesso.
+       * (Integração real com Stripe será feita depois.)
+
+---
+
+## COMPONENTES E UI
+
+Crie componentes reutilizáveis em, por exemplo, `components/ui/`:
+
+* `Navbar.tsx`:
+  * Mostra logo “CRStats”.
+  * Links: Dashboard, Coach, Perfil, Billing.
+  * Botão de Logout (chama `signOut` do NextAuth).
+
+* `Card.tsx` simples para agrupamento de blocos do dashboard.
+
+* `StatCard.tsx` para mostrar números grandes (troféus, winrate etc.).
+
+* `ChatMessage.tsx` para exibir cada mensagem no coach (`role = user` ou `assistant`).
+
+Na landing (`/`), use um layout simples, com:
+
+* Headline: “Suba troféus em Clash Royale com um coach de IA”.
+* Subheadline explicando que ele analisa suas batalhas e sugere treinos.
+* CTA: “Começar de graça”.
+
+No dashboard:
+
+* Mostrar estado de “carregando” enquanto busca as stats via fetch (`/api/player/sync` pode ser acionado manualmente via botão).
+* Se não houver `PlayerProfile`, mostrar CTA para ir ao `/profile` e registrar a tag.
+
+---
+
+## CONTROLE DE PLANO (FREE vs PRO)
+
+* Adicione um helper, por exemplo em `lib/subscription.ts`, com uma função:
+  * `getUserPlan(userId: string): Promise<"FREE" | "PRO">`
+* Nas rotas de IA:
+  * Se plano for `FREE`, limitar o número de mensagens por dia (ex.: contar quantos `AiMessage` `role = "user"` foram criados hoje).
+  * Se exceder, retornar erro amigável (“No plano FREE você já usou as mensagens de hoje, faça upgrade para PRO.”).
+
+No frontend:
+
+* Em `/coach`, se vier erro de limite, mostrar aviso e link para `/billing`.
+
+---
+
+## VARIÁVEIS DE AMBIENTE
+
+Considere que serão definidas via `.env` (não crie o arquivo com valores reais, apenas com placeholders nos comentários):
+
+* `DATABASE_URL`
+* `NEXTAUTH_SECRET`
+* `OPENAI_API_KEY`
+* `CLASH_API_KEY`
+* (Opcional para MVP+1) `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+
+---
+
+## COMO ENTREGAR
+
+Ao responder:
+
+1. Crie/mostre os arquivos principais com **conteúdo completo**, por exemplo:
+   * `prisma/schema.prisma`
+   * `lib/prismadb.ts`
+   * `lib/auth.ts`
+   * `app/layout.tsx`
+   * `app/page.tsx`
+   * `app/auth/login/page.tsx`
+   * `app/auth/register/page.tsx`
+   * `app/dashboard/page.tsx`
+   * `app/profile/page.tsx`
+   * `app/coach/page.tsx`
+   * `app/billing/page.tsx`
+   * Rotas de API em `app/api/**`
+   * Componentes principais em `components/**`
+2. Garanta que todo o código esteja em **TypeScript** e compatível com o App Router.
+3. Evite explicações longas. Foque em código e comentários curtos e objetivos dentro do próprio código.
+4. Se precisar de seed de dados, crie um script simples em `prisma/seed.ts` (opcional).
+
+Construa tudo isso agora, em uma única resposta, de forma coesa.
