@@ -3,6 +3,7 @@ import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -232,6 +233,57 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // ============================================================================
+  // CLASH ROYALE API ROUTES
+  // ============================================================================
+  
+  app.get('/api/clash/player/:tag', async (req: any, res) => {
+    try {
+      const { tag } = req.params;
+      const result = await getPlayerByTag(tag);
+      
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.json(result.data);
+    } catch (error) {
+      console.error("Error fetching player:", error);
+      res.status(500).json({ error: "Failed to fetch player data" });
+    }
+  });
+
+  app.get('/api/clash/player/:tag/battles', async (req: any, res) => {
+    try {
+      const { tag } = req.params;
+      const result = await getPlayerBattles(tag);
+      
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.json(result.data);
+    } catch (error) {
+      console.error("Error fetching battles:", error);
+      res.status(500).json({ error: "Failed to fetch battle history" });
+    }
+  });
+
+  app.get('/api/clash/cards', async (req: any, res) => {
+    try {
+      const result = await getCards();
+      
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.json(result.data);
+    } catch (error) {
+      console.error("Error fetching cards:", error);
+      res.status(500).json({ error: "Failed to fetch cards" });
     }
   });
 
