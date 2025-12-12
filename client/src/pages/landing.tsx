@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Swords, Zap, TrendingUp, ShieldCheck, ArrowRight } from "lucide-react";
+import { Swords, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
 import heroBg from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.png";
 
 export default function LandingPage() {
@@ -102,6 +102,70 @@ export default function LandingPage() {
               title="Revisão de Batalhas"
               description="Identifique exatamente onde você errou em suas últimas derrotas e como corrigir."
             />
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-24 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Planos Simples</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Comece grátis e evolua conforme suas necessidades.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Free Plan */}
+            <div className="p-8 rounded-2xl bg-card border border-border flex flex-col">
+              <div className="mb-4">
+                <h3 className="text-xl font-bold font-display">Iniciante</h3>
+                <div className="text-3xl font-bold mt-2">R$ 0 <span className="text-sm font-normal text-muted-foreground">/mês</span></div>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> 1 Perfil de Jogador
+                </li>
+                <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> 5 Mensagens de Coach/dia
+                </li>
+                <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> Últimas 10 batalhas
+                </li>
+              </ul>
+              <Link href="/auth?signup=true">
+                <Button variant="outline" className="w-full">Começar Grátis</Button>
+              </Link>
+            </div>
+
+            {/* Pro Plan */}
+            <div className="p-8 rounded-2xl bg-gradient-to-br from-card to-primary/5 border border-primary/50 flex flex-col relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
+                POPULAR
+              </div>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold font-display text-primary">Pro Player</h3>
+                <div className="text-3xl font-bold mt-2">R$ 19,90 <span className="text-sm font-normal text-muted-foreground">/mês</span></div>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-center gap-3 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> Perfis Ilimitados
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> Coach IA Ilimitado
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> Histórico de 60 dias
+                </li>
+                <li className="flex items-center gap-3 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> Treinos Personalizados
+                </li>
+              </ul>
+              <Link href="/auth?signup=true">
+                <Button className="w-full font-bold shadow-lg shadow-primary/20">Assinar Pro</Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>

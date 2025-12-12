@@ -8,7 +8,9 @@ import {
   LogOut, 
   Swords, 
   Menu,
-  X
+  X,
+  Target,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,8 +28,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Coach IA", href: "/coach", icon: MessageSquare },
+    { name: "Treino", href: "/training", icon: Target },
+    { name: "Decks", href: "/decks", icon: Layers },
     { name: "Perfil", href: "/profile", icon: User },
-    // { name: "Configurações", href: "/settings", icon: Settings },
   ];
 
   const SidebarContent = () => (
