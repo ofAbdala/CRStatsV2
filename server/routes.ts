@@ -4,6 +4,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
+import { generateCoachResponse, ChatMessage } from "./openai";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -284,6 +285,68 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching cards:", error);
       res.status(500).json({ error: "Failed to fetch cards" });
+    }
+  });
+
+  // ============================================================================
+  // AI COACH ROUTES
+  // ============================================================================
+  
+  app.post('/api/coach/chat', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messages, playerTag } = req.body as { 
+        messages: ChatMessage[]; 
+        playerTag?: string;
+      };
+
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: "Messages array is required" });
+      }
+
+      let playerContext: any = {};
+
+      if (playerTag) {
+        const playerResult = await getPlayerByTag(playerTag);
+        if (playerResult.data) {
+          const player = playerResult.data as any;
+          playerContext = {
+            playerTag: player.tag,
+            trophies: player.trophies,
+            arena: player.arena?.name,
+            currentDeck: player.currentDeck?.map((c: any) => c.name),
+          };
+
+          const battlesResult = await getPlayerBattles(playerTag);
+          if (battlesResult.data) {
+            playerContext.recentBattles = (battlesResult.data as any[]).slice(0, 5);
+          }
+        }
+      } else {
+        const profile = await storage.getProfile(userId);
+        if (profile?.clashTag) {
+          const playerResult = await getPlayerByTag(profile.clashTag);
+          if (playerResult.data) {
+            const player = playerResult.data as any;
+            playerContext = {
+              playerTag: player.tag,
+              trophies: player.trophies,
+              arena: player.arena?.name,
+              currentDeck: player.currentDeck?.map((c: any) => c.name),
+            };
+          }
+        }
+      }
+
+      const response = await generateCoachResponse(messages, playerContext);
+      
+      res.json({ 
+        message: response,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error in coach chat:", error);
+      res.status(500).json({ error: "Failed to generate coach response" });
     }
   });
 

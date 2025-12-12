@@ -71,4 +71,13 @@ export const api = {
     getBattles: (tag: string) => fetchAPI(`/clash/player/${encodeURIComponent(tag)}/battles`),
     getCards: () => fetchAPI('/clash/cards'),
   },
+
+  // AI Coach endpoints
+  coach: {
+    chat: (messages: { role: string; content: string }[], playerTag?: string) =>
+      fetchAPI<{ message: string; timestamp: string }>('/coach/chat', {
+        method: 'POST',
+        body: JSON.stringify({ messages, playerTag }),
+      }),
+  },
 };
