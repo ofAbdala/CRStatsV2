@@ -23,12 +23,12 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <Link href="/auth">
+            <a href="/api/login">
               <Button variant="ghost" className="hidden md:flex">Entrar</Button>
-            </Link>
-            <Link href="/auth?signup=true">
+            </a>
+            <a href="/api/login">
               <Button className="font-bold">Começar Grátis</Button>
-            </Link>
+            </a>
           </div>
         </div>
       </header>

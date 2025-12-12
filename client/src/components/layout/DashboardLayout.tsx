@@ -100,7 +100,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           variant="ghost" 
           className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors" 
           size="sm"
-          onClick={() => setLocation("/")}
+          onClick={() => { window.location.href = "/api/logout"; }}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Sair
