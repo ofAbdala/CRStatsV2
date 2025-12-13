@@ -351,48 +351,49 @@ export default function MePage() {
 
   const trophyEvolutionData = React.useMemo(() => {
     if (!battles.length || !player?.trophies) {
-      const baseTrophies = player?.trophies || 5000;
-      return Array.from({ length: 14 }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (13 - i));
-        const variation = Math.floor(Math.random() * 60) - 30;
-        return {
-          date: format(date, 'dd/MM', { locale: ptBR }),
-          fullDate: format(date, 'dd/MM/yyyy', { locale: ptBR }),
-          trophies: Math.max(0, baseTrophies + variation * (i - 7)),
-          change: variation,
-        };
-      });
+      return null;
     }
 
-    const dataByDate: Record<string, { trophies: number; change: number }> = {};
-    let currentTrophies = player.trophies;
+    const battlesWithTrophyChange = battles.filter((battle: any) => 
+      battle.battleTime && typeof battle.team?.[0]?.trophyChange === 'number'
+    );
 
-    battles.forEach((battle: any) => {
-      if (!battle.battleTime) return;
+    if (battlesWithTrophyChange.length === 0) {
+      return null;
+    }
+
+    const dataByDate: Record<string, { trophiesAtEnd: number; totalChange: number }> = {};
+    let runningTrophies = player.trophies;
+
+    battlesWithTrophyChange.forEach((battle: any) => {
       const battleDate = parseBattleTime(battle.battleTime);
       const dateKey = format(battleDate, 'yyyy-MM-dd');
-      const trophyChange = battle.team?.[0]?.trophyChange || 0;
+      const trophyChange = battle.team[0].trophyChange;
       
       if (!dataByDate[dateKey]) {
-        dataByDate[dateKey] = { trophies: currentTrophies, change: 0 };
+        dataByDate[dateKey] = { trophiesAtEnd: runningTrophies, totalChange: 0 };
       }
-      dataByDate[dateKey].change += trophyChange;
-      currentTrophies -= trophyChange;
+      dataByDate[dateKey].totalChange += trophyChange;
+      runningTrophies -= trophyChange;
     });
 
     const sortedDates = Object.keys(dataByDate).sort();
-    let runningTrophies = player.trophies;
+    
+    if (sortedDates.length === 0) {
+      return null;
+    }
+
+    let trophiesAtEndOfDay = player.trophies;
     
     return sortedDates.slice(-14).map(dateKey => {
       const data = dataByDate[dateKey];
       const result = {
         date: format(new Date(dateKey), 'dd/MM', { locale: ptBR }),
         fullDate: format(new Date(dateKey), 'dd/MM/yyyy', { locale: ptBR }),
-        trophies: runningTrophies,
-        change: data.change,
+        trophies: trophiesAtEndOfDay,
+        change: data.totalChange,
       };
-      runningTrophies = data.trophies;
+      trophiesAtEndOfDay -= data.totalChange;
       return result;
     }).reverse();
   }, [battles, player?.trophies]);
@@ -1270,79 +1271,110 @@ export default function MePage() {
           {/* Progress Tab */}
           <TabsContent value="progress" className="mt-6 space-y-6">
             {/* Trophy Evolution Chart */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="chart-trophy-evolution">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  Evolução de Troféus
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[280px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trophyEvolutionData}>
-                      <defs>
-                        <linearGradient id="colorTrophiesProgress" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="hsl(var(--muted-foreground))" 
-                        fontSize={11}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis 
-                        stroke="hsl(var(--muted-foreground))" 
-                        fontSize={11}
-                        tickLine={false}
-                        axisLine={false}
-                        domain={['dataMin - 100', 'dataMax + 100']}
-                        tickFormatter={(value) => value.toLocaleString()}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--popover))', 
-                          borderColor: 'hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'hsl(var(--popover-foreground))'
-                        }}
-                        formatter={(value: number, name: string) => [
-                          value.toLocaleString(), 
-                          name === 'trophies' ? 'Troféus' : name
-                        ]}
-                        labelFormatter={(label) => `Data: ${label}`}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="trophies" 
-                        stroke="hsl(var(--primary))" 
-                        strokeWidth={3}
-                        fillOpacity={1} 
-                        fill="url(#colorTrophiesProgress)" 
-                        dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-primary" />
-                    <span className="text-muted-foreground">Atual:</span>
-                    <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
+            {trophyEvolutionData && trophyEvolutionData.length > 0 ? (
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="chart-trophy-evolution">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    Evolução de Troféus
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trophyEvolutionData}>
+                        <defs>
+                          <linearGradient id="colorTrophiesProgress" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="hsl(var(--muted-foreground))" 
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis 
+                          stroke="hsl(var(--muted-foreground))" 
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                          domain={['dataMin - 100', 'dataMax + 100']}
+                          tickFormatter={(value) => value.toLocaleString()}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--popover))', 
+                            borderColor: 'hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--popover-foreground))'
+                          }}
+                          formatter={(value: number, name: string) => [
+                            value.toLocaleString(), 
+                            name === 'trophies' ? 'Troféus' : name
+                          ]}
+                          labelFormatter={(label) => `Data: ${label}`}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="trophies" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={3}
+                          fillOpacity={1} 
+                          fill="url(#colorTrophiesProgress)" 
+                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Award className="w-4 h-4 text-yellow-500" />
-                    <span className="text-muted-foreground">Melhor:</span>
-                    <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
+                  <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-primary" />
+                      <span className="text-muted-foreground">Atual:</span>
+                      <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Award className="w-4 h-4 text-yellow-500" />
+                      <span className="text-muted-foreground">Melhor:</span>
+                      <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="empty-trophy-data">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    Evolução de Troféus
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Trophy className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-lg font-medium text-muted-foreground mb-2">
+                      Sem dados de evolução disponíveis
+                    </p>
+                    <p className="text-sm text-muted-foreground/70">
+                      {battles.length === 0 
+                        ? "Jogue mais partidas para ver seu progresso"
+                        : "Suas batalhas recentes não possuem dados de troféus"}
+                    </p>
+                    {player?.trophies && (
+                      <div className="mt-6 flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-primary" />
+                        <span className="text-muted-foreground">Troféus atuais:</span>
+                        <span className="font-bold text-primary">{player.trophies.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Play Volume Section */}
             <div className="grid lg:grid-cols-3 gap-6">
