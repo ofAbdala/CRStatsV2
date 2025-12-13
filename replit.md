@@ -105,3 +105,23 @@ Key server modules:
 - `@tanstack/react-query` - Data fetching
 - `wouter` - Client routing
 - `tailwindcss` / `@radix-ui/*` - UI components
+
+## Recent Changes (December 2025)
+
+### Card Images Integration
+- Dashboard now displays official Clash Royale card images
+- Current deck section shows 8 cards with images from `iconUrls.medium`
+- Battle history shows deck thumbnails for each battle
+- Arena images loaded from RoyaleAPI CDN
+
+### Billing Page
+- New `/billing` route for subscription management
+- Plan comparison: FREE vs PRO features
+- Stripe checkout integration for upgrades (monthly R$19.90, yearly R$159.00)
+- Stripe customer portal for subscription management
+- Success/canceled redirect handling with toast notifications
+
+### Navigation Updates
+- Dynamic subscription status in sidebar (shows PRO badge or upgrade button)
+- Billing link added to navigation menu
+- Plan status displayed near user profile
