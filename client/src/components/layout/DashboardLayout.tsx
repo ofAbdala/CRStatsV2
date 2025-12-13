@@ -43,6 +43,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Meu Perfil", href: "/me", icon: User },
     { name: "Coach IA", href: "/coach", icon: MessageSquare },
     { name: "Treino", href: "/training", icon: Target },
     { name: "Decks", href: "/decks", icon: Layers },
