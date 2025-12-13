@@ -16,6 +16,7 @@ import DecksPage from "@/pages/decks";
 import CommunityPage from "@/pages/community";
 import SettingsPage from "@/pages/settings";
 import PublicProfilePage from "@/pages/public-profile";
+import BillingPage from "@/pages/billing";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -49,6 +50,7 @@ function Router() {
           <Route path="/settings" component={SettingsPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/onboarding" component={OnboardingPage} />
+          <Route path="/billing" component={BillingPage} />
         </>
       ) : (
         <>
@@ -60,6 +62,7 @@ function Router() {
           <Route path="/settings">{() => { window.location.href = "/api/login"; return null; }}</Route>
           <Route path="/profile">{() => { window.location.href = "/api/login"; return null; }}</Route>
           <Route path="/onboarding">{() => { window.location.href = "/api/login"; return null; }}</Route>
+          <Route path="/billing">{() => { window.location.href = "/api/login"; return null; }}</Route>
         </>
       )}
       
