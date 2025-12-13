@@ -145,3 +145,42 @@ New comprehensive player stats page inspired by DeepLOL/OP.GG:
 - Real-time data from Clash Royale API
 - PRO feature locks with blur effect and upgrade CTA
 - Responsive design for desktop and mobile
+
+### Internationalization (i18n) - December 2025
+New i18n system with support for multiple languages:
+
+**Translation Files:**
+- `shared/i18n/translations/pt-BR.json` - Brazilian Portuguese (default)
+- `shared/i18n/translations/en-US.json` - US English
+
+**i18n Utilities (`shared/i18n/index.ts`):**
+- `t(key, locale, params)` - Type-safe translation function with parameter interpolation
+- `detectLocale(acceptLanguage)` - Detects locale from browser Accept-Language header
+- `getTranslations(locale)` - Get full translation object for a locale
+
+**React Hook (`client/src/hooks/use-locale.ts`):**
+- `useLocale()` - Provides locale, currency, translation functions, and pricing
+- Persists user preference to localStorage
+- Auto-detects from browser settings
+
+### Multi-Currency Pricing - December 2025
+Support for multiple currencies in billing:
+
+**Pricing Module (`shared/pricing.ts`):**
+- Supported currencies: BRL, USD, EUR
+- `getPricing(currency)` - Get plan prices and Stripe price IDs
+- `formatPrice(amount, currency)` - Locale-aware price formatting
+- `getYearlySavingsPercent(currency)` - Calculate yearly discount
+
+**Price Tiers:**
+- BRL: R$19,90/month, R$159,00/year
+- USD: $4.99/month, $39.99/year
+- EUR: €4.49/month, €35.99/year
+
+### Icon Utilities - December 2025
+Centralized Clash Royale icon helpers (`client/src/lib/clashIcons.ts`):
+- `getCardImageUrl(cardName, size)` - Card images from RoyaleAPI CDN
+- `getArenaImageUrl(arenaId)` - Arena images
+- `getClanBadgeUrl(badgeId)` - Clan badge images
+- `getGameModeIcon(gameMode)` - Emoji icons for game modes
+- `getCardRarityColor(rarity)` - Color codes by card rarity
