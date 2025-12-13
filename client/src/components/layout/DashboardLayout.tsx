@@ -12,7 +12,9 @@ import {
   Target,
   Layers,
   Globe,
-  Bell
+  Bell,
+  CreditCard,
+  Crown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { mockNotifications } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,12 +34,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, setLocation] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
+  const { data: subscription } = useQuery({
+    queryKey: ['subscription'],
+    queryFn: () => api.subscription.get(),
+  });
+
+  const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
+
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Coach IA", href: "/coach", icon: MessageSquare },
     { name: "Treino", href: "/training", icon: Target },
     { name: "Decks", href: "/decks", icon: Layers },
     { name: "Comunidade", href: "/community", icon: Globe },
+    { name: "Billing", href: "/billing", icon: CreditCard },
     { name: "Configurações", href: "/settings", icon: Settings },
   ];
 
@@ -76,12 +88,32 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       <div className="mt-auto p-6 border-t border-sidebar-border">
-        <div className="bg-card/30 p-4 rounded-xl mb-4 border border-primary/20">
-          <h4 className="font-bold text-sm text-primary mb-1">Plano Free</h4>
-          <p className="text-xs text-muted-foreground mb-3">2/5 mensagens diárias</p>
-          <Link href="/settings?tab=billing">
-             <Button size="sm" className="w-full text-xs font-bold" variant="outline">Upgrade PRO</Button>
-          </Link>
+        <div className={cn(
+          "p-4 rounded-xl mb-4 border",
+          isPro 
+            ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30" 
+            : "bg-card/30 border-primary/20"
+        )}>
+          <h4 className="font-bold text-sm mb-1 flex items-center gap-2" data-testid="text-plan-status">
+            {isPro ? (
+              <>
+                <Crown className="w-4 h-4 text-yellow-500" />
+                <span className="text-yellow-500">Plano PRO</span>
+              </>
+            ) : (
+              <span className="text-primary">Plano Free</span>
+            )}
+          </h4>
+          {isPro ? (
+            <p className="text-xs text-muted-foreground">Acesso ilimitado</p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground mb-3">2/5 mensagens diárias</p>
+              <Link href="/billing">
+                <Button size="sm" className="w-full text-xs font-bold" variant="outline">Upgrade PRO</Button>
+              </Link>
+            </>
+          )}
         </div>
 
         <Link href="/profile">
@@ -91,7 +123,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <AvatarFallback>KS</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-sidebar-foreground">KingSlayer</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-sidebar-foreground">KingSlayer</span>
+                {isPro && (
+                  <Badge 
+                    className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-[10px] px-1.5 py-0"
+                    data-testid="badge-subscription-pro"
+                  >
+                    <Crown className="w-2.5 h-2.5 mr-0.5" />
+                    PRO
+                  </Badge>
+                )}
+              </div>
               <span className="text-xs text-sidebar-foreground/60">Ver Perfil</span>
             </div>
           </div>
