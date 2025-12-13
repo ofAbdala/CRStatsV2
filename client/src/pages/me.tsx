@@ -202,6 +202,56 @@ function createPushSession(battles: any[]): PushSession {
   };
 }
 
+/**
+ * Groups battles into sessions for visual display (includes single-battle sessions)
+ */
+function groupBattlesIntoSessions(battles: any[], maxGapMinutes: number = 30): PushSession[] {
+  return groupBattlesIntoPushes(battles, 1, maxGapMinutes);
+}
+
+/**
+ * PushSummaryRow - Compact summary for a push session in the battle history
+ */
+function PushSummaryRow({ session }: { session: PushSession }) {
+  const durationMin = Math.round(session.durationMs / (1000 * 60));
+  const isSingleBattle = session.battles.length === 1;
+  
+  return (
+    <div className="flex items-center gap-2 py-2 px-3 bg-muted/30 rounded-lg border border-border/30" data-testid="push-summary-row">
+      <Layers className="w-4 h-4 text-primary shrink-0" />
+      {isSingleBattle ? (
+        <span className="text-sm font-medium text-muted-foreground">
+          Sessão rápida: 1 partida
+        </span>
+      ) : (
+        <span className="text-sm font-medium">
+          Push: {session.battles.length} partidas,{' '}
+          <span className="text-green-500">{session.wins}V</span>
+          {' / '}
+          <span className="text-red-500">{session.losses}D</span>
+          {session.draws > 0 && (
+            <>
+              {' / '}
+              <span className="text-muted-foreground">{session.draws}E</span>
+            </>
+          )}
+          {', '}
+          <span className={cn(
+            session.netTrophies > 0 ? "text-green-500" : 
+            session.netTrophies < 0 ? "text-red-500" : "text-muted-foreground"
+          )}>
+            {session.netTrophies > 0 ? '+' : ''}{session.netTrophies} troféus
+          </span>
+          {', '}
+          <span className="text-muted-foreground">
+            {durationMin} min
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const clashTag = (profile as any)?.clashTag;
@@ -269,6 +319,23 @@ export default function MePage() {
   const lastPush = React.useMemo(() => {
     const pushes = groupBattlesIntoPushes(filteredBattles);
     return pushes.length > 0 ? pushes[pushes.length - 1] : null;
+  }, [filteredBattles]);
+
+  // Sessions for visual display (includes single-battle sessions), sorted newest first
+  const sessions = React.useMemo(() => {
+    const allSessions = groupBattlesIntoSessions(filteredBattles);
+    // Sort sessions from newest to oldest (by startTime descending)
+    // Also sort battles within each session from newest to oldest
+    return allSessions
+      .map(session => ({
+        ...session,
+        battles: [...session.battles].sort((a, b) => {
+          const dateA = parseBattleTime(a.battleTime);
+          const dateB = parseBattleTime(b.battleTime);
+          return dateB.getTime() - dateA.getTime();
+        })
+      }))
+      .sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
   }, [filteredBattles]);
 
   const stats = React.useMemo(() => {
@@ -1003,21 +1070,27 @@ export default function MePage() {
               </CardContent>
             </Card>
 
-            {/* Match List */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Histórico de Batalhas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {battlesLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  </div>
-                ) : filteredBattles.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Nenhuma batalha encontrada neste período</p>
-                ) : (
-                  <Accordion type="single" collapsible className="space-y-2">
-                    {filteredBattles.slice(0, 25).map((battle: any, idx: number) => {
+            {/* Match List - Grouped by Sessions */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <Swords className="w-5 h-5 text-primary" />
+                Histórico de Batalhas
+              </h3>
+              
+              {battlesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : sessions.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Nenhuma batalha encontrada neste período</p>
+              ) : (
+                <div className="space-y-6">
+                  {sessions.map((session, sessionIdx) => (
+                    <section key={session.startTime.toISOString()} data-testid={`session-${sessionIdx}`}>
+                      <PushSummaryRow session={session} />
+                      <div className="mt-2 space-y-2">
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {session.battles.map((battle: any, idx: number) => {
                       const teamCrowns = battle.team?.[0]?.crowns || 0;
                       const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
                       const isWin = teamCrowns > opponentCrowns;
@@ -1191,13 +1264,16 @@ export default function MePage() {
                             </div>
                           </AccordionContent>
                         </AccordionItem>
-                      );
-                    })}
-                  </Accordion>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                          );
+                        })}
+                      </Accordion>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
           {/* Decks Tab */}
           <TabsContent value="decks" className="mt-6 space-y-6">
