@@ -23,8 +23,8 @@ export const PRICING: Record<SupportedCurrency, PricingPlan> = {
   USD: {
     monthlyPrice: 10.00,
     yearlyPrice: 80.00,
-    monthlyPriceId: 'price_pro_usd_monthly',
-    yearlyPriceId: 'price_pro_usd_yearly',
+    monthlyPriceId: 'price_1SdwJRCnrOGKyenCp6kzFRYo',
+    yearlyPriceId: 'price_1SdwJSCnrOGKyenCSagffo1v',
     currency: 'USD',
     symbol: '$',
     locale: 'en-US',
@@ -32,8 +32,8 @@ export const PRICING: Record<SupportedCurrency, PricingPlan> = {
   EUR: {
     monthlyPrice: 9.00,
     yearlyPrice: 72.00,
-    monthlyPriceId: 'price_pro_eur_monthly',
-    yearlyPriceId: 'price_pro_eur_yearly',
+    monthlyPriceId: 'price_1SdwJSCnrOGKyenCRrOmhorG',
+    yearlyPriceId: 'price_1SdwJSCnrOGKyenCCj30dZj5',
     currency: 'EUR',
     symbol: '€',
     locale: 'de-DE',
