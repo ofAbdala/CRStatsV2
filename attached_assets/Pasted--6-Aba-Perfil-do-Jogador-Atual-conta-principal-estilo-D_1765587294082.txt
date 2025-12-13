@@ -1,0 +1,216 @@
+### 6. Aba “Perfil do Jogador Atual” (conta principal) – estilo DEEPLOL / página de stats
+
+Crie uma **tela dedicada** para o jogador ver o perfil COMPLETO da conta Clash Royale conectada, inspirada em páginas de análise de perfil de outros jogos competitivos (como páginas de summoner stats de sites tipo DeepLOL, OP.GG etc.), adaptado para Clash Royale.
+
+Essa aba é diferente do perfil público `/p/[tag]`:
+
+* Aqui é a visão **privada/logada** do jogador, com mais detalhes, foco em **treino e progresso pessoal**.
+* É uma página em **/me**, `/player`, ou similar, acessível pelo menu.
+
+#### Estrutura geral
+
+* Layout desktop:
+
+  * **Header grande no topo**, ocupando toda a largura.
+  * Abaixo, uma área com **tabs** e seções (Overview, Histórico, Decks, Progresso etc.).
+* Layout mobile:
+
+  * Header comprimido, com dados principais em cards empilhados.
+  * Tabs em formato scroll horizontal.
+
+---
+
+#### Header do Perfil
+
+No topo, um header forte, inspirado em páginas de stats de MOBA:
+
+* À esquerda / centro:
+
+  * **Nome do jogador** (grande).
+  * Tag Clash Royale (ex.: `#ABCD1234`).
+  * Clan (nome + tag), com badge/ícone simples.
+* À direita (ou logo abaixo, em mobile):
+
+  * Card com:
+
+    * Arena atual (ícone/ilustração simples).
+    * Troféus atuais (número bem grande).
+    * Melhor troféu da temporada atual e recorde histórico (se disponível).
+* Chips/resumos logo abaixo:
+
+  * Winrate global (últimas X partidas).
+  * Número de partidas jogadas no período (ex.: últimos 7 dias).
+  * Streak atual (vitórias/derrotas seguidas).
+  * Tempo desde a última partida (“Jogou há 3h”).
+
+Esse header deve dar a sensação de **“cartão de identidade competitivo”** do player.
+
+---
+
+#### Tabs / Navegação interna da página
+
+Logo abaixo do header, crie uma linha de tabs (desktop) / tabs roláveis (mobile), por exemplo:
+
+* **Visão Geral**
+* **Histórico de Partidas**
+* **Decks & Meta**
+* **Progresso & Gráficos**
+
+Cada tab troca o conteúdo da área principal abaixo.
+
+---
+
+#### Tab 1: Visão Geral
+
+Foco em **snapshot rápido** da performance atual do jogador.
+
+Elementos sugeridos:
+
+* **Bloco “Resumo da Temporada”**
+
+  * Troféus atuais.
+  * Melhor marca da temporada.
+  * Winrate da temporada.
+  * Número de partidas.
+
+* **Bloco “Performance Recente”**
+
+  * Winrate das últimas 20–30 partidas.
+  * Streak atual (ex.: 3 vitórias seguidas, 4 derrotas seguidas).
+  * Indicador de “Tilt” (leve visual, pode integrar com o conceito do AICoach):
+
+    * Ex.: badge “Em risco de tilt” ou “Consistente”.
+
+* **Mini-gráfico de linha** (mesmo que seja só conceitual no design):
+
+  * Evolução de troféus nos últimos dias / semanas.
+
+* **Resumo por modo de jogo** (cards):
+
+  * Ladder / Ranqueada.
+  * Desafios (Grand Challenge / Classic).
+  * Outros modos relevantes.
+  * Cada card com:
+
+    * Winrate.
+    * Partidas jogadas.
+    * Tendência (subindo/caindo, com setinha).
+
+Em alguns cards, mostre área “bloqueada” para PRO (ex.: gráfico mais detalhado), com blur + CTA “Desbloquear no PRO”.
+
+---
+
+#### Tab 2: Histórico de Partidas
+
+Similar a páginas de match history de sites de stats (como DeepLOL/OPGG), mas para Clash Royale.
+
+* **Filtro de período**:
+
+  * Botões tipo: “Hoje”, “7 dias”, “30 dias”, “Temporada”.
+* Lista de partidas em formato tabela ou lista rica, com cada linha contendo:
+
+  * Data/Hora da partida (ou “há X horas”).
+  * Resultado (Vitória / Derrota / Empate), com cores claras (verde/vermelho/cinza).
+  * Modo (Ladder, Desafio, etc.).
+  * Coroas do jogador vs oponente (ex.: `3 × 1`).
+  * Troféus ganhos/perdidos (+/-).
+  * Nome e tag do oponente (com opção de expandir detalhes).
+* Ao clicar numa partida (ou ícone de detalhe), abrir:
+
+  * Painel expandido/accordion com:
+
+    * Deck do jogador (8 cartas, ícones).
+    * Deck do oponente.
+    * Pequena nota de insight (futuro, pode vir do coach).
+
+No canto superior da tab, mostre um resumo da série recente:
+
+* Ex.: “Últimas 10 partidas: 6V / 4D (60% winrate)”.
+
+---
+
+#### Tab 3: Decks & Meta
+
+Foco em **deck usage** do jogador, inspirado em páginas de campeões/heróis de outros jogos, mas para decks de Clash Royale.
+
+* **Seção “Decks Mais Usados”**
+
+  * Cards grandes, cada um representando um deck:
+
+    * 8 cartas em grid.
+    * Nome do deck (se tiver).
+    * Winrate com esse deck.
+    * Número de partidas.
+  * Ordenado por relevância (mais jogado / maior winrate).
+
+* **Seção “Forças & Fraquezas” (mesmo que seja placeholder)**
+
+  * Blocos que indiquem:
+
+    * Contra quais tipos de decks o jogador tem mais dificuldade (ex.: aéreo, beatdown).
+    * Espaço para integração com o meta (futuro).
+
+Alguns insights avançados (ex.: “Seu deck X performa muito mal contra Y”) podem estar marcados como feature PRO (com blur/lock).
+
+---
+
+#### Tab 4: Progresso & Gráficos
+
+Aqui, a pegada é mais analítica/treino:
+
+* **Gráfico de troféus ao longo do tempo**
+
+  * Linha de tempo (últimos 30 dias / temporada).
+  * Eventos marcados (picos e quedas fortes).
+
+* **Volume de jogo**
+
+  * Gráfico de barras ou heatmap simples:
+
+    * Partidas por dia.
+    * Horários mais comuns (opcional).
+
+* **Metas (Goals) integradas**
+
+  * Cards de metas relevantes desse jogador:
+
+    * Ex.: “Alcançar X troféus”, “Manter winrate de Y%”.
+  * Mostre progresso visual da meta dentro dessa página de perfil.
+
+Novamente, elementos mais “pro” (como gráficos detalhados) podem ter variações FREE vs PRO.
+
+---
+
+#### Ações e Integrações importantes na página de Perfil
+
+Inclua, em lugares estratégicos:
+
+* Botão ou link “Ver perfil público” → leva a `/p/[tag]`.
+* Botão “Definir como jogador padrão” (integra com `favorite_players` / is_default).
+* CTA “Perguntar ao coach sobre este perfil”:
+
+  * Leva a /coach já com contexto do player atual.
+* Badge de plano:
+
+  * Mostrar se este player está associado a um usuário FREE ou PRO (na UI dessa página do app logado).
+
+---
+
+#### Direção de estilo específica para esta aba
+
+* Deve ter **peso visual forte**, quase como “homepage pessoal” do jogador.
+* Use bastante a cor primária e variações para destacar:
+
+  * Troféus.
+  * Winrate.
+  * Estados de vitória/derrota.
+* Em desktop, pense numa composição semelhante a sites de estatísticas de e-sports:
+
+  * Header heróico + seções bem segmentadas.
+* Em mobile, manter a leitura rápida:
+
+  * Cards empilhados.
+  * Navegação por tabs simples.
+  * Match history em lista.
+
+Projete essa aba de forma que seja claramente um **painel de performance individual**, que o jogador vai querer abrir sempre antes/depois de jogar.
