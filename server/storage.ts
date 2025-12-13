@@ -106,9 +106,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateProfile(userId: string, profileData: Partial<InsertProfile>): Promise<Profile | undefined> {
     const [profile] = await db
-      .update(profiles)
-      .set({ ...profileData, updatedAt: new Date() })
-      .where(eq(profiles.userId, userId))
+      .insert(profiles)
+      .values({ userId, ...profileData })
+      .onConflictDoUpdate({
+        target: profiles.userId,
+        set: { ...profileData, updatedAt: new Date() },
+      })
       .returning();
     return profile;
   }

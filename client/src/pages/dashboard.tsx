@@ -246,7 +246,17 @@ export default function DashboardPage() {
                     const isWin = teamCrowns > opponentCrowns;
                     const isDraw = teamCrowns === opponentCrowns;
                     const opponentName = battle.opponent?.[0]?.name || 'Oponente';
-                    const battleTime = battle.battleTime ? new Date(battle.battleTime) : new Date();
+                    // Parse Clash Royale API date format: "20231215T123456.000Z" -> "2023-12-15T12:34:56.000Z"
+                    const parseBattleTime = (timeStr: string) => {
+                      if (!timeStr) return new Date();
+                      const formatted = timeStr.replace(
+                        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.(\d{3})Z$/,
+                        '$1-$2-$3T$4:$5:$6.$7Z'
+                      );
+                      const date = new Date(formatted);
+                      return isNaN(date.getTime()) ? new Date() : date;
+                    };
+                    const battleTime = parseBattleTime(battle.battleTime);
 
                     return (
                       <div 
