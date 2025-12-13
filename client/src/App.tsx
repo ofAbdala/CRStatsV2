@@ -17,6 +17,7 @@ import CommunityPage from "@/pages/community";
 import SettingsPage from "@/pages/settings";
 import PublicProfilePage from "@/pages/public-profile";
 import BillingPage from "@/pages/billing";
+import MePage from "@/pages/me";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -51,6 +52,7 @@ function Router() {
           <Route path="/profile" component={ProfilePage} />
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/billing" component={BillingPage} />
+          <Route path="/me" component={MePage} />
         </>
       ) : (
         <>
@@ -63,6 +65,7 @@ function Router() {
           <Route path="/profile">{() => { window.location.href = "/api/login"; return null; }}</Route>
           <Route path="/onboarding">{() => { window.location.href = "/api/login"; return null; }}</Route>
           <Route path="/billing">{() => { window.location.href = "/api/login"; return null; }}</Route>
+          <Route path="/me">{() => { window.location.href = "/api/login"; return null; }}</Route>
         </>
       )}
       
