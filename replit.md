@@ -125,3 +125,23 @@ Key server modules:
 - Dynamic subscription status in sidebar (shows PRO badge or upgrade button)
 - Billing link added to navigation menu
 - Plan status displayed near user profile
+- "Meu Perfil" link added for player profile page
+
+### Player Profile Page (/me) - December 2025
+New comprehensive player stats page inspired by DeepLOL/OP.GG:
+
+**Hero Header:**
+- Player name, tag, clan with badge
+- Arena image and current trophies
+- Summary chips: winrate, matches, streak, last played time
+
+**Four Tabs:**
+1. **Visão Geral** - Season summary, performance stats, tilt indicator, trophy chart, game mode breakdown
+2. **Histórico** - Match history with period filters, expandable battle details with deck images
+3. **Decks & Meta** - Most used decks with winrate, archetype strength/weakness analysis
+4. **Progresso** - Trophy evolution chart, play volume analysis, goals integration, PRO locked features
+
+**Features:**
+- Real-time data from Clash Royale API
+- PRO feature locks with blur effect and upgrade CTA
+- Responsive design for desktop and mobile
