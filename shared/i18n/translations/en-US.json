@@ -185,7 +185,11 @@
     "opponentDeck": "Opponent's Deck",
     "lastPush": "Last push: {games} games, {wins}W / {losses}L, {trophies} trophies, {duration} min session",
     "lastNBattles": "Last {n} battles",
-    "noPush": "No valid push found"
+    "noPush": "No valid push found",
+    "pushSummary": "Push: {games} games, {wins}W / {losses}L, {trophies} trophies, {duration} min",
+    "quickSession": "Quick session: 1 game",
+    "battleHistory": "Battle History",
+    "noBattlesInPeriod": "No battles found in this period"
   },
   "onboarding": {
     "welcome": "Welcome to CRStats!",

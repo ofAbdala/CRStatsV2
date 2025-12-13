@@ -185,7 +185,11 @@
     "opponentDeck": "Deck do Oponente",
     "lastPush": "Último push: {games} partidas, {wins}V / {losses}D, {trophies} troféus, {duration} min de push",
     "lastNBattles": "Últimas {n} partidas",
-    "noPush": "Nenhum push válido encontrado"
+    "noPush": "Nenhum push válido encontrado",
+    "pushSummary": "Push: {games} partidas, {wins}V / {losses}D, {trophies} troféus, {duration} min",
+    "quickSession": "Sessão rápida: 1 partida",
+    "battleHistory": "Histórico de Batalhas",
+    "noBattlesInPeriod": "Nenhuma batalha encontrada neste período"
   },
   "onboarding": {
     "welcome": "Bem-vindo ao CRStats!",
