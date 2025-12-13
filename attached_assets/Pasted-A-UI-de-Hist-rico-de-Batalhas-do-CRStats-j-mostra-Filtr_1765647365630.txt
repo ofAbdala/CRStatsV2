@@ -1,0 +1,141 @@
+A UI de “Histórico de Batalhas” do CRStats já mostra:
+- Filtros (Hoje / 7 dias / 30 dias / Temporada)
+- Banner de **Último push: 3 partidas, 2V / 1D, +32 troféus, 8 min de push**
+- Uma lista plana de cards de batalha.
+
+Já implementamos:
+- Lógica de pushes com intervalo de **30 min** entre partidas.
+- O banner de “Último push” usando **apenas o último push válido (≥ 2 partidas)**.
+
+✅ Quero manter isso exatamente como está no banner, MAS agora:
+
+> Dentro de “Histórico de Batalhas”, a lista deve ser um **histórico de pushes**, cada um com seu resumo + as partidas daquele push.
+
+Estrutura desejada (conceito):
+
+--- Resumo do push #mais recente ---
+Card de batalha 1
+Card de batalha 2
+Card de batalha 3
+
+--- Resumo do push #anterior ---
+Card de batalha 4
+Card de batalha 5
+...
+
+Regras de negócio:
+
+1. Definição de push (já existente, mas vamos formalizar)
+   - Ordenar battles por `battleTime`.
+   - Agrupar partidas consecutivas quando o intervalo entre elas é **≤ 30 minutos**.
+   - Se o intervalo for > 30 minutos, começa um novo push.
+   - Para fins de **banner do topo**, só consideramos pushes com **≥ 2 partidas**.
+   - Para fins de **histórico visual**, NÃO queremos perder partidas isoladas:
+     - Sessões com 1 partida também devem aparecer, só que como um “push” de 1 partida (pode chamar de “sessão rápida”).
+
+2. Estrutura de tipo sugerida (adapte se já existir algo parecido):
+
+   ```ts
+   interface PushSession {
+     battles: Battle[];
+     startTime: Date;
+     endTime: Date;
+     wins: number;
+     losses: number;
+     draws: number;
+     netTrophies: number;
+     durationMs: number;
+   }
+   ```
+
+   Use uma função utilitária em arquivo de domain, algo como:
+   `groupBattlesIntoSessions(battles: Battle[]): PushSession[]`
+   - Aqui, use `minBattlesPerSession = 1` para incluir sessões de 1 partida.
+
+3. Componente / renderização
+
+   No componente da aba **Histórico** do perfil de player:
+
+   - Em vez de fazer:
+
+     ```tsx
+     {battles.map((battle) => (
+       <BattleCard key={battle.id} battle={battle} />
+     ))}
+     ```
+
+   - Quero algo assim (em termos de estrutura):
+
+     ```tsx
+     const sessions = groupBattlesIntoSessions(filteredBattles);
+     // ordenar da sessão MAIS RECENTE para a MAIS ANTIGA
+     const sessionsSorted = [...sessions].sort(
+       (a, b) => b.startTime.getTime() - a.startTime.getTime(),
+     );
+
+     return (
+       <>
+         <LastPushBanner ... /> {/* já existe, mantém igual */}
+
+         <SectionTitle>Histórico de Batalhas</SectionTitle>
+
+         <div className="space-y-6">
+           {sessionsSorted.map((session) => (
+             <section key={session.startTime.toISOString()}>
+               <PushSummaryRow session={session} />
+               <div className="mt-2 space-y-2">
+                 {session.battles.map((battle) => (
+                   <BattleCard key={battle.id} battle={battle} />
+                 ))}
+               </div>
+             </section>
+           ))}
+         </div>
+       </>
+     );
+     ```
+
+4. `PushSummaryRow`
+
+   Criar um componente pequeno (por ex. `PushSummaryRow`) que recebe `session: PushSession` e renderiza uma linha no mesmo estilo do banner de último push, porém mais compacto:
+
+   - PT-BR:
+     - `Último push` só no banner de cima.
+     - Aqui usar algo como:
+       - "Push: 3 partidas, 2V / 1D, +32 troféus, 8 min de push"
+   - EN-US:
+       - "Push: 3 games, 2W / 1L, +32 trophies, 8 min session"
+
+   Use o mesmo helper `formatDurationShort` que já foi criado para o banner.  
+   Reaproveite i18n (`t()`), nada de texto hardcoded.
+
+   Visual:
+   - Mesmo estilo de tipografia/cor usado no banner atual.
+   - Pode usar um bullet/ícone discreto à esquerda.
+   - Entre pushes, usar só `margin-top` para separar; NÃO criar bordas chamativas.
+
+5. Ordem e consistência de dados
+
+   - Os cards dentro de cada push devem continuar **ordenados do mais recente para o mais antigo** (mesma ordem que você já usa hoje).
+   - As sessões (pushes) devem aparecer do **mais recente para o mais antigo** (primeira seção da tela = push mais recente, que é o que alimenta o banner de topo).
+
+6. Integração com o banner de “Último push”
+
+   - O banner principal pode continuar usando a função existente `groupBattlesIntoPushes` com `minBattlesPerPush = 2`, se você já fez assim.
+   - Só garanta que a lógica de agrupamento usada no banner e no histórico é compatível:
+     - Se é um push no histórico, ele deveria ser o mesmo push que o banner usa como “último push”, quando houver ≥ 2 partidas.
+
+7. Critérios de aceite
+
+   - Com 5 partidas em sequência, sem pausas > 30 min:
+     - Histórico mostra 1 push com 5 cards.
+   - Com 3 partidas, pausa > 30 min, mais 3 partidas:
+     - Histórico mostra 2 pushes: o de baixo (mais antigo) com 3 cards e o de cima (mais recente) também com 3 cards.
+     - O banner “Último push” mostra os números do push mais recente.
+   - Com 1 partida isolada:
+     - Histórico mostra 1 push/sessão com 1 card.
+     - Banner “Último push” pode continuar vazio (sem push válido) ou mostrar só resumo “Últimas X partidas”, conforme você já implementou (não quebre isso).
+   - Nenhuma alteração visual negativa nos cards (mesmo layout, mesma aparência).
+   - Nenhum erro de TypeScript ou runtime.
+
+Implemente essa mudança, mantendo o design atual e apenas introduzindo os “blocos de push” dentro do Histórico de Batalhas.
