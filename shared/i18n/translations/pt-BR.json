@@ -188,6 +188,7 @@
     "noPush": "Nenhum push válido encontrado",
     "pushSummary": "Push: {games} partidas, {wins}V / {losses}D, {trophies} troféus, {duration} min",
     "quickSession": "Sessão rápida: 1 partida",
+    "draws": "empates",
     "battleHistory": "Histórico de Batalhas",
     "noBattlesInPeriod": "Nenhuma batalha encontrada neste período"
   },

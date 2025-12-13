@@ -188,6 +188,7 @@
     "noPush": "No valid push found",
     "pushSummary": "Push: {games} games, {wins}W / {losses}L, {trophies} trophies, {duration} min",
     "quickSession": "Quick session: 1 game",
+    "draws": "draws",
     "battleHistory": "Battle History",
     "noBattlesInPeriod": "No battles found in this period"
   },

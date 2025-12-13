@@ -55,6 +55,7 @@ import { useGoals } from "@/hooks/useGoals";
 import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
+import { useLocale } from "@/hooks/use-locale";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -212,40 +213,39 @@ function groupBattlesIntoSessions(battles: any[], maxGapMinutes: number = 30): P
 /**
  * PushSummaryRow - Compact summary for a push session in the battle history
  */
-function PushSummaryRow({ session }: { session: PushSession }) {
+function PushSummaryRow({ 
+  session, 
+  t 
+}: { 
+  session: PushSession; 
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
   const durationMin = Math.round(session.durationMs / (1000 * 60));
   const isSingleBattle = session.battles.length === 1;
+  
+  const trophiesText = session.netTrophies > 0 
+    ? `+${session.netTrophies}` 
+    : `${session.netTrophies}`;
   
   return (
     <div className="flex items-center gap-2 py-2 px-3 bg-muted/30 rounded-lg border border-border/30" data-testid="push-summary-row">
       <Layers className="w-4 h-4 text-primary shrink-0" />
       {isSingleBattle ? (
         <span className="text-sm font-medium text-muted-foreground">
-          Sessão rápida: 1 partida
+          {t('battle.quickSession')}
         </span>
       ) : (
         <span className="text-sm font-medium">
-          Push: {session.battles.length} partidas,{' '}
-          <span className="text-green-500">{session.wins}V</span>
-          {' / '}
-          <span className="text-red-500">{session.losses}D</span>
+          {t('battle.pushSummary', {
+            games: session.battles.length,
+            wins: session.wins,
+            losses: session.losses,
+            trophies: trophiesText,
+            duration: durationMin,
+          })}
           {session.draws > 0 && (
-            <>
-              {' / '}
-              <span className="text-muted-foreground">{session.draws}E</span>
-            </>
+            <span className="text-muted-foreground"> (+{session.draws} {t('battle.draws')})</span>
           )}
-          {', '}
-          <span className={cn(
-            session.netTrophies > 0 ? "text-green-500" : 
-            session.netTrophies < 0 ? "text-red-500" : "text-muted-foreground"
-          )}>
-            {session.netTrophies > 0 ? '+' : ''}{session.netTrophies} troféus
-          </span>
-          {', '}
-          <span className="text-muted-foreground">
-            {durationMin} min
-          </span>
         </span>
       )}
     </div>
@@ -264,6 +264,7 @@ export default function MePage() {
   });
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals();
+  const { t } = useLocale();
 
   const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
   const isLoading = profileLoading || playerLoading;
@@ -1087,7 +1088,7 @@ export default function MePage() {
                 <div className="space-y-6">
                   {sessions.map((session, sessionIdx) => (
                     <section key={session.startTime.toISOString()} data-testid={`session-${sessionIdx}`}>
-                      <PushSummaryRow session={session} />
+                      <PushSummaryRow session={session} t={t} />
                       <div className="mt-2 space-y-2">
                         <Accordion type="single" collapsible className="space-y-2">
                           {session.battles.map((battle: any, idx: number) => {
