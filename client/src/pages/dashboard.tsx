@@ -96,6 +96,7 @@ export default function DashboardPage() {
             icon={<Trophy className="w-5 h-5 text-primary" />}
             trend={(playerData as any)?.trophies ? `Arena: ${(playerData as any)?.arena?.name || 'N/A'}` : undefined}
             trendUp={true}
+            arenaImage={(playerData as any)?.arena?.id ? `https://cdn.royaleapi.com/static/img/arenas/arena${(playerData as any).arena.id}.png` : undefined}
           />
           <StatCard 
             title="Melhor Temporada" 
@@ -116,6 +117,25 @@ export default function DashboardPage() {
             subtext={`${(playerData as any)?.losses || 0} derrotas`}
           />
         </div>
+
+        {/* Current Deck Section */}
+        {(playerData as any)?.currentDeck && (playerData as any).currentDeck.length > 0 && (
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="current-deck-section">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Swords className="w-5 h-5 text-primary" />
+                Deck Atual
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                {(playerData as any).currentDeck.map((card: any, idx: number) => (
+                  <CardImage key={card?.id || idx} card={card} size="medium" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Column */}
@@ -236,7 +256,7 @@ export default function DashboardPage() {
                       >
                         <div className="flex items-center gap-3">
                           <div className={cn(
-                            "w-10 h-10 rounded flex items-center justify-center font-bold text-lg border",
+                            "w-10 h-10 rounded flex items-center justify-center font-bold text-lg border shrink-0",
                             isWin && !isDraw
                               ? "bg-green-500/10 text-green-500 border-green-500/20" 
                               : isDraw
@@ -245,15 +265,22 @@ export default function DashboardPage() {
                           )}>
                             {isWin && !isDraw ? "W" : isDraw ? "D" : "L"}
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{opponentName}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium truncate">{opponentName}</span>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="w-3 h-3" />
                               {battleTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </span>
+                            {battle.team?.[0]?.cards && (
+                              <div className="flex gap-0.5 mt-1 flex-wrap">
+                                {battle.team[0].cards.slice(0, 8).map((card: any, cardIdx: number) => (
+                                  <CardImage key={card?.id || cardIdx} card={card} size="small" />
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="text-sm font-bold text-muted-foreground">
+                        <div className="text-sm font-bold text-muted-foreground shrink-0">
                           {teamCrowns}-{opponentCrowns}
                         </div>
                       </div>
@@ -311,13 +338,23 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ title, value, icon, trend, trendUp, subtext }: any) {
+function StatCard({ title, value, icon, trend, trendUp, subtext, arenaImage }: any) {
   return (
     <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-colors">
       <CardContent className="p-6">
         <div className="flex items-center justify-between space-y-0 pb-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          {icon}
+          <div className="flex items-center gap-2">
+            {arenaImage && (
+              <img 
+                src={arenaImage} 
+                alt="Arena" 
+                className="w-8 h-8 object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+            {icon}
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <div className="text-2xl font-bold font-display">{value}</div>
@@ -332,5 +369,19 @@ function StatCard({ title, value, icon, trend, trendUp, subtext }: any) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function CardImage({ card, size = "medium" }: { card: any; size?: "small" | "medium" }) {
+  const sizeClass = size === "small" ? "w-6 h-7" : "w-12 h-14";
+  return (
+    <img
+      src={card?.iconUrls?.medium || ''}
+      alt={card?.name || 'Card'}
+      title={card?.name || 'Card'}
+      className={cn(sizeClass, "object-contain rounded")}
+      onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+      data-testid={`card-img-${card?.id || 'unknown'}`}
+    />
   );
 }
