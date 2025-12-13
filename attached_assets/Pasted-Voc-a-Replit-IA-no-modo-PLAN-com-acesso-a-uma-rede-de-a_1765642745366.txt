@@ -1,0 +1,375 @@
+Você é a **Replit IA** no modo **PLAN**, com acesso a uma rede de assistentes internos (architect, coder, ops, QA, product, etc.).  
+Quero que você use **100% da sua capacidade**, sem economizar tokens, para planejar a **corrigenda completa e refino de produção** do SaaS **CRStats (CR Status)**.
+
+### Objetivo de Negócio
+
+Quero conseguir:
+
+1. Fazer o **deploy do CRStats** ainda essa semana (Replit/Vercel ou similar).
+2. **Usar o app de verdade no fim de semana**:
+   - Criar conta.
+   - Fazer onboarding.
+   - Conectar minha tag de Clash Royale e ver dados reais.
+   - Falar com o coach de IA.
+   - Fazer upgrade PRO, pagar via Stripe e ter acesso PRO liberado automaticamente.
+3. Na segunda-feira, ter uma visão clara:
+   - O que funcionou bem.
+   - Quais bugs apareceram.
+   - O que melhorar na UX/produto.
+
+Então seu plano precisa focar no que é **essencial para teste real em produção**, com qualidade suficiente para eu não perder tempo com erro óbvio.
+
+---
+
+### Contexto Técnico (do seu próprio diagnóstico anterior)
+
+Você já analisou o projeto e encontrou:
+
+- i18n incompleto (PT/EN, textos hardcoded).
+- Pricing multi-moeda inconsistente (arquivo pricing.ts ≠ billing ≠ realidade).
+- Webhooks Stripe incompletos → usuário paga e continua FREE.
+- Gating PRO ausente/inconsistente → feature PRO acessível para todo mundo.
+- Falta de validação de entrada (Zod) em rotas críticas.
+- Tratamento de erro fraco (pouca proteção em páginas sensíveis).
+
+Além disso:
+
+- O app usa **Supabase** para auth e banco (`profiles`, `subscriptions`, `goals`, `favorite_players`, `notifications`, `notification_preferences`, `user_settings`, `meta_decks_cache`).
+- Existe integração real com **Stripe** (checkout + portal).
+- Já tem um **AI Coach rule-based** + estrutura para LLM.
+- Existe **API oficial do Clash Royale** em alguma forma (precisa garantir que é ela, não mocks).
+- Replit já reclamou de um erro de porta em uso (temporário).
+
+---
+
+### Modo de Operação (super importante)
+
+Você ESTÁ em **PLAN MODE**:
+
+- NÃO pode editar arquivos nem rodar comandos de build diretamente.  
+- Mas pode:
+  - Ler, inferir e raciocinar sobre a estrutura do projeto.
+  - Propor uma **task list extremamente detalhada**.
+  - Indicar arquivos, módulos e rotas por nome (quando conseguir inferir).
+  - Sugerir a ordem ideal de execução.
+  - Definir critérios de aceite para cada tarefa.
+  - Sugerir comandos/procedimentos para serem executados depois pelo dev ou pela própria IA em modo “code”.
+
+ASSUMA que:
+
+- Você PODE chamar mentalmente seus “sub-assistentes” (architect, backend, frontend, ops, QA, product) – ou seja, pense como se vários especialistas estivessem te ajudando.  
+- Você PODE gerar um plano longo, com muitas tarefas e sub-tarefas.  
+- Você PODE demorar e gastar muitos tokens para ser minucioso.
+
+Quero que você realmente **não se censure**: detalhe o máximo possível.
+
+---
+
+### Resultado Esperado deste Plano
+
+Quero que você produza uma resposta com:
+
+1. **Visão geral em alto nível** (máx. 15–20 linhas):  
+   - Como você enxerga o estado atual (suspeitas fundamentadas).
+   - Lista de áreas críticas para produção.
+
+2. **Plano em FASES** (Fase 0, 1, 2, 3, 4, 5…), onde cada fase tem:  
+   - Nome e objetivo (“Fase 1 — Base de Produção”, “Fase 2 — Pagamento & PRO”, etc.).
+   - Tarefas principais.
+   - Dependências entre fases.
+
+3. **Task list ultra detalhada** por área:  
+   Para cada área abaixo, crie tarefas e sub-tarefas com:
+   - Descrição clara.
+   - Indicação provável de arquivos/módulos/rotas envolvidos.
+   - Critério de aceite (como saber que está pronto).
+
+Áreas obrigatórias a cobrir:
+
+---
+
+#### A) Build & Infra de Deploy
+
+- Garantir que o projeto:
+  - Builda sem erro (`lint`, `typecheck`, `build`).
+  - Respeita as particularidades do ambiente Replit (porta, env, etc.).
+- Tarefas:
+  - Verificar scripts em `package.json`.
+  - Conferir se há conflito de porta (porta fixa vs porta `$PORT`).
+  - Checar `.replit`, `replit.nix` ou configs equivalentes.
+- Critério de aceite:
+  - Rodar local/preview sem “port in use”.
+  - Build final passa sem erro.
+
+---
+
+#### B) Pricing Multi-Moeda + Stripe (BRL / USD / EUR)
+
+Quero um plano PRO com:
+
+- Preço base em **USD** (por ex. 10 USD — pode tratar como valor de referência).
+- Conversão coerente para **BRL** e **EUR**.
+- Um **único módulo de pricing** que define:
+  - Nome do plano.
+  - Preços por moeda.
+  - Stripe Price IDs por moeda.
+  - Regras de formatação.
+
+Planeje:
+
+1. Criação/ajuste de módulo (ex.: `packages/core/pricing.ts`):
+   - Tipo `SupportedCurrency = "BRL" | "USD" | "EUR"`.
+   - Objeto `PLANS.PRO` com `prices.BRL`, `prices.USD`, `prices.EUR` e respectivos `stripePriceId`.
+   - Documentação inline.
+
+2. Helper de detecção de moeda:
+   - Baseado em locale (pt-BR → BRL, en-US → USD, etc.).
+   - Opcionalmente país (se disponível).
+
+3. Ajustes na página de billing:
+   - Usar APENAS esse módulo pra mostrar preço.
+   - Mostrar preço atual em moeda principal + permitir ver outras (opcional).
+
+4. Ajuste na criação de Checkout Session:
+   - Escolher o `stripePriceId` correto conforme moeda do usuário.
+   - Enviar `userId` no `metadata`.
+
+Critério de aceite:
+- Todo o código que fala de preço do plano PRO usa o módulo de pricing.
+- Mudar o valor em UM lugar atualiza o app inteiro (billing, checkout, landing).
+
+---
+
+#### C) Webhooks Stripe & Tabela `subscriptions`
+
+Objetivo: se o usuário pagar, **é 100% garantido** que o `subscriptions` dele fica como PRO/active.
+
+Planeje:
+
+1. Revisão da rota de webhook (ex.: `/api/billing/webhook`):
+   - Validar assinatura com `STRIPE_WEBHOOK_SECRET`.
+   - Tratar eventos:
+     - `checkout.session.completed` (ligar `userId` ao `customer/subscription`).
+     - `customer.subscription.updated`.
+     - `customer.subscription.deleted` ou eventos de cancelamento.
+
+2. Lógica idempotente de upsert:
+   - Tabela `subscriptions`:
+     - `user_id`.
+     - `stripe_customer_id`.
+     - `stripe_subscription_id`.
+     - `plan` (ex.: `'pro'`).
+     - `status` (`active`, `canceled`, `past_due`, etc.).
+     - `current_period_end`, `cancel_at_period_end`.
+   - Garantir:
+     - Mesmo evento recebido duas vezes não duplica/não bagunça dados.
+
+3. Onboarding de cliente Stripe:
+   - Se ainda não existir `stripe_customer_id` para o user:
+     - Criar e salvar.
+   - Se já existir, reutilizar.
+
+Critério de aceite:
+- Teste manual/simulado:
+  - Usuário paga um checkout → `subscriptions` atualizado com `plan='pro'`, `status='active'`.
+  - Usuário cancela → `status` reflete cancelamento e app trata como FREE.
+
+---
+
+#### D) Gating PRO (Backend + Frontend + Mobile)
+
+Objetivo: só quem é PRO usa features PRO. FREE vê upsell.
+
+Planeje:
+
+1. Helper central:
+   - Função `getUserPlan(userId)` ou `isPro(userId)` em módulo compartilhado.
+   - Essa função consulta `subscriptions`.
+
+2. Backend:
+   - Rotas sensíveis (coach avançado, stats extra, funcionalidades premium) chamam `isPro`.
+   - Se não PRO:
+     - Retornam HTTP 402/403 com mensagem de erro amigável.
+
+3. Frontend (web):
+   - Páginas e componentes:
+     - `coach`: limite de mensagens FREE vs PRO, badge PRO, upsell quando bater limite.
+     - Dashboard/área de insight avançado: se não PRO, bloquear com overlay/blur e CTA.
+
+4. Mobile:
+   - Mesmo comportamento consumindo os mesmos endpoints.
+
+Critério de aceite:
+- Não existe caminho simples para usar feature PRO sem que `subscriptions` marque o usuário como PRO.
+- Usuário PRO nunca é bloqueado por engano.
+
+---
+
+#### E) i18n Completo (PT-BR / EN-US) no Fluxo Principal
+
+Objetivo: toda a jornada **landing → cadastro → onboarding → billing → uso PRO** deve funcionar em PT-BR e EN-US.
+
+Planeje:
+
+1. Módulo de i18n:
+   - Arquivos de tradução:
+     - `pt-BR.json`
+     - `en-US.json`
+   - Namespaces:
+     - `common`, `auth`, `landing`, `onboarding`, `dashboard`, `coach`, `billing`, `settings`, `notifications`.
+
+2. Detecção de idioma:
+   - Server: usar `Accept-Language` + `user_settings.preferred_language`.
+   - Client: context de idioma + seletor manual para override.
+
+3. Refactor de textos:
+   - Landing, auth, onboarding, billing, dashboard, coach.
+   - Tirar textos hardcoded PT, colocar em chaves `t('...')`.
+
+4. Coach LLM:
+   - Quando montar o prompt para o LLM:
+     - Incluir instrução de responder em PT-BR ou EN-US conforme idioma escolhido/detectado.
+
+Critério de aceite:
+- Trocar idioma muda toda a jornada para PT ou EN sem fragmentos misturados.
+- Mensagens do coach seguem o idioma.
+
+---
+
+#### F) API Oficial do Clash Royale (Players, Battles, Clans, Cards)
+
+Objetivo: todos os dados exibidos sejam a **verdade oficial** da API do Clash Royale (não mocks).
+
+Planeje:
+
+1. Cliente único:
+   - Módulo `clashRoyaleApiClient` com:
+     - `getPlayer(tag)`.
+     - `getPlayerBattleLog(tag)`.
+     - `getClan(tag)`.
+     - `getCards()` (para meta e ícones).
+   - Usa `CLASH_API_KEY` em header `Authorization: Bearer ...`.
+
+2. Uso em endpoints internos:
+   - `/api/clash/player/[tag]/battles`.
+   - `/api/public/player/[tag]`.
+   - `/api/public/clan/[tag]`.
+   - Qualquer endpoint que gera meta decks ou stats baseadas na API.
+
+3. Cache:
+   - `meta_decks_cache` e qualquer caching leve para cards/meta.
+
+Critério de aceite:
+- Quando eu mudar minha tag para uma conta válida, vejo:
+  - Troféus corretos.
+  - Histórico de batalhas recentes correto.
+  - Informações de clan corretas.
+
+---
+
+#### G) Onboarding & Primeira Experiência do Lead
+
+Objetivo: fluxo limpo **landing → register → onboarding → dashboard/coach**, com coleta de informações relevantes pro coach.
+
+Planeje:
+
+1. Sequência:
+   - Landing (`/`).
+   - `/auth/register`.
+   - `/onboarding` com múltiplos passos:
+     - Step 1: perfil de jogador (novo, intermediário, tryhard).
+     - Step 2: objetivo principal (subir troféus, consistência, deck, clã).
+     - Step 3: conectar tag (com opção “pular”).
+     - Step 4: resumo + CTA (“Ir para Dashboard” / “Ir para Coach”).
+   - Pós-onboarding:
+     - Salvar `onboardingCompletedAt`.
+     - Redirecionar para `default_landing_page` (ou dashboard).
+
+2. Integrações:
+   - Salvar estilo de jogador e objetivo em `user_settings.extra` ou `profiles`.
+   - Criar metas iniciais em `goals` com base nas escolhas.
+   - Conectar tag via API oficial Clash Royale.
+
+3. Critério de redirecionamento:
+   - Se usuário sem `onboardingCompletedAt` fizer login → vai para `/onboarding`.
+   - Se já completou → vai para `default_landing_page`.
+
+Critério de aceite:
+- Usuário novo passa por onboarding sem fricção.
+- Dados do onboarding aparecem no coach e em partes do dashboard.
+
+---
+
+#### H) Validação de Dados & Tratamento de Erros
+
+Objetivo: não deixar a app quebrar com entradas ruins ou erros externos.
+
+Planeje:
+
+1. Validação (Zod ou similar):
+   - Rotas:
+     - Profile/settings (displayName, região, idioma, clashTag).
+     - Billing (request de checkout).
+     - Webhook Stripe (dados críticos).
+   - Lidar com payload inválido de forma amigável.
+
+2. Tratamento de erro:
+   - Error boundaries em páginas sensíveis (dashboard, coach, billing).
+   - Mensagem amigável pro usuário.
+   - Log (console/log service) consistente.
+
+Critério de aceite:
+- Inputs inválidos geram erros controlados.
+- Nenhuma página crítica cai com erro sem tratamento.
+
+---
+
+#### I) QA & Cenários de Teste (para este fim de semana)
+
+Objetivo: ter um roteiro de teste que eu possa seguir manualmente.
+
+Planeje:
+
+- Lista de cenários claramente numerados, por exemplo:
+
+  1. **Cadastro + Onboarding + Tag + Dashboard**
+  2. **Cadastro + Pulo de Tag + Dashboard com CTA de conectar**
+  3. **SUPABASE free user + Tentativa de usar coach PRO (bloqueio + upsell)**
+  4. **Upgrade PRO → pagamento Stripe → volta PRO liberado**
+  5. **Cancelamento de assinatura → volta a FREE**
+  6. **Troca de idioma PT/EN e moeda BRL/USD/EUR**
+
+- Para cada cenário:
+  - Passo a passo.
+  - O que se espera ver em cada etapa.
+
+Critério de aceite:
+- Lista pronta para eu seguir e marcar o que funciona/não funciona em produção.
+
+---
+
+### Priorização: Faixa A (antes do fim de semana) x Faixa B (depois)
+
+No final da sua resposta, faça duas listas:
+
+- **Faixa A (Obrigatório antes do fim de semana)**  
+  – Todas as tarefas sem as quais eu não consigo testar o app de verdade:  
+  Build, API Clash, onboarding, billing PRO, webhooks, gating PRO, i18n mínimo.
+
+- **Faixa B (Pós-fim de semana)**  
+  – Melhorias de logs, observabilidade, refinamentos de UX, experimentos adicionais, etc.
+
+---
+
+### Estilo da sua resposta
+
+- Não seja genérico.
+- Não escreva tarefas vagas como “Fix prices” – sempre detalhe:
+  - O que,
+  - Onde,
+  - Como,
+  - Critério de aceite.
+- Pode ser longo, MUITO longo.  
+  Eu quero que você use o máximo possível da sua capacidade de planejamento aqui.
+
+Agora, gere esse plano completo.

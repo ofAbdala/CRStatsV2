@@ -87,10 +87,10 @@ export const api = {
     getProducts: () => fetchAPI<{ data: any[] }>('/stripe/products'),
     getPrices: () => fetchAPI<{ data: any[] }>('/stripe/prices'),
     getProductsWithPrices: () => fetchAPI<{ data: any[] }>('/stripe/products-with-prices'),
-    createCheckout: (priceId: string) =>
+    createCheckout: (priceId: string, currency?: string) =>
       fetchAPI<{ url: string }>('/stripe/checkout', {
         method: 'POST',
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({ priceId, currency }),
       }),
     createPortal: () =>
       fetchAPI<{ url: string }>('/stripe/portal', {
