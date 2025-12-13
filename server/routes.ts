@@ -401,7 +401,7 @@ export async function registerRoutes(
       }
 
       const userId = req.user.claims.sub;
-      const { priceId } = req.body;
+      const { priceId, currency } = req.body;
 
       if (!priceId) {
         return res.status(400).json({ error: "Price ID is required" });
@@ -459,12 +459,97 @@ export async function registerRoutes(
   });
 
   // ============================================================================
+  // STRIPE WEBHOOK ROUTES (for subscription activation)
+  // ============================================================================
+  
+  app.post('/api/stripe/webhook', async (req: any, res) => {
+    try {
+      const event = req.body;
+      
+      if (!event || !event.type) {
+        return res.status(400).json({ error: "Invalid webhook payload" });
+      }
+
+      console.log(`Stripe webhook received: ${event.type}`);
+
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data?.object;
+          if (session?.metadata?.userId && session?.subscription) {
+            const userId = session.metadata.userId;
+            const subscription = await storage.getSubscription(userId);
+            
+            if (subscription) {
+              await storage.updateSubscription(subscription.id, {
+                stripeSubscriptionId: session.subscription,
+                plan: 'pro',
+                status: 'active',
+              });
+              console.log(`PRO activated for user: ${userId}`);
+            }
+          }
+          break;
+        }
+        
+        case 'customer.subscription.updated': {
+          const subscriptionData = event.data?.object;
+          if (subscriptionData?.id) {
+            const existing = await storage.getSubscriptionByStripeId(subscriptionData.id);
+            if (existing) {
+              const status = subscriptionData.status === 'active' ? 'active' : 
+                            subscriptionData.status === 'canceled' ? 'canceled' : 
+                            subscriptionData.status;
+              await storage.updateSubscription(existing.id, {
+                status: status,
+              });
+              console.log(`Subscription ${subscriptionData.id} updated to: ${status}`);
+            }
+          }
+          break;
+        }
+        
+        case 'customer.subscription.deleted': {
+          const subscriptionData = event.data?.object;
+          if (subscriptionData?.id) {
+            const existing = await storage.getSubscriptionByStripeId(subscriptionData.id);
+            if (existing) {
+              await storage.updateSubscription(existing.id, {
+                plan: 'free',
+                status: 'canceled',
+              });
+              console.log(`Subscription ${subscriptionData.id} canceled`);
+            }
+          }
+          break;
+        }
+        
+        default:
+          console.log(`Unhandled webhook event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ============================================================================
   // AI COACH ROUTES
   // ============================================================================
   
   app.post('/api/coach/chat', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return res.status(402).json({ 
+          error: "PRO subscription required",
+          code: "PRO_REQUIRED" 
+        });
+      }
+      
       const { messages, playerTag } = req.body as { 
         messages: ChatMessage[]; 
         playerTag?: string;

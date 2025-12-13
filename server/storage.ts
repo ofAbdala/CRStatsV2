@@ -41,6 +41,7 @@ export interface IStorage {
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
+  isPro(userId: string): Promise<boolean>;
   
   // Goals operations
   getGoals(userId: string): Promise<Goal[]>;
@@ -150,6 +151,11 @@ export class DatabaseStorage implements IStorage {
       .from(subscriptions)
       .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
     return subscription;
+  }
+
+  async isPro(userId: string): Promise<boolean> {
+    const subscription = await this.getSubscription(userId);
+    return subscription?.plan === 'pro' && subscription?.status === 'active';
   }
 
   // ============================================================================
