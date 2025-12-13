@@ -75,6 +75,105 @@ function formatGameMode(type: string | undefined): string {
   return type.replace(/([A-Z])/g, ' $1').trim();
 }
 
+interface PushSession {
+  battles: any[];
+  startTime: Date;
+  endTime: Date;
+  wins: number;
+  losses: number;
+  draws: number;
+  netTrophies: number;
+  durationMs: number;
+}
+
+/**
+ * Groups battles into "push sessions" based on time gaps.
+ * A push is a sequence of games where the player never waits more than 30 minutes between matches.
+ * If the gap between two battles exceeds 30 minutes, a new push starts.
+ * 
+ * @param battles - Array of battles (newest first from API)
+ * @param minBattlesPerPush - Minimum battles required for a valid push (default: 2)
+ * @param maxGapMinutes - Maximum gap in minutes between battles in same push (default: 30)
+ * @returns Array of PushSession objects, ordered from oldest to newest push
+ */
+function groupBattlesIntoPushes(
+  battles: any[],
+  minBattlesPerPush: number = 2,
+  maxGapMinutes: number = 30
+): PushSession[] {
+  if (!battles.length) return [];
+
+  const sortedBattles = [...battles]
+    .filter(b => b.battleTime)
+    .sort((a, b) => {
+      const dateA = parseBattleTime(a.battleTime);
+      const dateB = parseBattleTime(b.battleTime);
+      return dateA.getTime() - dateB.getTime();
+    });
+
+  if (sortedBattles.length === 0) return [];
+
+  const pushes: PushSession[] = [];
+  let currentPush: any[] = [sortedBattles[0]];
+
+  for (let i = 1; i < sortedBattles.length; i++) {
+    const prevBattle = sortedBattles[i - 1];
+    const currBattle = sortedBattles[i];
+    
+    const prevTime = parseBattleTime(prevBattle.battleTime);
+    const currTime = parseBattleTime(currBattle.battleTime);
+    const gapMinutes = (currTime.getTime() - prevTime.getTime()) / (1000 * 60);
+
+    if (gapMinutes <= maxGapMinutes) {
+      currentPush.push(currBattle);
+    } else {
+      if (currentPush.length >= minBattlesPerPush) {
+        pushes.push(createPushSession(currentPush));
+      }
+      currentPush = [currBattle];
+    }
+  }
+
+  if (currentPush.length >= minBattlesPerPush) {
+    pushes.push(createPushSession(currentPush));
+  }
+
+  return pushes;
+}
+
+function createPushSession(battles: any[]): PushSession {
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+  let netTrophies = 0;
+
+  battles.forEach((battle: any) => {
+    const teamCrowns = battle.team?.[0]?.crowns || 0;
+    const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
+    const trophyChange = battle.team?.[0]?.trophyChange || 0;
+
+    if (teamCrowns > opponentCrowns) wins++;
+    else if (teamCrowns < opponentCrowns) losses++;
+    else draws++;
+
+    netTrophies += trophyChange;
+  });
+
+  const startTime = parseBattleTime(battles[0].battleTime);
+  const endTime = parseBattleTime(battles[battles.length - 1].battleTime);
+
+  return {
+    battles,
+    startTime,
+    endTime,
+    wins,
+    losses,
+    draws,
+    netTrophies,
+    durationMs: endTime.getTime() - startTime.getTime(),
+  };
+}
+
 export default function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const clashTag = (profile as any)?.clashTag;
@@ -137,6 +236,11 @@ export default function MePage() {
     const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
     
     return { wins, losses, total: recent.length, winRate };
+  }, [filteredBattles]);
+
+  const lastPush = React.useMemo(() => {
+    const pushes = groupBattlesIntoPushes(filteredBattles);
+    return pushes.length > 0 ? pushes[pushes.length - 1] : null;
   }, [filteredBattles]);
 
   const stats = React.useMemo(() => {
@@ -831,20 +935,40 @@ export default function MePage() {
               </Button>
             </div>
 
-            {/* Summary */}
+            {/* Summary - Shows last push if valid (2+ games within 30min gaps), otherwise shows recent stats */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
               <CardContent className="py-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Target className="w-5 h-5 text-primary" />
-                    <span className="font-medium">
-                      Últimas {recentSeriesStats.total} partidas:{' '}
-                      <span className="text-green-500">{recentSeriesStats.wins}V</span>
-                      {' / '}
-                      <span className="text-red-500">{recentSeriesStats.losses}D</span>
-                      {' '}
-                      <span className="text-muted-foreground">({recentSeriesStats.winRate}% winrate)</span>
-                    </span>
+                    {lastPush ? (
+                      <span className="font-medium" data-testid="push-summary">
+                        Último push: {lastPush.battles.length} partidas,{' '}
+                        <span className="text-green-500">{lastPush.wins}V</span>
+                        {' / '}
+                        <span className="text-red-500">{lastPush.losses}D</span>
+                        {', '}
+                        <span className={cn(
+                          lastPush.netTrophies > 0 ? "text-green-500" : 
+                          lastPush.netTrophies < 0 ? "text-red-500" : "text-muted-foreground"
+                        )}>
+                          {lastPush.netTrophies > 0 ? '+' : ''}{lastPush.netTrophies} troféus
+                        </span>
+                        {', '}
+                        <span className="text-muted-foreground">
+                          {Math.round(lastPush.durationMs / (1000 * 60))} min de push
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-medium" data-testid="recent-stats-summary">
+                        Últimas {recentSeriesStats.total} partidas:{' '}
+                        <span className="text-green-500">{recentSeriesStats.wins}V</span>
+                        {' / '}
+                        <span className="text-red-500">{recentSeriesStats.losses}D</span>
+                        {' '}
+                        <span className="text-muted-foreground">({recentSeriesStats.winRate}% winrate)</span>
+                      </span>
+                    )}
                   </div>
                   <Badge variant="outline">{filteredBattles.length} batalhas</Badge>
                 </div>
