@@ -1,5 +1,7 @@
 // Clash Royale API integration
-const BASE_URL = 'https://api.clashroyale.com/v1';
+// Using RoyaleAPI proxy to avoid IP whitelist issues
+// To use: create API key at developer.clashroyale.com with IP: 45.79.218.79
+const BASE_URL = process.env.CLASH_ROYALE_API_URL || 'https://proxy.royaleapi.dev/v1';
 const API_KEY = process.env.CLASH_ROYALE_API_KEY;
 
 if (!API_KEY) {
