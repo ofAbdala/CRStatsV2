@@ -147,16 +147,44 @@ function createPushSession(battles: any[]): PushSession {
   let draws = 0;
   let netTrophies = 0;
 
-  battles.forEach((battle: any) => {
+  battles.forEach((battle: any, index: number) => {
     const teamCrowns = battle.team?.[0]?.crowns || 0;
     const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
-    const trophyChange = battle.team?.[0]?.trophyChange || 0;
+    const trophyChange = battle.team?.[0]?.trophyChange;
 
-    if (teamCrowns > opponentCrowns) wins++;
-    else if (teamCrowns < opponentCrowns) losses++;
+    const isWin = teamCrowns > opponentCrowns;
+    const isLoss = teamCrowns < opponentCrowns;
+    
+    if (isWin) wins++;
+    else if (isLoss) losses++;
     else draws++;
 
-    netTrophies += trophyChange;
+    // Use trophyChange if it's a valid per-battle delta (Clash Royale typically ±20-45)
+    if (typeof trophyChange === 'number' && trophyChange >= -60 && trophyChange <= 60) {
+      netTrophies += trophyChange;
+    } else {
+      // Try computing delta from startingTrophies between consecutive battles
+      const prevBattle = index > 0 ? battles[index - 1] : null;
+      const prevTrophies = prevBattle?.team?.[0]?.startingTrophies || prevBattle?.team?.[0]?.trophies;
+      const currentStartTrophies = battle.team?.[0]?.startingTrophies;
+      
+      if (typeof prevTrophies === 'number' && typeof currentStartTrophies === 'number') {
+        // Delta = current starting - previous starting (adjusted for previous result)
+        const computedDelta = currentStartTrophies - prevTrophies;
+        if (computedDelta >= -60 && computedDelta <= 60) {
+          netTrophies += computedDelta;
+        } else if (isWin) {
+          netTrophies += 30;
+        } else if (isLoss) {
+          netTrophies -= 30;
+        }
+      } else if (isWin) {
+        netTrophies += 30; // Estimate for wins
+      } else if (isLoss) {
+        netTrophies -= 30; // Estimate for losses
+      }
+    }
+    // Draws typically give 0 trophies
   });
 
   const startTime = parseBattleTime(battles[0].battleTime);
