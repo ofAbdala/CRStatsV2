@@ -1,0 +1,345 @@
+Você é um ENGENHEIRO DE SOFTWARE SÊNIOR responsável por preparar o monorepo do **CRStats (CR Status)** para DEPLOY EM PRODUÇÃO.
+
+O objetivo deste prompt é:
+
+1. Rodar um **debug completo** (lint, typecheck, build, testes) e corrigir tudo que impede um deploy estável.
+2. Garantir que TODOS os dados de Clash Royale venham da **API OFICIAL** (players, battles, clans, cards/meta), sempre atualizados.
+3. Garantir que o **AI Coach** esteja funcional (regra + LLM) usando dados reais.
+4. Deixar o **backend e frontend 100% prontos para deploy**, incluindo:
+
+   * Web (Next.js + Supabase + Stripe + OpenAI + Clash Royale API).
+   * Mobile (consumindo as mesmas APIs e configs).
+5. Ter o app em **Português e Inglês**, com **detector de idioma**.
+6. Mostrar **preços em múltiplas moedas**: Real (BRL), Dólar (USD) e Euro (EUR).
+7. Respeitar o **roadmap** de ondas (Onda 1 e Onda 2 principalmente).
+
+---
+
+## 0. Contexto Rápido do Projeto
+
+* Monorepo do CRStats: app web + pacotes @crstatus/* (domain, types, etc.) e possivelmente app mobile.
+* Infra atual (importante NÃO QUEBRAR):
+
+  * Supabase (auth, perfis, subscriptions, goals, favorites, notifications, user_settings, meta_decks_cache…).
+  * Stripe (assinatura PRO via Checkout + webhook).
+  * Sistema de goals, jogadores favoritos, notificações, user settings, community, AI Coach rule-based com dados de batalha reais.
+* Já existem features maduras (auth, billing, goals, favorites, notifications, settings, community, coach, dashboard).
+
+Você deve trabalhar EM CIMA disso, **sem reescrever tudo**, mas:
+
+* Limpando tech debt crítico.
+* Fechando integrações pendentes.
+* Deixando tudo confiável para produção.
+
+---
+
+## 1. Debug Geral e Saúde do Monorepo
+
+1. Rodar os comandos padrão do projeto (ajuste conforme `package.json`):
+
+   * `pnpm lint` ou equivalente.
+   * `pnpm test` (se existir).
+   * `pnpm build`.
+
+2. Para qualquer erro:
+
+   * Corrigir importações quebradas, tipos TypeScript, problemas de caminho.
+   * Resolver dependências faltantes ou desatualizadas (sem upgrades irresponsáveis de major que quebrem tudo; prefira correções pontuais).
+
+3. Garantir:
+
+   * TypeScript com `strict: true` esteja passando.
+   * Não haja `any` desnecessário em trechos críticos (auth, billing, coach, Clash API).
+   * As migrations do Supabase/Prisma (se houver) sejam idempotentes e refletidas no código.
+
+4. Conferir:
+
+   * `new_env_setup.md` e `schema_overview.md` fazem sentido com o que o código espera.
+   * Ajustar comentários se algo mudou.
+
+---
+
+## 2. Integração COM A API OFICIAL DO CLASH ROYALE
+
+Objetivo: tirar qualquer resquício de mock e garantir que TUDO o que aparece de player/battles/clan/meta venha da API oficial.
+
+### 2.1. Cliente centralizado de Clash Royale
+
+Crie ou revise um módulo único, por exemplo em `packages/core`:
+
+* Arquivo algo como: `clash-api-client.ts` ou `services/clashRoyaleApi.ts`.
+* Ele deve usar:
+
+  * `CLASH_API_BASE_URL = "https://api.clashroyale.com/v1"` (ou valor vindo de env).
+  * Header: `Authorization: Bearer ${process.env.CLASH_API_KEY}`.
+* Implementar funções tipadas:
+
+  * `getPlayer(tag: string)`
+  * `getPlayerBattleLog(tag: string)`
+  * `getClan(tag: string)`
+  * `getCards()` (para meta e ícones)
+* Tipos baseados na resposta oficial (types em `@crstatus/types/clash` ou similar).
+
+### 2.2. Usar cliente oficial em TODAS as APIs internas
+
+Verificar e garantir que:
+
+* `/api/clash/player/[tag]/battles` usa o cliente oficial, não mocks.
+* `/api/public/player/[tag]` usa `getPlayer` + dados relevantes.
+* `/api/public/clan/[tag]` usa `getClan`.
+* Qualquer endpoint que dependa de lista de cartas/meta use `getCards()` + `meta_decks_cache`.
+
+### 2.3. Cache & performance
+
+* Implementar caching leve onde fizer sentido (ex.: meta decks, cards) via:
+
+  * Supabase table `meta_decks_cache` (se já existe).
+  * Ou um cache em memória com TTL, se rodando em ambiente com server persistente.
+* Evitar bater na API oficial mais do que o necessário (respeitar rate limit).
+
+---
+
+## 3. ÍCONES CERTOS (Cartas, Arenas, Modos, etc.)
+
+Objetivo: **ícones corretos e consistentes** no dashboard, community, perfil do jogador, decks e coach.
+
+1. Centralizar o mapeamento de ícones em um módulo único:
+
+   * Ex.: `@crstatus/ui/icons/clash` ou `@crstatus/shared/icon-mapping.ts`.
+   * Mapear:
+
+     * Carta (key/id da API oficial) → URL do ícone (pode ser CDN oficial ou pasta local).
+     * Arenas → ícones/ilustrações.
+     * Modos de jogo → ícones simples (ex.: ladder, 2v2, desafio).
+
+2. Substituir em toda a UI:
+
+   * Decks (cards).
+   * Match history.
+   * Meta decks.
+   * Community.
+
+3. Garantir:
+
+   * Nenhum lugar carrega ícones hard-coded de forma duplicada.
+   * Tudo passa pelo mesmo “icon mapping”.
+
+---
+
+## 4. AI COACH 100% FUNCIONAL (Regra + LLM)
+
+Objetivo: AI Coach robusto, pronto para PRO vender.
+
+1. Usar o domain atual de coach:
+
+   * `@crstatus/domain/coach` com:
+
+     * `generateRuleBasedInsights(context)`
+     * `buildLLMPromptFromContext(context, summary)`
+   * Garantir que o `context` inclui:
+
+     * Dados reais do player (battles recentes via Clash API).
+     * Goals do usuário.
+     * Favorite players (default).
+     * Stats derivadas: winrate, streak, tiltLevel, etc.
+
+2. Criar/validar endpoint de LLM:
+
+   * `POST /api/coach/llm` ou equivalente.
+   * Usar `OPENAI_API_KEY` (env) para chamar modelo de chat.
+   * Prompt:
+
+     * Usar `buildLLMPromptFromContext`.
+     * Responder em **PT-BR ou EN** dependendo do idioma detectado (ver seção i18n).
+   * Tratamento de erro:
+
+     * Se a chamada ao LLM falhar, voltar só com insights rule-based (não quebrar a UI).
+
+3. UI do Coach:
+
+   * Página `/coach` já existe; garantir que:
+
+     * Mostre resumo de stats.
+     * Mostre lista de insights (rule-based).
+     * Mostre respostas do LLM de forma clara.
+     * Exiba limites de FREE vs PRO:
+
+       * Contador de mensagens do coach (FREE).
+       * Upsell para PRO.
+
+---
+
+## 5. i18n (PT/EN) + DETECTOR DE IDIOMA
+
+Objetivo: todo o app (pelo menos o web) em **pt-BR e en-US**, com detecção automática + opção de troca manual.
+
+1. Criar um módulo de i18n compartilhado (`@crstatus/i18n`):
+
+   * Arquivos de tradução:
+
+     * `pt-BR.json`
+     * `en-US.json`
+   * Estrutura por namespaces:
+
+     * `common`, `auth`, `dashboard`, `coach`, `billing`, `community`, `notifications`, `settings`, `landing`.
+   * Helpers:
+
+     * `t(key: string, locale: Locale)`.
+
+2. Detecção de idioma:
+
+   * Backend (Next.js):
+
+     * Usar header `Accept-Language`.
+     * Se usuário logado, usar `user_settings.preferred_language` se existir.
+     * Fallback para `pt-BR` se o usuário é do Brasil (por IP/locale, opcional) ou default global `en-US`.
+   * Frontend:
+
+     * Guardar idioma atual (contexto de UI).
+     * Botão/toggle para forçar idioma (salvar em `user_settings` quando logado).
+
+3. Aplicar i18n:
+
+   * Landing page, dashboard, coach, settings, notifications, billing.
+   * Mensagens do coach (LLM):
+
+     * Quando for montar o prompt, passar o idioma desejado (“responda em português do Brasil” ou “responda em inglês”).
+
+4. Garantir:
+
+   * Nenhum texto “hard-coded” importante fica sem chave de tradução.
+   * Mobile possa reutilizar o mesmo módulo ou JSON de traduções.
+
+---
+
+## 6. MULTI-MOEDA (BRL, USD, EUR)
+
+Objetivo: exibir preços em Real, Dólar e Euro, consistentes com Stripe.
+
+1. Criar um módulo de pricing compartilhado (`@crstatus/pricing`):
+
+   * Estrutura tipo:
+
+     ```ts
+     export type SupportedCurrency = "BRL" | "USD" | "EUR";
+
+     export const PLANS = {
+       PRO: {
+         name: {
+           "pt-BR": "Plano PRO",
+           "en-US": "PRO Plan",
+         },
+         prices: {
+           BRL: {
+             amount: 29.9,
+             stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_BRL,
+           },
+           USD: {
+             amount: 9.9,
+             stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_USD,
+           },
+           EUR: {
+             amount: 8.9,
+             stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_EUR,
+           },
+         },
+       },
+     };
+     ```
+
+   * Os valores são exemplos – deixar claro que podem ser ajustados via env/config.
+
+2. Detecção de moeda:
+
+   * Basear-se em:
+
+     * Idioma detectado (pt-BR → BRL; en-US → USD; en-GB/en-?? → EUR ou USD, conforme estratégia).
+     * Opcional: usar country do IP (se tiver).
+   * Ter um helper:
+
+     * `getUserCurrency(localeOrCountry): SupportedCurrency`.
+
+3. Billing:
+
+   * Página `/settings/billing`:
+
+     * Mostrar sempre o preço na moeda principal detectada.
+     * Opcional: mostrar toggle para ver outras moedas.
+   * Ao criar sessão de checkout Stripe:
+
+     * Usar o `stripePriceId` correspondente à moeda do usuário.
+     * Continuar suportando webhooks atuais.
+
+4. Landing:
+
+   * Se estiver em pt-BR:
+
+     * Mostrar preço em BRL na secção de planos.
+   * Se EN:
+
+     * Mostrar USD ou EUR, conforme regra.
+
+5. Mobile:
+
+   * App móvel deve usar as mesmas funções de currency e pricing; expor isso via pacote compartilhado.
+
+---
+
+## 7. ROADMAP (ONDAS) APLICADO AO CÓDIGO NESSA PASSADA
+
+Priorize nesta ordem:
+
+### ONDA 1 (agora)
+
+* Debug geral (lint, typecheck, build).
+* API oficial Clash Royale plugada.
+* AI Coach conectada com OpenAI (com fallback).
+* i18n PT/EN implementado nas telas principais (landing, auth, dashboard, coach, billing, settings).
+* Multi-moeda funcionando no billing e landing.
+
+### ONDA 2 (pode deixar preparado / seeds)
+
+* Melhorias de Community Hub (visual + dados extra da API).
+* Aperfeiçoar AICoachCard no dashboard.
+* Ajustes de UX mobile (responsivo + compartilhamento de i18n/pricing).
+
+Você deve focar em concluir ONDA 1 inteira de forma funcional, e deixar ONDA 2 encaminhada estruturalmente, sem atrasar o deploy.
+
+---
+
+## 8. Checklist Final de Deploy
+
+Ao terminar as mudanças, você deve:
+
+1. Confirmar que os comandos:
+
+   * `pnpm lint`
+   * `pnpm test` (se existir)
+   * `pnpm build`
+     passam sem erros.
+
+2. Verificar que os seguintes fluxos funcionam em DEV (simular manualmente se possível):
+
+   * Criar conta → fazer login → configurar perfil + clashTag.
+   * Ver dashboard com stats reais da conta.
+   * Ver aba de perfil completo do jogador (overview, histórico, decks, progresso).
+   * Ver Community com rankings e perfis públicos.
+   * Usar coach (insights rule-based + resposta do LLM).
+   * Fazer upgrade para PRO (Stripe checkout) + voltar com status de assinatura correto.
+   * Ver textos certos em PT-BR e EN.
+   * Ver preços em BRL / USD / EUR conforme idioma.
+
+3. Deixar claro no README/env:
+
+   * Quais variáveis são necessárias:
+
+     * `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+     * `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+     * `NEXT_PUBLIC_STRIPE_PRICE_PRO_BRL`, `NEXT_PUBLIC_STRIPE_PRICE_PRO_USD`, `NEXT_PUBLIC_STRIPE_PRICE_PRO_EUR`
+     * `CLASH_API_KEY`
+     * `OPENAI_API_KEY`
+     * `NEXTAUTH_SECRET` / equivalente se houver.
+
+Entregue o código pronto para deploy em Vercel (web) + consumo estável no app mobile.
+
+Lembre-se: **não quebre o que já funciona**; ajuste, refatore e complete o que está faltando para chegar ao estado de “produção confiável”.
