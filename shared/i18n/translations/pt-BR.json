@@ -182,7 +182,10 @@
     "elixirAvg": "Custo médio: {cost}",
     "opponent": "Oponente",
     "yourDeck": "Seu Deck",
-    "opponentDeck": "Deck do Oponente"
+    "opponentDeck": "Deck do Oponente",
+    "lastPush": "Último push: {games} partidas, {wins}V / {losses}D, {trophies} troféus, {duration} min de push",
+    "lastNBattles": "Últimas {n} partidas",
+    "noPush": "Nenhum push válido encontrado"
   },
   "onboarding": {
     "welcome": "Bem-vindo ao CRStats!",
