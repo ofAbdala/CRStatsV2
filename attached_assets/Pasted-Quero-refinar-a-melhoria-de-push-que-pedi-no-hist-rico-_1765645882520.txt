@@ -1,0 +1,55 @@
+Quero refinar a melhoria de “push” que pedi no histórico de batalhas do CRStats.
+
+Requisito novo (mais preciso):
+- Um **push** é uma sequência de partidas onde o jogador NUNCA fica mais de **30 minutos** sem jogar entre uma partida e outra.
+- Se ele para e volta **30 min ou mais depois**, isso começa um **novo push**.
+- Um push só é considerado válido se tiver **pelo menos 2 partidas**.
+- O resumo que mostramos no topo deve se referir ao **último push válido**, não simplesmente a todas as partidas filtradas.
+
+Relembre o contexto atual:
+- Já existe UI de histórico com filtros (Hoje / 7 dias / 30 dias / Temporada).
+- Já existe lista de batalhas com cards (Vitória/Derrota, troféus, modo, horário).
+- Já calculamos wins/losses/winrate.
+- Já tínhamos adicionado o resumo com tempo de push e troféus, mas ainda para o conjunto inteiro.
+
+Agora quero que você:
+
+1. Crie uma função para **agrupar battles em pushes**, algo como:
+
+   - `groupBattlesIntoPushes(battles: Battle[], minBattlesPerPush = 2): PushSession[]`
+   - Regras:
+     - Ordenar as battles por `battleTime` do mais antigo para o mais novo.
+     - Percorrer e ir acumulando num “chunk”; se a diferença entre a battle atual e a anterior for **<= 30 minutos**, continua no mesmo push.
+     - Se a diferença for **> 30 minutos**, fecha o push atual (se tiver pelo menos 2 partidas) e inicia um novo.
+     - No final, adicionar o último chunk se tiver pelo menos 2 partidas.
+     - Cada `PushSession` deve ter:
+       - `battles: Battle[]`
+       - `startTime`, `endTime`
+       - `wins`, `losses`, `draws`
+       - `netTrophies` (soma de trophyChange)
+       - `durationMs` (`endTime - startTime`)
+
+2. Ajustar o resumo do topo para usar o **último push válido**:
+   - `const pushes = groupBattlesIntoPushes(filteredBattles);`
+   - `const lastPush = pushes.length ? pushes[pushes.length - 1] : null;`
+   - Se `lastPush` existir:
+     - Montar o texto usando `lastPush.battles.length`, `lastPush.wins`, `lastPush.losses`, `lastPush.netTrophies` e `durationMs`.
+   - Se NÃO existir nenhum push válido (só 0 ou 1 partida isolada):
+     - Manter o comportamento antigo (resumo das últimas X partidas sem “push”).
+
+3. Manter o **design atual**:
+   - Não mudar a estrutura nem os cards.
+   - Apenas atualizar o texto do resumo.
+   - Continuar usando i18n:
+     - PT-BR: “Último push: 3 partidas, 2V / 1D, +32 troféus, 55 min de push”.
+     - EN-US: “Last push: 3 games, 2W / 1L, +32 trophies, 55 min session”.
+
+4. Documentar em comentário:
+   - Que `30 minutos` é o gap padrão para separar pushes.
+   - Que `minBattlesPerPush = 2` é o mínimo de partidas para um push ser considerado válido.
+
+Critério de aceite:
+- Se eu fizer 5 partidas em sequência, o resumo mostra um único push com 5 partidas.
+- Se eu fizer 3 partidas, parar por > 30 min, e fizer mais 3, o resumo passa a mostrar apenas o push mais recente (essas 3 últimas).
+- Se eu fizer só 1 partida isolada, o resumo volta para o modo “Últimas X partidas”, sem falar de push.
+- Nenhum erro de TypeScript ou runtime é introduzido.
