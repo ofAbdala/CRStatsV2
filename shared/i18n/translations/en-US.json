@@ -1,0 +1,210 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "filter": "Filter",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "or": "or",
+    "and": "and",
+    "all": "All",
+    "none": "None",
+    "month": "month",
+    "year": "year",
+    "day": "day",
+    "today": "today",
+    "yesterday": "yesterday",
+    "lastNDays": "last {n} days"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "coach": "AI Coach",
+    "training": "Training",
+    "decks": "Decks",
+    "community": "Community",
+    "settings": "Settings",
+    "billing": "Subscription",
+    "profile": "My Profile",
+    "logout": "Logout",
+    "login": "Login"
+  },
+  "landing": {
+    "hero": {
+      "title": "Master Clash Royale with Intelligence",
+      "subtitle": "Advanced stats, AI analysis, and personalized coaching to take your game to the next level.",
+      "cta": "Get Started Free",
+      "ctaSecondary": "Learn More"
+    },
+    "features": {
+      "title": "Powerful Features",
+      "stats": {
+        "title": "Detailed Statistics",
+        "description": "Track your progress with precise data on battles, decks, and performance."
+      },
+      "coach": {
+        "title": "Personalized AI Coach",
+        "description": "Get tips and insights tailored to your playstyle."
+      },
+      "training": {
+        "title": "Training Exercises",
+        "description": "Improve your weaknesses with practical exercises and challenges."
+      }
+    }
+  },
+  "dashboard": {
+    "welcome": "Welcome, {name}!",
+    "overview": "Overview",
+    "recentBattles": "Recent Battles",
+    "currentDeck": "Current Deck",
+    "stats": {
+      "trophies": "Trophies",
+      "wins": "Wins",
+      "losses": "Losses",
+      "winRate": "Win Rate",
+      "threeCrowns": "3 Crowns",
+      "battleCount": "Battles"
+    },
+    "noBattles": "No battles found",
+    "noTag": "Set up your tag to view stats"
+  },
+  "coach": {
+    "title": "AI Coach",
+    "subtitle": "Ask questions and get personalized tips",
+    "placeholder": "Ask about strategies, decks, matchups...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "welcome": "Hello! I'm your Clash Royale coach. How can I help?",
+    "proRequired": "AI Coach is a PRO-exclusive feature"
+  },
+  "billing": {
+    "title": "Plans & Subscription",
+    "subtitle": "Unlock the full potential of CRStats with PRO: advanced analytics, AI Coach, and much more.",
+    "currentPlan": "Your current plan",
+    "free": {
+      "name": "Free",
+      "description": "Perfect to get started",
+      "features": [
+        "Basic statistics",
+        "5-battle history",
+        "Community access"
+      ]
+    },
+    "pro": {
+      "name": "PRO",
+      "description": "For serious players",
+      "popular": "POPULAR",
+      "features": [
+        "Unlimited battle history",
+        "AI Coach with personalized analysis",
+        "Training exercises",
+        "Priority support"
+      ]
+    },
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "perMonth": "/month",
+    "perYear": "/year",
+    "savePercent": "Save {percent}%",
+    "subscribeMonthly": "Subscribe Monthly",
+    "subscribeYearly": "Subscribe Yearly",
+    "manageSubscription": "Manage Subscription",
+    "currentPlanButton": "Current plan",
+    "faq": {
+      "title": "Frequently asked questions",
+      "cancelQuestion": "Can I cancel anytime?",
+      "cancelAnswer": "Yes! You can cancel your subscription at any time through the management portal.",
+      "paymentQuestion": "How does payment work?",
+      "paymentAnswer": "We accept credit and debit cards through Stripe, a secure payment platform."
+    },
+    "toast": {
+      "activated": "Subscription activated!",
+      "activatedDesc": "Welcome to the PRO plan! Enjoy all features.",
+      "canceled": "Payment canceled",
+      "canceledDesc": "You can try again whenever you want.",
+      "checkoutError": "Error starting checkout",
+      "portalError": "Error opening portal",
+      "tryAgain": "Please try again later."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": {
+      "title": "Profile",
+      "displayName": "Display name",
+      "clashTag": "Clash Royale Tag",
+      "clashTagHint": "E.g.: #2P090J0"
+    },
+    "preferences": {
+      "title": "Preferences",
+      "theme": "Theme",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeSystem": "System",
+      "language": "Language",
+      "notifications": "Notifications",
+      "notificationsEnabled": "Enabled",
+      "notificationsDisabled": "Disabled"
+    }
+  },
+  "profile": {
+    "overview": "Overview",
+    "history": "History",
+    "decks": "Decks & Meta",
+    "progress": "Progress",
+    "seasonSummary": "Season Summary",
+    "performance": "Performance",
+    "tiltIndicator": "Tilt Indicator",
+    "trophyChart": "Trophy Evolution",
+    "gameModes": "Game Modes",
+    "matchHistory": "Match History",
+    "mostUsedDecks": "Most Used Decks",
+    "archetypes": "Archetypes",
+    "trophyEvolution": "Trophy Evolution",
+    "playVolume": "Play Volume",
+    "goals": "Goals",
+    "proFeatures": "PRO Features"
+  },
+  "battle": {
+    "victory": "Victory",
+    "defeat": "Defeat",
+    "draw": "Draw",
+    "crowns": "{n} crown(s)",
+    "elixirAvg": "Average cost: {cost}",
+    "opponent": "Opponent",
+    "yourDeck": "Your Deck",
+    "opponentDeck": "Opponent's Deck"
+  },
+  "onboarding": {
+    "welcome": "Welcome to CRStats!",
+    "step1": {
+      "title": "Set Up Your Tag",
+      "description": "Enter your Clash Royale tag to sync your stats."
+    },
+    "step2": {
+      "title": "Explore the Dashboard",
+      "description": "View your stats, recent battles, and more."
+    },
+    "step3": {
+      "title": "Chat with the Coach",
+      "description": "Ask questions and get personalized tips from our AI Coach."
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "Page not found",
+    "unauthorized": "Unauthorized access",
+    "playerNotFound": "Player not found",
+    "invalidTag": "Invalid tag",
+    "networkError": "Connection error"
+  }
+}

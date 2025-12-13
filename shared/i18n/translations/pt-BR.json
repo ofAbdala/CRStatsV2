@@ -1,0 +1,210 @@
+{
+  "common": {
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "close": "Fechar",
+    "yes": "Sim",
+    "no": "Não",
+    "or": "ou",
+    "and": "e",
+    "all": "Todos",
+    "none": "Nenhum",
+    "month": "mês",
+    "year": "ano",
+    "day": "dia",
+    "today": "hoje",
+    "yesterday": "ontem",
+    "lastNDays": "últimos {n} dias"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "coach": "Coach IA",
+    "training": "Treinos",
+    "decks": "Decks",
+    "community": "Comunidade",
+    "settings": "Configurações",
+    "billing": "Assinatura",
+    "profile": "Meu Perfil",
+    "logout": "Sair",
+    "login": "Entrar"
+  },
+  "landing": {
+    "hero": {
+      "title": "Domine o Clash Royale com Inteligência",
+      "subtitle": "Estatísticas avançadas, análises de IA e coaching personalizado para levar seu jogo ao próximo nível.",
+      "cta": "Comece Gratuitamente",
+      "ctaSecondary": "Saiba Mais"
+    },
+    "features": {
+      "title": "Recursos Poderosos",
+      "stats": {
+        "title": "Estatísticas Detalhadas",
+        "description": "Acompanhe seu progresso com dados precisos sobre batalhas, decks e performance."
+      },
+      "coach": {
+        "title": "Coach IA Personalizado",
+        "description": "Receba dicas e análises personalizadas baseadas no seu estilo de jogo."
+      },
+      "training": {
+        "title": "Exercícios de Treinamento",
+        "description": "Melhore suas fraquezas com exercícios práticos e desafios."
+      }
+    }
+  },
+  "dashboard": {
+    "welcome": "Bem-vindo, {name}!",
+    "overview": "Visão Geral",
+    "recentBattles": "Batalhas Recentes",
+    "currentDeck": "Deck Atual",
+    "stats": {
+      "trophies": "Troféus",
+      "wins": "Vitórias",
+      "losses": "Derrotas",
+      "winRate": "Taxa de Vitória",
+      "threeCrowns": "3 Coroas",
+      "battleCount": "Batalhas"
+    },
+    "noBattles": "Nenhuma batalha encontrada",
+    "noTag": "Configure sua tag para ver estatísticas"
+  },
+  "coach": {
+    "title": "Coach IA",
+    "subtitle": "Tire suas dúvidas e receba dicas personalizadas",
+    "placeholder": "Pergunte sobre estratégias, decks, matchups...",
+    "send": "Enviar",
+    "thinking": "Pensando...",
+    "welcome": "Olá! Sou seu coach de Clash Royale. Como posso ajudar?",
+    "proRequired": "O Coach IA é um recurso exclusivo PRO"
+  },
+  "billing": {
+    "title": "Planos e Assinatura",
+    "subtitle": "Desbloqueie todo o potencial do CRStats com o plano PRO: análises avançadas, Coach IA e muito mais.",
+    "currentPlan": "Seu plano atual",
+    "free": {
+      "name": "Free",
+      "description": "Perfeito para começar",
+      "features": [
+        "Estatísticas básicas",
+        "Histórico de 5 batalhas",
+        "Acesso à comunidade"
+      ]
+    },
+    "pro": {
+      "name": "PRO",
+      "description": "Para jogadores sérios",
+      "popular": "POPULAR",
+      "features": [
+        "Histórico ilimitado de batalhas",
+        "Coach IA com análises personalizadas",
+        "Exercícios de treinamento",
+        "Suporte prioritário"
+      ]
+    },
+    "monthly": "Mensal",
+    "yearly": "Anual",
+    "perMonth": "/mês",
+    "perYear": "/ano",
+    "savePercent": "Economize {percent}%",
+    "subscribeMonthly": "Assinar Mensal",
+    "subscribeYearly": "Assinar Anual",
+    "manageSubscription": "Gerenciar Assinatura",
+    "currentPlanButton": "Plano atual",
+    "faq": {
+      "title": "Perguntas frequentes",
+      "cancelQuestion": "Posso cancelar a qualquer momento?",
+      "cancelAnswer": "Sim! Você pode cancelar sua assinatura a qualquer momento pelo portal de gerenciamento.",
+      "paymentQuestion": "Como funciona o pagamento?",
+      "paymentAnswer": "Aceitamos cartões de crédito e débito através do Stripe, uma plataforma segura de pagamentos."
+    },
+    "toast": {
+      "activated": "Assinatura ativada!",
+      "activatedDesc": "Bem-vindo ao plano PRO! Aproveite todos os recursos.",
+      "canceled": "Pagamento cancelado",
+      "canceledDesc": "Você pode tentar novamente quando quiser.",
+      "checkoutError": "Erro ao iniciar checkout",
+      "portalError": "Erro ao abrir portal",
+      "tryAgain": "Tente novamente mais tarde."
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "profile": {
+      "title": "Perfil",
+      "displayName": "Nome de exibição",
+      "clashTag": "Tag do Clash Royale",
+      "clashTagHint": "Ex: #2P090J0"
+    },
+    "preferences": {
+      "title": "Preferências",
+      "theme": "Tema",
+      "themeLight": "Claro",
+      "themeDark": "Escuro",
+      "themeSystem": "Sistema",
+      "language": "Idioma",
+      "notifications": "Notificações",
+      "notificationsEnabled": "Ativadas",
+      "notificationsDisabled": "Desativadas"
+    }
+  },
+  "profile": {
+    "overview": "Visão Geral",
+    "history": "Histórico",
+    "decks": "Decks & Meta",
+    "progress": "Progresso",
+    "seasonSummary": "Resumo da Temporada",
+    "performance": "Performance",
+    "tiltIndicator": "Indicador de Tilt",
+    "trophyChart": "Evolução de Troféus",
+    "gameModes": "Modos de Jogo",
+    "matchHistory": "Histórico de Partidas",
+    "mostUsedDecks": "Decks Mais Usados",
+    "archetypes": "Arquétipos",
+    "trophyEvolution": "Evolução de Troféus",
+    "playVolume": "Volume de Jogo",
+    "goals": "Metas",
+    "proFeatures": "Recursos PRO"
+  },
+  "battle": {
+    "victory": "Vitória",
+    "defeat": "Derrota",
+    "draw": "Empate",
+    "crowns": "{n} coroa(s)",
+    "elixirAvg": "Custo médio: {cost}",
+    "opponent": "Oponente",
+    "yourDeck": "Seu Deck",
+    "opponentDeck": "Deck do Oponente"
+  },
+  "onboarding": {
+    "welcome": "Bem-vindo ao CRStats!",
+    "step1": {
+      "title": "Configure sua Tag",
+      "description": "Informe sua tag do Clash Royale para sincronizar suas estatísticas."
+    },
+    "step2": {
+      "title": "Explore o Dashboard",
+      "description": "Veja suas estatísticas, batalhas recentes e muito mais."
+    },
+    "step3": {
+      "title": "Converse com o Coach",
+      "description": "Tire dúvidas e receba dicas personalizadas do nosso Coach IA."
+    }
+  },
+  "errors": {
+    "generic": "Algo deu errado. Tente novamente.",
+    "notFound": "Página não encontrada",
+    "unauthorized": "Acesso não autorizado",
+    "playerNotFound": "Jogador não encontrado",
+    "invalidTag": "Tag inválida",
+    "networkError": "Erro de conexão"
+  }
+}
