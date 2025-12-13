@@ -47,7 +47,8 @@ export default function CoachPage() {
       content: t('coach.welcome'),
       timestamp: new Date().toISOString(),
     }]);
-  }, [t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
