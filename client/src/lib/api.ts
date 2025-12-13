@@ -80,4 +80,21 @@ export const api = {
         body: JSON.stringify({ messages, playerTag }),
       }),
   },
+
+  // Stripe billing endpoints
+  stripe: {
+    getConfig: () => fetchAPI<{ publishableKey: string }>('/stripe/config'),
+    getProducts: () => fetchAPI<{ data: any[] }>('/stripe/products'),
+    getPrices: () => fetchAPI<{ data: any[] }>('/stripe/prices'),
+    getProductsWithPrices: () => fetchAPI<{ data: any[] }>('/stripe/products-with-prices'),
+    createCheckout: (priceId: string) =>
+      fetchAPI<{ url: string }>('/stripe/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ priceId }),
+      }),
+    createPortal: () =>
+      fetchAPI<{ url: string }>('/stripe/portal', {
+        method: 'POST',
+      }),
+  },
 };

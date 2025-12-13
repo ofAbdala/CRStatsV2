@@ -5,6 +5,10 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
 import { generateCoachResponse, ChatMessage } from "./openai";
+import { stripeService } from "./stripeService";
+import { getStripePublishableKey } from "./stripeClient";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -289,6 +293,172 @@ export async function registerRoutes(
   });
 
   // ============================================================================
+  // STRIPE BILLING ROUTES
+  // ============================================================================
+  
+  app.get('/api/stripe/config', async (req, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured" });
+      }
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (error) {
+      console.error("Error fetching Stripe config:", error);
+      res.status(500).json({ error: "Failed to fetch Stripe configuration" });
+    }
+  });
+
+  app.get('/api/stripe/products', async (req, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured", data: [] });
+      }
+      const result = await db.execute(
+        sql`SELECT * FROM stripe.products WHERE active = true`
+      );
+      res.json({ data: result.rows });
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.get('/api/stripe/prices', async (req, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured", data: [] });
+      }
+      const result = await db.execute(
+        sql`SELECT * FROM stripe.prices WHERE active = true`
+      );
+      res.json({ data: result.rows });
+    } catch (error) {
+      console.error("Error fetching prices:", error);
+      res.status(500).json({ error: "Failed to fetch prices" });
+    }
+  });
+
+  app.get('/api/stripe/products-with-prices', async (req, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured", data: [] });
+      }
+      const result = await db.execute(
+        sql`
+          SELECT 
+            p.id as product_id,
+            p.name as product_name,
+            p.description as product_description,
+            p.active as product_active,
+            p.metadata as product_metadata,
+            pr.id as price_id,
+            pr.unit_amount,
+            pr.currency,
+            pr.recurring,
+            pr.active as price_active
+          FROM stripe.products p
+          LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+          WHERE p.active = true
+          ORDER BY p.id, pr.unit_amount
+        `
+      );
+
+      const productsMap = new Map();
+      for (const row of result.rows as any[]) {
+        if (!productsMap.has(row.product_id)) {
+          productsMap.set(row.product_id, {
+            id: row.product_id,
+            name: row.product_name,
+            description: row.product_description,
+            active: row.product_active,
+            metadata: row.product_metadata,
+            prices: []
+          });
+        }
+        if (row.price_id) {
+          productsMap.get(row.product_id).prices.push({
+            id: row.price_id,
+            unit_amount: row.unit_amount,
+            currency: row.currency,
+            recurring: row.recurring,
+            active: row.price_active,
+          });
+        }
+      }
+
+      res.json({ data: Array.from(productsMap.values()) });
+    } catch (error) {
+      console.error("Error fetching products with prices:", error);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.post('/api/stripe/checkout', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured" });
+      }
+
+      const userId = req.user.claims.sub;
+      const { priceId } = req.body;
+
+      if (!priceId) {
+        return res.status(400).json({ error: "Price ID is required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const customerId = await stripeService.getOrCreateCustomer(userId, user.email || '');
+
+      const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
+      const baseUrl = domains ? `https://${domains}` : (process.env.APP_BASE_URL || 'http://localhost:5000');
+      const session = await stripeService.createCheckoutSession(
+        customerId,
+        priceId,
+        `${baseUrl}/billing?success=true`,
+        `${baseUrl}/billing?canceled=true`,
+        userId
+      );
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.post('/api/stripe/portal', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.status(503).json({ error: "Stripe not configured" });
+      }
+
+      const userId = req.user.claims.sub;
+      const subscription = await storage.getSubscription(userId);
+
+      if (!subscription?.stripeCustomerId) {
+        return res.status(400).json({ error: "No subscription found" });
+      }
+
+      const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
+      const baseUrl = domains ? `https://${domains}` : (process.env.APP_BASE_URL || 'http://localhost:5000');
+      const session = await stripeService.createCustomerPortalSession(
+        subscription.stripeCustomerId,
+        `${baseUrl}/billing`
+      );
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating portal session:", error);
+      res.status(500).json({ error: "Failed to create customer portal session" });
+    }
+  });
+
+  // ============================================================================
   // AI COACH ROUTES
   // ============================================================================
   
@@ -306,26 +476,9 @@ export async function registerRoutes(
 
       let playerContext: any = {};
 
-      if (playerTag) {
-        const playerResult = await getPlayerByTag(playerTag);
-        if (playerResult.data) {
-          const player = playerResult.data as any;
-          playerContext = {
-            playerTag: player.tag,
-            trophies: player.trophies,
-            arena: player.arena?.name,
-            currentDeck: player.currentDeck?.map((c: any) => c.name),
-          };
-
-          const battlesResult = await getPlayerBattles(playerTag);
-          if (battlesResult.data) {
-            playerContext.recentBattles = (battlesResult.data as any[]).slice(0, 5);
-          }
-        }
-      } else {
-        const profile = await storage.getProfile(userId);
-        if (profile?.clashTag) {
-          const playerResult = await getPlayerByTag(profile.clashTag);
+      try {
+        if (playerTag) {
+          const playerResult = await getPlayerByTag(playerTag);
           if (playerResult.data) {
             const player = playerResult.data as any;
             playerContext = {
@@ -334,14 +487,35 @@ export async function registerRoutes(
               arena: player.arena?.name,
               currentDeck: player.currentDeck?.map((c: any) => c.name),
             };
+
+            const battlesResult = await getPlayerBattles(playerTag);
+            if (battlesResult.data) {
+              playerContext.recentBattles = (battlesResult.data as any[]).slice(0, 5);
+            }
+          }
+        } else {
+          const profile = await storage.getProfile(userId);
+          if (profile?.clashTag) {
+            const playerResult = await getPlayerByTag(profile.clashTag);
+            if (playerResult.data) {
+              const player = playerResult.data as any;
+              playerContext = {
+                playerTag: player.tag,
+                trophies: player.trophies,
+                arena: player.arena?.name,
+                currentDeck: player.currentDeck?.map((c: any) => c.name),
+              };
+            }
           }
         }
+      } catch (contextError) {
+        console.warn("Failed to fetch player context, continuing without it:", contextError);
       }
 
-      const response = await generateCoachResponse(messages, playerContext);
+      const aiResponse = await generateCoachResponse(messages, playerContext);
       
       res.json({ 
-        message: response,
+        message: aiResponse,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
