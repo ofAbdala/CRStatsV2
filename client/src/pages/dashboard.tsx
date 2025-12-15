@@ -11,6 +11,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useClashPlayer, useClashBattles } from "@/hooks/useClashPlayer";
 import { useGoals } from "@/hooks/useGoals";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useLocale } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Area,
@@ -22,15 +23,60 @@ import {
   YAxis,
 } from "recharts";
 
-const chartData = [
-  { date: "Seg", trophies: 5780 },
-  { date: "Ter", trophies: 5810 },
-  { date: "Qua", trophies: 5795 },
-  { date: "Qui", trophies: 5820 },
-  { date: "Sex", trophies: 5835 },
-  { date: "Sab", trophies: 5800 },
-  { date: "Dom", trophies: 5842 },
-];
+function parseBattleTime(battleTime: string): Date {
+  return new Date(battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
+}
+
+function computeTrophyEvolution(battles: any[], currentTrophies: number, dayNames: string[]): { date: string; trophies: number }[] {
+  if (!battles.length || !currentTrophies) return [];
+
+  const sortedBattles = [...battles]
+    .filter(b => b.battleTime && b.team?.[0])
+    .sort((a, b) => {
+      const dateA = parseBattleTime(a.battleTime);
+      const dateB = parseBattleTime(b.battleTime);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+  if (sortedBattles.length === 0) return [];
+
+  const dataPoints: { date: Date; trophies: number }[] = [];
+  let runningTrophies = currentTrophies;
+
+  dataPoints.push({ date: new Date(), trophies: runningTrophies });
+
+  for (const battle of sortedBattles) {
+    const trophyChange = battle.team?.[0]?.trophyChange;
+    
+    if (typeof trophyChange === 'number' && trophyChange >= -60 && trophyChange <= 60) {
+      runningTrophies -= trophyChange;
+    } else {
+      const teamCrowns = battle.team?.[0]?.crowns || 0;
+      const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
+      const isWin = teamCrowns > opponentCrowns;
+      const isLoss = teamCrowns < opponentCrowns;
+      
+      if (isWin) runningTrophies -= 30;
+      else if (isLoss) runningTrophies += 30;
+    }
+
+    const battleDate = parseBattleTime(battle.battleTime);
+    dataPoints.push({ date: battleDate, trophies: Math.max(0, runningTrophies) });
+  }
+
+  dataPoints.reverse();
+
+  const chartData = dataPoints.slice(-10).map((point, idx, arr) => {
+    const dayName = dayNames[point.date.getDay()];
+    
+    return {
+      date: arr.length <= 7 ? dayName : `${idx + 1}`,
+      trophies: point.trophies,
+    };
+  });
+
+  return chartData;
+}
 
 export default function DashboardPage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
@@ -38,10 +84,17 @@ export default function DashboardPage() {
   const { data: battlesData, isLoading: battlesLoading } = useClashBattles((profile as any)?.clashTag);
   const { data: goals = [], isLoading: goalsLoading } = useGoals();
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
+  const { t, translations } = useLocale();
 
   const isLoading = profileLoading || playerLoading;
   const battles = (battlesData as any) || [];
   const recentBattles = battles.slice(0, 5);
+  const player = playerData as any;
+
+  const dayNamesArray = (translations as any)?.dayNames || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const trophyChartData = React.useMemo(() => {
+    return computeTrophyEvolution(battles, player?.trophies, dayNamesArray);
+  }, [battles, player?.trophies, dayNamesArray]);
 
   // Calculate win rate from recent battles
   const calculateWinRate = () => {
@@ -59,18 +112,18 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground">Visão geral do seu desempenho na arena</p>
+            <p className="text-muted-foreground">{t("syncStatus.overview")}</p>
           </div>
           <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg shadow-sm">
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm font-medium text-muted-foreground">Carregando...</span>
+                <span className="text-sm font-medium text-muted-foreground">{t("common.loading")}</span>
               </>
             ) : (
               <>
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm font-medium text-muted-foreground">Dados sincronizados agora</span>
+                <span className="text-sm font-medium text-muted-foreground">{t("syncStatus.synced")}</span>
               </>
             )}
           </div>
@@ -82,8 +135,8 @@ export default function DashboardPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {(profile as any)?.clashTag 
-                ? `Não foi possível carregar os dados do jogador ${(profile as any).clashTag}. Verifique se a tag está correta.`
-                : 'Configure sua Clash Royale tag no perfil para ver seus dados.'}
+                ? t("errors.playerLoadFailed", { tag: (profile as any).clashTag })
+                : t("errors.configureTag")}
             </AlertDescription>
           </Alert>
         )}
@@ -91,7 +144,7 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard 
-            title="Troféus Atuais" 
+            title={t("stats.currentTrophies")} 
             value={isLoading ? "..." : ((playerData as any)?.trophies || 0)} 
             icon={<Trophy className="w-5 h-5 text-primary" />}
             trend={(playerData as any)?.trophies ? `Arena: ${(playerData as any)?.arena?.name || 'N/A'}` : undefined}
@@ -99,22 +152,22 @@ export default function DashboardPage() {
             arenaImage={(playerData as any)?.arena?.id ? `https://cdn.royaleapi.com/static/img/arenas/arena${(playerData as any).arena.id}.png` : undefined}
           />
           <StatCard 
-            title="Melhor Temporada" 
+            title={t("stats.bestSeason")} 
             value={isLoading ? "..." : ((playerData as any)?.bestTrophies || 0)} 
             icon={<Crown className="w-5 h-5 text-yellow-500" />}
-            subtext="Recorde Pessoal"
+            subtext={t("stats.personalRecord")}
           />
           <StatCard 
-            title="Win Rate" 
+            title={t("stats.winRate")} 
             value={isLoading ? "..." : `${calculateWinRate()}%`} 
             icon={<TrendingUp className="w-5 h-5 text-green-500" />}
-            subtext={`Últimas ${battles.length} batalhas`}
+            subtext={t("stats.lastNBattles", { n: battles.length })}
           />
           <StatCard 
-            title="Vitórias" 
+            title={t("stats.victories")} 
             value={isLoading ? "..." : ((playerData as any)?.wins || 0)} 
             icon={<Swords className="w-5 h-5 text-blue-500" />}
-            subtext={`${(playerData as any)?.losses || 0} derrotas`}
+            subtext={t("stats.nDefeats", { n: (playerData as any)?.losses || 0 })}
           />
         </div>
 
@@ -124,7 +177,7 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Swords className="w-5 h-5 text-primary" />
-                Deck Atual
+                {t("stats.currentDeck")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -141,54 +194,66 @@ export default function DashboardPage() {
           {/* Main Column */}
           <div className="lg:col-span-2 space-y-8">
              {/* Chart Section */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="trophy-progress-chart">
               <CardHeader>
-                <CardTitle>Progresso de Troféus</CardTitle>
+                <CardTitle>{t("stats.trophyProgress")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="colorTrophies" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="hsl(var(--muted-foreground))" 
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis 
-                        stroke="hsl(var(--muted-foreground))" 
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                        domain={['dataMin - 50', 'dataMax + 50']}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--popover))', 
-                          borderColor: 'hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'hsl(var(--popover-foreground))'
-                        }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="trophies" 
-                        stroke="hsl(var(--primary))" 
-                        strokeWidth={3}
-                        fillOpacity={1} 
-                        fill="url(#colorTrophies)" 
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {battlesLoading ? (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : trophyChartData.length === 0 ? (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <p className="text-sm text-muted-foreground text-center">
+                      {t("stats.noBattles")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trophyChartData}>
+                        <defs>
+                          <linearGradient id="colorTrophies" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="hsl(var(--muted-foreground))" 
+                          fontSize={12}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis 
+                          stroke="hsl(var(--muted-foreground))" 
+                          fontSize={12}
+                          tickLine={false}
+                          axisLine={false}
+                          domain={['dataMin - 50', 'dataMax + 50']}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--popover))', 
+                            borderColor: 'hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--popover-foreground))'
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="trophies" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={3}
+                          fillOpacity={1} 
+                          fill="url(#colorTrophies)" 
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -197,10 +262,10 @@ export default function DashboardPage() {
                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                      <Target className="w-5 h-5 text-primary" />
-                     Metas Ativas
+                     {t("goals.activeGoals")}
                   </CardTitle>
                   <Link href="/profile">
-                    <Button variant="ghost" size="sm" className="h-8 text-xs" data-testid="button-manage-goals">Gerenciar</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-xs" data-testid="button-manage-goals">{t("goals.manage")}</Button>
                   </Link>
                </CardHeader>
                <CardContent className="space-y-6">
@@ -209,7 +274,7 @@ export default function DashboardPage() {
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                     </div>
                   ) : (goals as any[]).length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nenhuma meta ativa</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">{t("goals.noActiveGoals")}</p>
                   ) : (
                     (goals as any[]).slice(0, 3).map((goal: any) => (
                       <div key={goal.id} className="space-y-2" data-testid={`goal-${goal.id}`}>
@@ -230,7 +295,7 @@ export default function DashboardPage() {
             {/* Recent Battles List */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Últimas Batalhas</CardTitle>
+                <CardTitle>{t("battles.recentBattles")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {battlesLoading ? (
@@ -238,14 +303,14 @@ export default function DashboardPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   </div>
                 ) : recentBattles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma batalha recente</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">{t("battles.noRecentBattles")}</p>
                 ) : (
                   recentBattles.map((battle: any, idx: number) => {
                     const teamCrowns = battle.team?.[0]?.crowns || 0;
                     const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
                     const isWin = teamCrowns > opponentCrowns;
                     const isDraw = teamCrowns === opponentCrowns;
-                    const opponentName = battle.opponent?.[0]?.name || 'Oponente';
+                    const opponentName = battle.opponent?.[0]?.name || t("battles.opponent");
                     // Parse Clash Royale API date format: "20231215T123456.000Z" -> "2023-12-15T12:34:56.000Z"
                     const parseBattleTime = (timeStr: string) => {
                       if (!timeStr) return new Date();
@@ -299,7 +364,7 @@ export default function DashboardPage() {
                 )}
                 <div className="pt-4 text-center">
                   <Link href="/decks">
-                    <button className="text-sm text-primary hover:underline font-medium transition-colors hover:text-primary/80" data-testid="link-view-history">Ver histórico completo</button>
+                    <button className="text-sm text-primary hover:underline font-medium transition-colors hover:text-primary/80" data-testid="link-view-history">{t("favorites.viewFullHistory")}</button>
                   </Link>
                 </div>
               </CardContent>
@@ -310,7 +375,7 @@ export default function DashboardPage() {
                <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                      <Star className="w-5 h-5 text-yellow-500" />
-                     Jogadores Favoritos
+                     {t("favorites.favoritePlayers")}
                   </CardTitle>
                </CardHeader>
                <CardContent className="space-y-4">
@@ -319,7 +384,7 @@ export default function DashboardPage() {
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                     </div>
                   ) : (favorites as any[]).length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum jogador favoritado</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">{t("favorites.noFavorites")}</p>
                   ) : (
                     (favorites as any[]).map((fav: any) => (
                       <div key={fav.id} className="flex items-center justify-between p-3 rounded-lg bg-background/40 hover:bg-background/60 transition-colors cursor-pointer group" data-testid={`favorite-${fav.id}`}>
@@ -329,7 +394,7 @@ export default function DashboardPage() {
                           </Avatar>
                           <div>
                             <div className="font-bold text-sm">{fav.name}</div>
-                            <div className="text-xs text-muted-foreground">{fav.clan || 'Sem clan'}</div>
+                            <div className="text-xs text-muted-foreground">{fav.clan || t("favorites.noClan")}</div>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -337,7 +402,7 @@ export default function DashboardPage() {
                     ))
                   )}
                   <Link href="/community">
-                     <Button variant="ghost" size="sm" className="w-full text-xs mt-2" data-testid="button-explore-community">Explorar Comunidade</Button>
+                     <Button variant="ghost" size="sm" className="w-full text-xs mt-2" data-testid="button-explore-community">{t("favorites.exploreCommunity")}</Button>
                   </Link>
                </CardContent>
             </Card>

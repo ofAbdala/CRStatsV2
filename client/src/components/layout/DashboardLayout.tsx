@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/hooks/use-locale";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,6 +34,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, setLocation] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
+  const { t } = useLocale();
 
   const { data: subscription } = useQuery({
     queryKey: ['subscription'],
@@ -42,14 +44,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
 
   const navigation = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Meu Perfil", href: "/me", icon: User },
-    { name: "Coach IA", href: "/coach", icon: MessageSquare },
-    { name: "Treino", href: "/training", icon: Target },
-    { name: "Decks", href: "/decks", icon: Layers },
-    { name: "Comunidade", href: "/community", icon: Globe },
-    { name: "Billing", href: "/billing", icon: CreditCard },
-    { name: "Configurações", href: "/settings", icon: Settings },
+    { name: t('nav.dashboard'), href: "/dashboard", icon: LayoutDashboard },
+    { name: t('nav.profile'), href: "/me", icon: User },
+    { name: t('nav.coach'), href: "/coach", icon: MessageSquare },
+    { name: t('nav.training'), href: "/training", icon: Target },
+    { name: t('nav.decks'), href: "/decks", icon: Layers },
+    { name: t('nav.community'), href: "/community", icon: Globe },
+    { name: t('nav.billing'), href: "/billing", icon: CreditCard },
+    { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
   const SidebarContent = () => (
@@ -99,25 +101,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             {isPro ? (
               <>
                 <Crown className="w-4 h-4 text-yellow-500" />
-                <span className="text-yellow-500">Plano PRO</span>
+                <span className="text-yellow-500">{t('sidebar.planPro')}</span>
               </>
             ) : (
-              <span className="text-primary">Plano Free</span>
+              <span className="text-primary">{t('sidebar.planFree')}</span>
             )}
           </h4>
           {isPro ? (
-            <p className="text-xs text-muted-foreground">Acesso ilimitado</p>
+            <p className="text-xs text-muted-foreground">{t('sidebar.unlimitedAccess')}</p>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground mb-3">2/5 mensagens diárias</p>
+              <p className="text-xs text-muted-foreground mb-3">{t('sidebar.dailyMessages', { used: 2, total: 5 })}</p>
               <Link href="/billing">
-                <Button size="sm" className="w-full text-xs font-bold" variant="outline">Upgrade PRO</Button>
+                <Button size="sm" className="w-full text-xs font-bold" variant="outline">{t('sidebar.upgradePro')}</Button>
               </Link>
             </>
           )}
         </div>
 
-        <Link href="/profile">
+        <Link href="/settings">
           <div className="flex items-center gap-3 mb-4 cursor-pointer p-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors">
             <Avatar className="w-8 h-8 border border-border">
               <AvatarImage src="https://github.com/shadcn.png" />
@@ -136,7 +138,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Badge>
                 )}
               </div>
-              <span className="text-xs text-sidebar-foreground/60">Ver Perfil</span>
+              <span className="text-xs text-sidebar-foreground/60">{t('sidebar.viewProfile')}</span>
             </div>
           </div>
         </Link>
@@ -147,7 +149,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           onClick={() => { window.location.href = "/api/logout"; }}
         >
           <LogOut className="w-4 h-4 mr-2" />
-          Sair
+          {t('nav.logout')}
         </Button>
       </div>
     </div>
@@ -202,6 +204,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 }
 
 function NotificationsPopover() {
+  const { t } = useLocale();
   const unreadCount = mockNotifications.filter(n => !n.read).length;
 
   return (
@@ -216,7 +219,7 @@ function NotificationsPopover() {
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
         <div className="p-4 border-b border-border">
-          <h4 className="font-bold">Notificações</h4>
+          <h4 className="font-bold">{t('sidebar.notifications')}</h4>
         </div>
         <div className="max-h-[300px] overflow-y-auto">
           {mockNotifications.map((notification) => (
@@ -230,7 +233,7 @@ function NotificationsPopover() {
           ))}
         </div>
         <div className="p-2 border-t border-border bg-muted/20">
-          <Button variant="ghost" size="sm" className="w-full text-xs">Marcar todas como lidas</Button>
+          <Button variant="ghost" size="sm" className="w-full text-xs">{t('sidebar.markAllRead')}</Button>
         </div>
       </PopoverContent>
     </Popover>

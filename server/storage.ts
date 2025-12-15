@@ -12,6 +12,7 @@ import {
   pushAnalyses,
   trainingPlans,
   trainingDrills,
+  metaDecksCache,
   type User,
   type UpsertUser,
   type Profile,
@@ -35,6 +36,8 @@ import {
   type InsertTrainingPlan,
   type TrainingDrill,
   type InsertTrainingDrill,
+  type MetaDeckCache,
+  type InsertMetaDeckCache,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
@@ -107,6 +110,11 @@ export interface IStorage {
   createTrainingDrill(drill: InsertTrainingDrill): Promise<TrainingDrill>;
   updateTrainingDrill(id: string, drill: Partial<InsertTrainingDrill>): Promise<TrainingDrill | undefined>;
   countActiveDrills(planId: string): Promise<number>;
+  
+  // Meta Decks Cache operations
+  getMetaDecks(): Promise<MetaDeckCache[]>;
+  createMetaDeck(deck: Partial<InsertMetaDeckCache>): Promise<MetaDeckCache>;
+  clearMetaDecks(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -486,6 +494,29 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return result[0]?.count || 0;
+  }
+
+  // ============================================================================
+  // Meta Decks Cache operations
+  // ============================================================================
+  
+  async getMetaDecks(): Promise<MetaDeckCache[]> {
+    return await db
+      .select()
+      .from(metaDecksCache)
+      .orderBy(desc(metaDecksCache.usageCount));
+  }
+
+  async createMetaDeck(deckData: Partial<InsertMetaDeckCache>): Promise<MetaDeckCache> {
+    const [deck] = await db
+      .insert(metaDecksCache)
+      .values(deckData as InsertMetaDeckCache)
+      .returning();
+    return deck;
+  }
+
+  async clearMetaDecks(): Promise<void> {
+    await db.delete(metaDecksCache);
   }
 }
 

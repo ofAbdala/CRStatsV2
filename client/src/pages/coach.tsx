@@ -240,9 +240,9 @@ export default function CoachPage() {
               </Button>
             </form>
             <div className="max-w-3xl mx-auto mt-2 flex justify-center gap-2 flex-wrap">
-              <SuggestionPill onClick={() => handleSuggestion("Como counterar Megacavaleiro?")} text="Como counterar Megacavaleiro?" />
-              <SuggestionPill onClick={() => handleSuggestion("Analise minha última derrota")} text="Analise minha última derrota" />
-              <SuggestionPill onClick={() => handleSuggestion("Melhor deck para Arena 17")} text="Melhor deck para Arena 17" />
+              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.counterMegaKnight'))} text={t('coach.suggestions.counterMegaKnight')} />
+              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.analyzeLastDefeat'))} text={t('coach.suggestions.analyzeLastDefeat')} />
+              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.bestDeckArena17'))} text={t('coach.suggestions.bestDeckArena17')} />
             </div>
           </div>
         </Card>

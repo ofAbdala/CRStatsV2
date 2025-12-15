@@ -407,3 +407,22 @@ export const trainingDrillsRelations = relations(trainingDrills, ({ one }) => ({
     references: [trainingPlans.id],
   }),
 }));
+
+// ============================================================================
+// META DECKS CACHE TABLE (Aggregated popular decks from top players)
+// ============================================================================
+
+export const metaDecksCache = pgTable("meta_decks_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deckHash: varchar("deck_hash").notNull().unique(),
+  cards: jsonb("cards").notNull(), // Array of card names
+  winRate: integer("win_rate"), // Estimated win rate percentage (0-100)
+  usageCount: integer("usage_count").notNull().default(1),
+  avgTrophies: integer("avg_trophies"),
+  archetype: varchar("archetype"), // e.g., "Hog Cycle", "Golem Beatdown"
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type MetaDeckCache = typeof metaDecksCache.$inferSelect;
+export type InsertMetaDeckCache = typeof metaDecksCache.$inferInsert;

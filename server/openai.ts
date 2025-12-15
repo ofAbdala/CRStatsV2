@@ -45,8 +45,48 @@ export async function generateCoachResponse(
     arena?: string;
     currentDeck?: string[];
     recentBattles?: any[];
+    tiltStatus?: {
+      level: 'high' | 'medium' | 'none';
+      recentWinRate: number;
+      currentStreak: { type: string; count: number };
+      consecutiveLosses: number;
+    };
+    activeGoals?: Array<{
+      title: string;
+      type: string;
+      target: number;
+      current: number;
+      progress: number;
+    }>;
+    lastBattleAnalysis?: any;
   }
 ): Promise<string> {
+  let tiltContext = '';
+  if (playerContext?.tiltStatus) {
+    const { level, recentWinRate, currentStreak, consecutiveLosses } = playerContext.tiltStatus;
+    if (level === 'high') {
+      tiltContext = `
+⚠️ ALERTA DE TILT ALTO: O jogador está em tilt severo!
+- Taxa de vitória recente: ${recentWinRate.toFixed(1)}%
+- Sequência atual: ${currentStreak.count} ${currentStreak.type === 'loss' ? 'derrotas' : currentStreak.type === 'win' ? 'vitórias' : 'jogos'}
+${consecutiveLosses > 0 ? `- Derrotas consecutivas: ${consecutiveLosses}` : ''}
+IMPORTANTE: Quando o jogador está em tilt alto, priorize conselhos sobre saúde mental, pausas estratégicas e controle emocional antes de dicas técnicas.`;
+    } else if (level === 'medium') {
+      tiltContext = `
+⚡ Status de tilt: Médio
+- Taxa de vitória recente: ${recentWinRate.toFixed(1)}%
+- Mantenha isso em mente ao dar conselhos.`;
+    }
+  }
+
+  let goalsContext = '';
+  if (playerContext?.activeGoals && playerContext.activeGoals.length > 0) {
+    goalsContext = `
+🎯 Metas ativas do jogador:
+${playerContext.activeGoals.map(g => `- ${g.title} (${g.type}): ${g.progress}% concluído (${g.current}/${g.target})`).join('\n')}
+IMPORTANTE: Sempre que apropriado, relacione suas sugestões com as metas do jogador.`;
+  }
+
   const systemPrompt = `Você é um coach especialista de Clash Royale, ajudando jogadores a melhorar suas habilidades.
 
 Seu papel é:
@@ -64,6 +104,8 @@ Contexto do jogador:
 ${playerContext.currentDeck ? `- Deck atual: ${playerContext.currentDeck.join(', ')}` : ''}
 ${playerContext.recentBattles ? `- Batalhas recentes: ${playerContext.recentBattles.length} batalhas registradas` : ''}
 ` : ''}
+${tiltContext}
+${goalsContext}
 
 Responda sempre em português brasileiro de forma amigável e educativa. Seja conciso mas informativo.`;
 
