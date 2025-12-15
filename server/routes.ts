@@ -852,7 +852,22 @@ export async function registerRoutes(
         return res.status(400).json({ error: "At least one user message is required" });
       }
 
+      const lossPatterns = [
+        /por\s*que\s*perd[ie]/i,
+        /why\s*did\s*i\s*lose/i,
+        /analise\s*(minha\s*)?((última|ultima)\s*)?derrot/i,
+        /analise\s*o\s*que\s*fiz\s*de\s*errado/i,
+        /o\s*que\s*fiz\s*de\s*errado/i,
+        /erros?\s*(da|na)\s*(minha\s*)?(última|ultima)?\s*(batalha|derrota|partida)/i,
+        /última\s*derrota/i,
+        /analyze\s*(my\s*)?(last\s*)?loss/i,
+        /what\s*went\s*wrong/i,
+      ];
+      
+      const shouldInjectLastBattle = lossPatterns.some(p => p.test(lastUserMessage.content));
+
       let playerContext: any = {};
+      let lastBattleContext: any = null;
 
       try {
         if (playerTag) {
@@ -868,7 +883,35 @@ export async function registerRoutes(
 
             const battlesResult = await getPlayerBattles(playerTag);
             if (battlesResult.data) {
-              playerContext.recentBattles = (battlesResult.data as any[]).slice(0, 5);
+              const battles = battlesResult.data as any[];
+              playerContext.recentBattles = battles.slice(0, 5);
+              
+              if (shouldInjectLastBattle) {
+                const lastLoss = battles.find((b: any) => {
+                  const teamCrowns = b.team?.[0]?.crowns || 0;
+                  const opponentCrowns = b.opponent?.[0]?.crowns || 0;
+                  return teamCrowns < opponentCrowns;
+                });
+                
+                if (lastLoss) {
+                  const playerTeam = lastLoss.team?.[0];
+                  const opponent = lastLoss.opponent?.[0];
+                  
+                  lastBattleContext = {
+                    result: 'loss',
+                    gameMode: lastLoss.gameMode?.name || lastLoss.type || 'Unknown',
+                    arena: lastLoss.arena?.name,
+                    playerDeck: playerTeam?.cards?.map((c: any) => c.name) || [],
+                    opponentDeck: opponent?.cards?.map((c: any) => c.name) || [],
+                    playerCrowns: playerTeam?.crowns || 0,
+                    opponentCrowns: opponent?.crowns || 0,
+                    trophyChange: playerTeam?.trophyChange || 0,
+                    elixirLeaked: playerTeam?.elixirLeaked || 0,
+                    battleTime: lastLoss.battleTime,
+                  };
+                  playerContext.lastBattleAnalysis = lastBattleContext;
+                }
+              }
             }
           }
         } else {
@@ -883,6 +926,39 @@ export async function registerRoutes(
                 arena: player.arena?.name,
                 currentDeck: player.currentDeck?.map((c: any) => c.name),
               };
+              
+              if (shouldInjectLastBattle) {
+                const battlesResult = await getPlayerBattles(profile.clashTag);
+                if (battlesResult.data) {
+                  const battles = battlesResult.data as any[];
+                  playerContext.recentBattles = battles.slice(0, 5);
+                  
+                  const lastLoss = battles.find((b: any) => {
+                    const teamCrowns = b.team?.[0]?.crowns || 0;
+                    const opponentCrowns = b.opponent?.[0]?.crowns || 0;
+                    return teamCrowns < opponentCrowns;
+                  });
+                  
+                  if (lastLoss) {
+                    const playerTeam = lastLoss.team?.[0];
+                    const opponent = lastLoss.opponent?.[0];
+                    
+                    lastBattleContext = {
+                      result: 'loss',
+                      gameMode: lastLoss.gameMode?.name || lastLoss.type || 'Unknown',
+                      arena: lastLoss.arena?.name,
+                      playerDeck: playerTeam?.cards?.map((c: any) => c.name) || [],
+                      opponentDeck: opponent?.cards?.map((c: any) => c.name) || [],
+                      playerCrowns: playerTeam?.crowns || 0,
+                      opponentCrowns: opponent?.crowns || 0,
+                      trophyChange: playerTeam?.trophyChange || 0,
+                      elixirLeaked: playerTeam?.elixirLeaked || 0,
+                      battleTime: lastLoss.battleTime,
+                    };
+                    playerContext.lastBattleAnalysis = lastBattleContext;
+                  }
+                }
+              }
             }
           }
         }
