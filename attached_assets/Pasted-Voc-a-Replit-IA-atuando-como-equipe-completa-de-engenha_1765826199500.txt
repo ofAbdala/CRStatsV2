@@ -1,0 +1,569 @@
+Você é a Replit IA, atuando como **equipe completa de engenharia** (arquitetura, backend, frontend, DevOps, QA e produto) para o SaaS **CRStats (CR Status)**.
+
+⚙️ CONTEXTO ATUAL
+
+* O CRStats já está rodando em produção/teste com:
+
+  * Auth + onboarding + conexão de tag Clash Royale.
+  * Dashboard com stats reais da API oficial (players/battles).
+  * Histórico de batalhas agrupado em **pushes** (sessões de 2+ partidas em até 30min).
+  * Coach IA básico, com gating PRO.
+  * Billing Stripe (modo teste) com webhooks e `subscriptions` atualizando plano PRO.
+  * i18n PT-BR / EN-US.
+  * Validação com Zod + error boundaries.
+* O OpenAI API key (ChatGPT) já está configurado no ambiente (ex.: `OPENAI_API_KEY`).
+
+  * Use a **API oficial da OpenAI** (Chat Completions).
+  * Crie um cliente OpenAI reutilizável (por exemplo em `lib/openai.ts`).
+  * Permita configurar o modelo via env (`OPENAI_MODEL`, default para algo como `gpt-4o-mini` ou similar).
+
+🧪 TESTE REAL (feedback do fundador/jogador)
+
+Usando o app jogando Clash Royale de verdade, os problemas/insights foram:
+
+1. **Atualização confusa:**
+
+   * Depois de jogar 3/4 partidas e voltar pro app, os dados nem sempre estavam atualizados.
+   * Às vezes o push atualizava, mas a dashboard geral não.
+   * F5 múltiplos era necessário.
+   * A UI falava que os dados foram atualizados, mas nem sempre era verdade.
+
+2. **Coach ainda “mockado” para FREE:**
+
+   * Em streak de derrotas (tilt), nenhum aviso apareceu.
+   * O Coach PRO até existe, mas o FREE praticamente não sente o coach funcionando.
+   * O app ainda não passa a sensação de que **está ajudando ativamente** a jogar melhor.
+
+3. **Coach não entende automaticamente a última partida:**
+
+   * Exemplo real: perdi pra um deck de X-Besta que, em teoria, meu deck deveria ganhar.
+   * Voltei tiltado pro app e queria perguntar:
+
+     * “Por que perdi a última partida?”
+   * O ideal: o coach puxa sozinho a última partida, decks, stats e já explica motivos e melhorias, sem pedir informação extra.
+
+4. **Perfil precisa de leitura de progresso:**
+
+   * O gráfico de troféus e push está ótimo.
+   * Mas falta uma barra clara mostrando **progresso até a próxima arena/liga**.
+
+5. **Centro de Treinamento ainda não está integrado ao Coach:**
+
+   * Existe o conceito de Treino, mas não algo que converta a análise do coach em **plano de treino auto-gerado**.
+   * O sonho: terminou o push → coach analisa → o Centro de Treinamento gera drills concretos automaticamente.
+
+📌 OBJETIVO DESTA RODADA
+
+Transformar o CRStats de um **dashboard bonito de stats** num **coach + centro de treinamento que realmente faz o jogador evoluir**, SEM quebrar nada que já funciona (auth, billing, PRO, Clash API, pushes, etc.).
+
+Quero um ciclo de jogo assim:
+
+> Jogar → clicar “Atualizar dados” → ver push/stats reais → Coach analisa última partida e último push → Centro de Treinamento gera plano de treino → Jogar de novo seguindo o treino.
+
+Use **ChatGPT via OpenAI API** como LLM principal, aproveitando a env `OPENAI_API_KEY` já configurada.
+
+---
+
+## BLOCO 1 — SYNC ÚNICO + BOTÃO “ATUALIZAR DADOS”
+
+### Problema
+
+* É preciso dar F5 várias vezes pra todos os stats se alinharem.
+* A UI já afirmou “dados atualizados” quando eles não estavam.
+
+### O que quero
+
+1. Um **endpoint único** de sync, ex.: `POST /api/player/sync`:
+
+   * Entrada: user autenticado (pode usar perfil/`clashTag` padrão).
+   * Comportamento:
+
+     * Puxa dados da API oficial do Clash Royale:
+
+       * Player → troféus, arena, etc.
+       * Battles (últimas X partidas relevantes).
+     * Atualiza o que for persistido no banco (se for o caso).
+     * Atualiza `last_synced_at` em `profiles` ou tabela própria (ex.: `player_sync_state`).
+     * Calcula e devolve em **UM payload**:
+
+       * Perfil (trophies, arena, nível).
+       * Estatísticas agregadas (winrate, streak, tiltLevel preliminar).
+       * Lista de batalhas (já em ordem correta).
+       * Push sessions (usando a lógica atual de gap de 30min, ≥ 2 partidas).
+       * Qualquer dado necessário para dashboard/perfil/coach, pra evitar vários fetch separados.
+
+2. **Componente de UI na dashboard**:
+
+   * Botão “Atualizar dados” com estado:
+
+     * idle → enabled.
+     * loading → desabilitado + spinner.
+   * Ao lado, texto tipo:
+
+     * PT: “Última atualização: há 5 min”.
+     * EN: “Last updated: 5 min ago”.
+   * Depois do sucesso:
+
+     * Atualizar estado global/contexts (stats, pushes, perfil) com os dados do response.
+     * SOMENTE então mostrar toast/mensagem “Dados atualizados”.
+
+3. Garantir que:
+
+   * Dashboard, Perfil, Coach, Histórico usam **a mesma fonte de dados** após o sync.
+   * Não há divergência (ex.: push atualizado, gráfico não).
+
+---
+
+## BLOCO 2 — COACH FREE LIMITADO + PRO ILIMITADO (ChatGPT)
+
+### Regras de negócio
+
+* FREE:
+
+  * **5 mensagens/dia** para o coach (pode parametrizar em constante).
+* PRO:
+
+  * Mensagens ilimitadas.
+
+### Backend
+
+1. Criar/usar uma tabela para registro de mensagens do coach, se ainda não existir:
+
+   * `coach_messages` ou similar:
+
+     * `id`
+     * `user_id`
+     * `role` (`"user" | "assistant"`)
+     * `content`
+     * `created_at`
+     * (opcional) `context_type` (`"last_battle" | "general" | "push"`)
+
+2. Função de domínio:
+
+   * `countUserCoachMessagesToday(userId): Promise<number>`
+   * Usa timezone padrão (pode ser UTC) para delimitar o dia.
+
+3. Endpoint de coach (ex.: `POST /api/coach/message`):
+
+   * Antes de chamar o LLM:
+
+     * Se `isPro(userId)` → ok, sem limite.
+     * Senão:
+
+       * Chamar `countUserCoachMessagesToday`.
+       * Se `count >= FREE_DAILY_LIMIT`:
+
+         * Retornar 429 ou 403 com código de erro tipo `FREE_COACH_DAILY_LIMIT_REACHED`.
+
+4. Integração com OpenAI:
+
+   * Criar cliente em `lib/openai.ts`:
+
+     * Usar `OPENAI_API_KEY`.
+     * Permitir configurar modelo via env `OPENAI_MODEL` (default `gpt-4o-mini` ou similar).
+   * Endpoint do coach monta `messages` para ChatCompletions:
+
+     * `system`: instruções do coach (já existentes + novas sobre tilt/treinos).
+     * `user`: pergunta do jogador.
+     * `context`: embedar via `system`/`assistant` o contexto do player (última batalha/push/metas…).
+
+### Frontend
+
+* Ao receber erro `FREE_COACH_DAILY_LIMIT_REACHED`:
+
+  * Inserir mensagem do tipo:
+
+    * PT: “No plano FREE você já usou suas 5 perguntas de hoje com o coach. Faça upgrade para PRO para perguntas ilimitadas.”
+    * EN: “On FREE plan you’ve already used your 5 coach questions for today. Upgrade to PRO for unlimited coaching.”
+  * Mostrar CTA de upgrade.
+
+---
+
+## BLOCO 3 — TILT REAL (E NÃO MOCK) + ALERTAS DE TILT
+
+### Objetivo
+
+Se o jogador estiver numa sequência bem ruim, o sistema deve:
+
+* Marcar `tiltLevel` real.
+* Mostrar isso no push e no coach.
+* O coach deve adaptar a resposta, sugerindo pausa/controle.
+
+### Lógica sugerida (pode encapsular em função)
+
+Sobre as **últimas N partidas** (ex.: 10) e/ou o **último push**:
+
+* `tiltLevel = "high"` se:
+
+  * Existem **3+ derrotas consecutivas**, OU
+  * Winrate < 40% e `netTrophies <= -60` nas últimas X partidas/última 1h.
+
+* `tiltLevel = "medium"` se:
+
+  * Winrate entre 40–50% com `netTrophies < 0`.
+
+* Caso contrário: `none`.
+
+Implementação:
+
+1. Função de domínio:
+
+   * `computeTiltLevel(battlesOrPushes): TiltLevel`.
+
+2. UI:
+
+   * No banner do último push (já existe):
+
+     * Se `tiltLevel = "high"`:
+
+       * Mostrar um badge/ícone adicional:
+
+         * PT: “Alerta de tilt”.
+         * EN: “Tilt warning”.
+   * (Opcional) no histórico de pushes, pode destacar push com tilt alto.
+
+3. Coach:
+
+   * Quando for montar o prompt do coach (última partida / último push):
+
+     * Incluir frase no `system`/context:
+
+       * “O jogador está possivelmente em tilt: perdeu X de Y nas últimas Z partidas, com -N troféus em T minutos. Ajude com recomendações de pausa e ajustes mentais, além de aspectos técnicos.”
+
+---
+
+## BLOCO 4 — BARRA DE PROGRESSO ATÉ A PRÓXIMA ARENA / LIGA
+
+### Objetivo
+
+No perfil (aba Perfil/Visão Geral), mostrar uma leitura visual clara de:
+
+* Em que arena/league o jogador está.
+* Quanto falta em troféus para a próxima.
+
+### Implementação
+
+1. Criar uma estrutura de arenas/ligas (se não existir):
+
+   * Array ordenado com:
+
+     * `name`
+     * `minTrophies`
+   * Ex.: `ARENAS = [{ name: "Arena 10", min: 4000 }, { name: "Arena 11", min: 4300 }, ...]`.
+
+2. Função de domínio:
+
+   * `getLeagueProgress(currentTrophies): { currentLeagueName, nextLeagueName, currentMin, nextMin, progressPercent }`
+   * `progressPercent`:
+
+     * `(currentTrophies - currentMin) / (nextMin - currentMin)` clampado entre 0 e 1.
+
+3. UI:
+
+   * Na aba Perfil:
+
+     * Barra horizontal (tipo XP bar) com:
+
+       * PT: “Progresso até [próxima arena]: 4200 / 4600 troféus (70%)”.
+       * EN: “Progress to [next league]: 4200 / 4600 trophies (70%)”.
+   * Usar i18n e design-system atual (nada muito chamativo, seguir o visual dos cards).
+
+---
+
+## BLOCO 5 — COACH “POR QUE PERDI A ÚLTIMA PARTIDA?” (Contexto automático)
+
+### Objetivo
+
+Se o jogador perguntar algo como “por que perdi a última partida?”, o coach deve:
+
+* Automaticamente puxar **a última batalha real**.
+* Ler decks, resultado, troféus, contexto de push/tilt.
+* Explicar o que provavelmente aconteceu, **sem perguntar deck/infos básicas**.
+
+### Backend
+
+1. `lastBattleContext`:
+
+   * No serviço do coach, criar uma função:
+
+     * `getLastBattleContext(userId)` →
+
+       * Usa `favorite_players` / jogador padrão para pegar `playerTag`.
+       * Usa dados já sincronizados (ou chama Clash API se necessário) para obter a última battle.
+     * Retorna:
+
+       * Deck do player (ids/cartas).
+       * Deck do oponente.
+       * Modo (ladder etc.).
+       * Resultado, coroas, troféus ganhos/perdidos.
+       * Parte do push (ex.: sua posição no push, netTrophies do push, tiltLevel).
+
+2. Detectar pergunta de “última partida”:
+
+   * Na rota `POST /api/coach/message`, antes do call ao LLM:
+
+     * Normalizar o texto do usuário (lowercase, sem acento).
+     * Se contiver padrões do tipo:
+
+       * "por que perdi a ultima partida"
+       * "por que perdi a ultima"
+       * "why did i lose my last game"
+       * "why did i lose the last game"
+     * Marcar `focus = "last_battle"` e injetar `lastBattleContext` no prompt.
+
+3. Prompt para LLM (ChatGPT):
+
+   * Se `focus = "last_battle"`:
+
+     * `system`:
+
+       * Explicar que ele é um coach de Clash Royale.
+       * Especificar que o contexto da **última partida** está logo abaixo.
+       * Pedir para:
+
+         * Apontar motivos plausíveis da derrota (macro, ciclo, matchup, elixir, decisões).
+         * Sugerir 2–3 ações práticas para corrigir isso nos próximos jogos.
+         * Não pedir ao usuário quais decks foram usados – já estão no contexto.
+     * `assistant`/`system` extra com JSON/descrição do `lastBattleContext`.
+
+---
+
+## BLOCO 6 — COACH DE PUSH (ANÁLISE AUTOMÁTICA DA SESSÃO)
+
+### Objetivo
+
+Depois de um push (sessão de 2+ partidas), o coach deve:
+
+* Analisar **o push inteiro**, não só uma partida.
+* Gerar:
+
+  * `summary`
+  * `strengths[]`
+  * `mistakes[]`
+  * `recommendations[]`
+* Alimentar tanto a UI (card de análise) quanto o Centro de Treinamento.
+
+### Backend
+
+1. `PushAnalysisContext`:
+
+   * Tipo contendo:
+
+     * Perfil do player (trophies, arena).
+     * `PushSession` (battles, wins, losses, netTrophies, duration).
+     * `tiltLevel` do push.
+     * Goals relevantes.
+
+2. Endpoint:
+
+   * `POST /api/coach/push-analysis`:
+
+     * Usa user autenticado.
+     * Acha o último `PushSession` (mais recente).
+     * Se não houver push com ≥ 2 partidas → retorna erro amigável.
+     * Gera `PushAnalysisContext`.
+     * Chama LLM (ChatGPT) com prompt específico para análise de push.
+     * Retorna:
+
+       ```ts
+       interface PushAnalysisResult {
+         summary: string;
+         strengths: string[];
+         mistakes: string[];
+         recommendations: string[];
+       }
+       ```
+
+3. Armazenamento:
+
+   * Opcionalmente criar tabela `push_analyses` ligada ao push:
+
+     * `id`, `user_id`, `push_start_time`, `push_end_time`, `result_json`, `created_at`.
+
+### UI
+
+1. Dashboard/Perfil:
+
+   * Na área de push:
+
+     * Card “Análise do último push” contendo:
+
+       * `summary` resumido.
+       * 2–3 bullets de strengths e mistakes.
+       * Lista curta de recomendações.
+     * Estado vazio:
+
+       * “Jogue um push e clique em Atualizar dados para ver a análise do coach.”
+
+2. Coach:
+
+   * Quando `PushAnalysisResult` for gerado (após sync):
+
+     * Inserir mensagem automática do coach no chat:
+
+       * PT: “Acabei de analisar seu último push de X partidas. Eis o que eu vi…” + resumo + recomendações.
+       * EN: “I’ve just analyzed your last push of X games. Here’s what I saw…”
+
+3. Perguntas do tipo “Como foi meu último push?”:
+
+   * Detectar frases equivalentes.
+   * Reusar/gerar `PushAnalysisResult` e responder com base nisso, não em genérico.
+
+---
+
+## BLOCO 7 — CENTRO DE TREINAMENTO INTEGRADO AO COACH
+
+### Objetivo
+
+Converter a análise do push em **plano de treino concreto** automaticamente.
+
+### Backend
+
+1. Tabelas
+
+* `training_plans`:
+
+  * `id`
+  * `user_id`
+  * `title`
+  * `source` (`"push_analysis"` | `"manual"`)
+  * `status` (`"active" | "completed" | "archived"`)
+  * `created_at`, `updated_at`
+
+* `training_drills`:
+
+  * `id`
+  * `plan_id`
+  * `focus_area` (`"tilt" | "macro" | "deck" | "matchup" | "fundamentals"`…)
+  * `description`
+  * `target_games`
+  * `completed_games`
+  * `mode`
+  * `priority`
+  * `status` (`"pending" | "in_progress" | "completed"`)
+  * `created_from_push_id` (opcional)
+  * timestamps
+
+2. Geração de plano
+
+* Função:
+
+  * `createTrainingPlanFromPushAnalysis(userId, pushAnalysis, pushSession)`:
+
+    * Cria (ou atualiza) um `training_plan` com `source = "push_analysis"` como “Plano atual”.
+    * Para cada `recommendation` da análise:
+
+      * Inferir `focus_area` (ex.: se falar de controle de elixir, é `"macro"`, se falar de X-Besta, é `"matchup"`).
+      * Criar `training_drill` com:
+
+        * `description` textual.
+        * `target_games` (ex.: 3 ou 5 partidas).
+        * `mode` default (ladder, por enquanto).
+        * `priority` (1–3, se fizer sentido).
+
+3. Endpoints
+
+* `GET /api/training/plans`
+
+  * Retorna plano atual + drills.
+* `POST /api/training/generate-from-last-push`
+
+  * Força geração manual (caso usuário clique).
+* `PATCH /api/training/drills/[id]`
+
+  * Atualiza `status` e `completed_games`.
+
+4. Limites FREE x PRO
+
+* FREE:
+
+  * 1 `training_plan` ativo de `source="push_analysis"`.
+  * Até 3 `training_drills` ativos.
+  * 1 análise de push/dia.
+* PRO:
+
+  * Análise de todos os pushes, múltiplos planos, vários drills, histórico.
+
+O backend deve aplicar esses limites e retornar erros amigáveis (ex.: `FREE_TRAINING_LIMIT_REACHED`).
+
+### Frontend
+
+1. Aba Treino / Centro de Treinamento
+
+* Se houver plano ativo:
+
+  * Mostrar card “Plano atual gerado pelo coach”:
+
+    * Lista de drills com:
+
+      * Título (pode ser a primeira frase da descrição).
+      * Texto explicativo curto.
+      * Barra de progresso (`completed_games / target_games`).
+      * Botão/checkbox “Marcar como concluído” (chama PATCH).
+* Se não houver:
+
+  * Estado vazio:
+
+    * PT: “Jogue um push e clique em Atualizar dados para gerar um plano de treino com a ajuda do coach.”
+    * EN: “Play a push and click Refresh data to generate a training plan with your coach.”
+
+2. Coach x Treino
+
+* Ao mandar a mensagem de análise do último push no Coach:
+
+  * No fim, incluir algo como:
+
+    * PT: “Criei um plano de treino com X exercícios baseado nisso. Você pode seguir no Centro de Treinamento.”
+    * EN: “I’ve created a training plan with X drills based on this. You can follow it in the Training Center.”
+  * Se possível, incluir botão/link “Ver treino” → `/training`.
+
+* Quando o usuário perguntar:
+
+  * “O que devo treinar agora?” / “What should I train now?”:
+
+    * Se existir plano ativo:
+
+      * Coach responde com base nos drills atuais.
+    * Se não existir:
+
+      * Coach sugere jogar um push + clicar em Atualizar dados para gerar o plano.
+
+---
+
+## BLOCO 8 — i18n PARA TUDO NOVO + QA
+
+1. **i18n**
+
+   * Todas as novas strings (botão “Atualizar dados”, “Última atualização há X min”, mensagens de limite FREE, tilt warning, progresso de arena, análise de push, Centro de Treinamento) devem ir pros arquivos de tradução PT-BR / EN-US.
+   * Não deixar texto hardcoded nas páginas novas.
+
+2. **QA – Cenários mínimos**
+
+   * Usuário novo FREE em PT-BR:
+
+     * Faz onboarding, joga push, clica em Atualizar dados:
+
+       * Push aparece certo.
+       * Tilt é calculado corretamente em caso de sequência ruim.
+       * Card de análise de push é gerado.
+       * Centro de Treinamento mostra plano com drills.
+       * Coach responde “Por que perdi a última partida?” com base na última battle real.
+       * Após 5 perguntas, limite FREE entra com mensagem de upsell.
+   * Usuário PRO:
+
+     * Sem limite de perguntas.
+     * Consegue gerar análises de vários pushes e múltiplos planos de treino (dentro das regras que você implementar).
+
+🧪 **IMPORTANTE:**
+
+* Não quebre nada que já funciona (auth, billing, PRO gating, pushes, histórico, i18n, validação).
+* Use o cliente OpenAI de forma robusta:
+
+  * Timeout, tratamento de erro (fallback pra rule-based se LLM falhar).
+  * Logs básicos (sem expor secrets).
+* Mantenha TypeScript estrito passando e build sem erros.
+
+Implemente todas essas mudanças e, se possível, descreva rapidamente ao final:
+
+* Quais arquivos principais foram tocados.
+* Como chamar o fluxo de sync/coach/treino em dev para testar.
