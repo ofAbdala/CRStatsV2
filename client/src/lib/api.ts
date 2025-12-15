@@ -75,7 +75,7 @@ export const api = {
   // AI Coach endpoints
   coach: {
     chat: (messages: { role: string; content: string }[], playerTag?: string) =>
-      fetchAPI<{ message: string; timestamp: string }>('/coach/chat', {
+      fetchAPI<{ message: string; timestamp: string; remainingMessages?: number }>('/coach/chat', {
         method: 'POST',
         body: JSON.stringify({ messages, playerTag }),
       }),
