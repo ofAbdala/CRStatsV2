@@ -61,40 +61,51 @@ type NestedKeyOf<T> = T extends object
 
 type TranslationKey = NestedKeyOf<typeof ptBR>;
 
-function getNestedValue(obj: any, path: string): string | undefined {
+function getNestedValue(obj: any, path: string): any {
   const keys = path.split('.');
   let current = obj;
   for (const key of keys) {
     if (current === undefined || current === null) return undefined;
     current = current[key];
   }
-  return typeof current === 'string' ? current : undefined;
+  return current;
+}
+
+function getNestedString(obj: any, path: string): string | undefined {
+  const value = getNestedValue(obj, path);
+  return typeof value === 'string' ? value : undefined;
 }
 
 export function t(
   key: string,
   locale: Locale = DEFAULT_LOCALE,
   params?: Record<string, string | number>
-): string {
+): string | string[] {
   const translation = translations[locale] || translations[DEFAULT_LOCALE];
   let value = getNestedValue(translation, key);
   
-  if (!value) {
+  if (value === undefined || value === null) {
     value = getNestedValue(translations[DEFAULT_LOCALE], key);
   }
   
-  if (!value) {
+  if (value === undefined || value === null) {
     console.warn(`Missing translation for key: ${key}`);
     return key;
   }
   
-  if (params) {
-    return value.replace(/\{(\w+)\}/g, (_, paramKey) => {
+  // Return arrays as-is
+  if (Array.isArray(value)) {
+    return value;
+  }
+  
+  // Handle string with params
+  if (typeof value === 'string' && params) {
+    return value.replace(/\{(\w+)\}/g, (_: string, paramKey: string) => {
       return params[paramKey]?.toString() ?? `{${paramKey}}`;
     });
   }
   
-  return value;
+  return typeof value === 'string' ? value : key;
 }
 
 export function getTranslations(locale: Locale = DEFAULT_LOCALE) {

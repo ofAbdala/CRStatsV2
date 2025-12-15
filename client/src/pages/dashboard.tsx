@@ -13,6 +13,8 @@ import { useGoals } from "@/hooks/useGoals";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useLocale } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SyncButton } from "@/components/SyncButton";
+import { getArenaImageUrl } from "@/lib/clashIcons";
 import {
   Area,
   AreaChart,
@@ -28,7 +30,7 @@ function parseBattleTime(battleTime: string): Date {
 }
 
 function computeTrophyEvolution(battles: any[], currentTrophies: number, dayNames: string[]): { date: string; trophies: number }[] {
-  if (!battles.length || !currentTrophies) return [];
+  if (!battles.length || typeof currentTrophies !== 'number') return [];
 
   const sortedBattles = [...battles]
     .filter(b => b.battleTime && b.team?.[0])
@@ -67,10 +69,8 @@ function computeTrophyEvolution(battles: any[], currentTrophies: number, dayName
   dataPoints.reverse();
 
   const chartData = dataPoints.slice(-10).map((point, idx, arr) => {
-    const dayName = dayNames[point.date.getDay()];
-    
     return {
-      date: arr.length <= 7 ? dayName : `${idx + 1}`,
+      date: `${String(point.date.getDate()).padStart(2, '0')}/${String(point.date.getMonth() + 1).padStart(2, '0')}`,
       trophies: point.trophies,
     };
   });
@@ -114,19 +114,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-display font-bold text-foreground">Dashboard</h1>
             <p className="text-muted-foreground">{t("syncStatus.overview")}</p>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg shadow-sm">
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm font-medium text-muted-foreground">{t("common.loading")}</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm font-medium text-muted-foreground">{t("syncStatus.synced")}</span>
-              </>
-            )}
-          </div>
+          <SyncButton variant="outline" size="sm" showLastSync={true} />
         </div>
 
         {/* Error State */}
@@ -149,7 +137,7 @@ export default function DashboardPage() {
             icon={<Trophy className="w-5 h-5 text-primary" />}
             trend={(playerData as any)?.trophies ? `Arena: ${(playerData as any)?.arena?.name || 'N/A'}` : undefined}
             trendUp={true}
-            arenaImage={(playerData as any)?.arena?.id ? `https://cdn.royaleapi.com/static/img/arenas/arena${(playerData as any).arena.id}.png` : undefined}
+            arenaImage={(playerData as any)?.arena?.id ? getArenaImageUrl((playerData as any).arena.id) : undefined}
           />
           <StatCard 
             title={t("stats.bestSeason")} 

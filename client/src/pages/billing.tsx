@@ -24,7 +24,7 @@ export default function BillingPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { t, pricing, formatPrice, savingsPercent, currency, locale } = useLocale();
+  const { t, tArray, pricing, formatPrice, savingsPercent, currency, locale } = useLocale();
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "yearly" | "portal" | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
 
@@ -58,8 +58,8 @@ export default function BillingPage() {
     }
   };
 
-  const freeFeatures = t('billing.free.features') as unknown as string[];
-  const proFeatures = t('billing.pro.features') as unknown as string[];
+  const freeFeatures = tArray('billing.free.features');
+  const proFeatures = tArray('billing.pro.features');
 
   useEffect(() => {
     const params = new URLSearchParams(search);
