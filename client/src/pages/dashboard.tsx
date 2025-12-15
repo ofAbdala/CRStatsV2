@@ -15,6 +15,7 @@ import { useLocale } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SyncButton } from "@/components/SyncButton";
 import { getArenaImageUrl } from "@/lib/clashIcons";
+import { computeRealTrophyEvolution, parseBattleTime } from "@/lib/trophyEvolution";
 import {
   Area,
   AreaChart,
@@ -24,59 +25,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-function parseBattleTime(battleTime: string): Date {
-  return new Date(battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
-}
-
-function computeTrophyEvolution(battles: any[], currentTrophies: number, dayNames: string[]): { date: string; trophies: number }[] {
-  if (!battles.length || typeof currentTrophies !== 'number') return [];
-
-  const sortedBattles = [...battles]
-    .filter(b => b.battleTime && b.team?.[0])
-    .sort((a, b) => {
-      const dateA = parseBattleTime(a.battleTime);
-      const dateB = parseBattleTime(b.battleTime);
-      return dateB.getTime() - dateA.getTime();
-    });
-
-  if (sortedBattles.length === 0) return [];
-
-  const dataPoints: { date: Date; trophies: number }[] = [];
-  let runningTrophies = currentTrophies;
-
-  dataPoints.push({ date: new Date(), trophies: runningTrophies });
-
-  for (const battle of sortedBattles) {
-    const trophyChange = battle.team?.[0]?.trophyChange;
-    
-    if (typeof trophyChange === 'number' && trophyChange >= -60 && trophyChange <= 60) {
-      runningTrophies -= trophyChange;
-    } else {
-      const teamCrowns = battle.team?.[0]?.crowns || 0;
-      const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
-      const isWin = teamCrowns > opponentCrowns;
-      const isLoss = teamCrowns < opponentCrowns;
-      
-      if (isWin) runningTrophies -= 30;
-      else if (isLoss) runningTrophies += 30;
-    }
-
-    const battleDate = parseBattleTime(battle.battleTime);
-    dataPoints.push({ date: battleDate, trophies: Math.max(0, runningTrophies) });
-  }
-
-  dataPoints.reverse();
-
-  const chartData = dataPoints.slice(-10).map((point, idx, arr) => {
-    return {
-      date: `${String(point.date.getDate()).padStart(2, '0')}/${String(point.date.getMonth() + 1).padStart(2, '0')}`,
-      trophies: point.trophies,
-    };
-  });
-
-  return chartData;
-}
 
 export default function DashboardPage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
@@ -91,10 +39,9 @@ export default function DashboardPage() {
   const recentBattles = battles.slice(0, 5);
   const player = playerData as any;
 
-  const dayNamesArray = (translations as any)?.dayNames || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const trophyChartData = React.useMemo(() => {
-    return computeTrophyEvolution(battles, player?.trophies, dayNamesArray);
-  }, [battles, player?.trophies, dayNamesArray]);
+    return computeRealTrophyEvolution(battles, player?.trophies ?? 0, 10);
+  }, [battles, player?.trophies]);
 
   // Calculate win rate from recent battles
   const calculateWinRate = () => {

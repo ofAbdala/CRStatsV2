@@ -62,6 +62,7 @@ import { SyncButton } from "@/components/SyncButton";
 import { TiltAlert } from "@/components/TiltAlert";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
 import { PushAnalysisCard } from "@/components/PushAnalysisCard";
+import { computeRealTrophyEvolution } from "@/lib/trophyEvolution";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -445,19 +446,8 @@ export default function MePage() {
   }, [stats.streak]);
 
   const chartData = React.useMemo(() => {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (6 - i));
-      const baseTrophies = player?.trophies || 5000;
-      const variation = Math.floor(Math.random() * 100) - 50;
-      return {
-        date: days[date.getDay()],
-        trophies: Math.max(0, baseTrophies + variation * (i - 3)),
-      };
-    });
-  }, [player?.trophies]);
+    return computeRealTrophyEvolution(battles, player?.trophies ?? 0, 7);
+  }, [battles, player?.trophies]);
 
   const deckUsage = React.useMemo(() => {
     if (!battles.length) return [];
