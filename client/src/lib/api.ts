@@ -79,6 +79,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ messages, playerTag }),
       }),
+    analyzePush: (playerTag?: string) =>
+      fetchAPI<{
+        id: string;
+        summary: string;
+        strengths: string[];
+        mistakes: string[];
+        recommendations: string[];
+        wins: number;
+        losses: number;
+        winRate: number;
+        netTrophies: number;
+        battlesCount: number;
+        pushStartTime: string;
+        pushEndTime: string;
+      }>('/coach/push-analysis', {
+        method: 'POST',
+        body: JSON.stringify({ playerTag }),
+      }),
   },
 
   // Stripe billing endpoints

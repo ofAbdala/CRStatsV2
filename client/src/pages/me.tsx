@@ -60,6 +60,7 @@ import { ArenaProgressBar } from "@/components/ArenaProgressBar";
 import { SyncButton } from "@/components/SyncButton";
 import { TiltAlert } from "@/components/TiltAlert";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
+import { PushAnalysisCard } from "@/components/PushAnalysisCard";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -955,6 +956,9 @@ export default function MePage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Push Analysis */}
+            <PushAnalysisCard isPro={isPro} />
 
             {/* Trophy Chart */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
