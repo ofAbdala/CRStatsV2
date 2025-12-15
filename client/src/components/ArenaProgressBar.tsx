@@ -4,34 +4,34 @@ import { cn } from "@/lib/utils";
 import { getArenaImageUrl } from "@/lib/clashIcons";
 
 const ARENAS = [
-  { id: 1, name: "Goblin Stadium", minTrophies: 0 },
-  { id: 2, name: "Bone Pit", minTrophies: 300 },
-  { id: 3, name: "Barbarian Bowl", minTrophies: 600 },
-  { id: 4, name: "Spell Valley", minTrophies: 1000 },
-  { id: 5, name: "Builder's Workshop", minTrophies: 1300 },
-  { id: 6, name: "Royal Arena", minTrophies: 1600 },
-  { id: 7, name: "Frozen Peak", minTrophies: 2000 },
-  { id: 8, name: "Jungle Arena", minTrophies: 2300 },
-  { id: 9, name: "Hog Mountain", minTrophies: 2600 },
-  { id: 10, name: "Electro Valley", minTrophies: 3000 },
-  { id: 11, name: "Party Beach", minTrophies: 3300 },
-  { id: 12, name: "Spooky Town", minTrophies: 3600 },
-  { id: 13, name: "Rascal's Hideout", minTrophies: 4000 },
-  { id: 14, name: "Serenity Peak", minTrophies: 4300 },
-  { id: 15, name: "Miner's Mine", minTrophies: 4600 },
-  { id: 16, name: "Executioner's Kitchen", minTrophies: 5000 },
-  { id: 17, name: "Royal Crypt", minTrophies: 5300 },
-  { id: 18, name: "Silent Sanctuary", minTrophies: 5600 },
-  { id: 19, name: "Dragon Spa", minTrophies: 6000 },
-  { id: 20, name: "Corrupted Cove", minTrophies: 6600 },
-  { id: 21, name: "Goblin's Cage", minTrophies: 7000 },
-  { id: 22, name: "Boot Camp", minTrophies: 7500 },
-  { id: 23, name: "Clash Fest", minTrophies: 8000 },
-  { id: 24, name: "PANCAKES!", minTrophies: 8500 },
-  { id: 25, name: "Valkalla", minTrophies: 9000 },
-  { id: 26, name: "Legendary Arena", minTrophies: 9500 },
-  { id: 27, name: "Trophy Road Max", minTrophies: 10500 },
-  { id: 28, name: "Champion League", minTrophies: 11975 },
+  { id: 1, cdnId: 1, name: "Goblin Stadium", minTrophies: 0 },
+  { id: 2, cdnId: 2, name: "Bone Pit", minTrophies: 300 },
+  { id: 3, cdnId: 3, name: "Barbarian Bowl", minTrophies: 600 },
+  { id: 4, cdnId: 4, name: "Spell Valley", minTrophies: 1000 },
+  { id: 5, cdnId: 5, name: "Builder's Workshop", minTrophies: 1300 },
+  { id: 6, cdnId: 6, name: "Royal Arena", minTrophies: 1600 },
+  { id: 7, cdnId: 7, name: "Frozen Peak", minTrophies: 2000 },
+  { id: 8, cdnId: 8, name: "Jungle Arena", minTrophies: 2300 },
+  { id: 9, cdnId: 9, name: "Hog Mountain", minTrophies: 2600 },
+  { id: 10, cdnId: 10, name: "Electro Valley", minTrophies: 3000 },
+  { id: 11, cdnId: 11, name: "Party Beach", minTrophies: 3300 },
+  { id: 12, cdnId: 12, name: "Spooky Town", minTrophies: 3600 },
+  { id: 13, cdnId: 13, name: "Rascal's Hideout", minTrophies: 4000 },
+  { id: 14, cdnId: 14, name: "Serenity Peak", minTrophies: 4300 },
+  { id: 15, cdnId: 15, name: "Miner's Mine", minTrophies: 4600 },
+  { id: 16, cdnId: 16, name: "Dragon Spa", minTrophies: 5000 },
+  { id: 17, cdnId: 17, name: "Executioner's Kitchen", minTrophies: 5300 },
+  { id: 18, cdnId: 18, name: "Royal Crypt", minTrophies: 5600 },
+  { id: 19, cdnId: 19, name: "Silent Sanctuary", minTrophies: 6000 },
+  { id: 20, cdnId: 20, name: "Corrupted Cove", minTrophies: 6600 },
+  { id: 21, cdnId: 21, name: "Goblin's Cage", minTrophies: 7000 },
+  { id: 22, cdnId: 22, name: "Boot Camp", minTrophies: 7500 },
+  { id: 23, cdnId: 23, name: "Clash Fest", minTrophies: 8000 },
+  { id: 24, cdnId: 24, name: "PANCAKES!", minTrophies: 8500 },
+  { id: 25, cdnId: 24, name: "Valkalla", minTrophies: 9000 },
+  { id: 26, cdnId: 24, name: "Legendary Arena", minTrophies: 9500 },
+  { id: 27, cdnId: 24, name: "Trophy Road Max", minTrophies: 10500 },
+  { id: 28, cdnId: 24, name: "Champion League", minTrophies: 11975 },
 ];
 
 export function getArenaForTrophies(trophies: number) {
@@ -64,11 +64,12 @@ export function ArenaProgressBar({
   arenaName,
   compact = false 
 }: ArenaProgressBarProps) {
-  const currentArena = arenaId 
-    ? ARENAS.find(a => a.id === arenaId) || getArenaForTrophies(trophies)
-    : getArenaForTrophies(trophies);
-    
+  const currentArena = getArenaForTrophies(trophies);
   const nextArena = getNextArena(currentArena.id);
+  
+  const apiArenaImageId = arenaId && arenaId >= 54000000 
+    ? arenaId - 54000000 
+    : currentArena.cdnId;
   
   const progressInArena = nextArena 
     ? trophies - currentArena.minTrophies
@@ -90,7 +91,7 @@ export function ArenaProgressBar({
     return (
       <div className="flex items-center gap-2" data-testid="arena-progress-compact">
         <img 
-          src={getArenaImageUrl(currentArena.id)} 
+          src={getArenaImageUrl(apiArenaImageId)} 
           alt={arenaName || currentArena.name}
           className="w-6 h-6 object-contain"
         />
@@ -111,7 +112,7 @@ export function ArenaProgressBar({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img 
-            src={getArenaImageUrl(currentArena.id)} 
+            src={getArenaImageUrl(apiArenaImageId)} 
             alt={arenaName || currentArena.name}
             className="w-12 h-12 object-contain"
           />
@@ -132,7 +133,7 @@ export function ArenaProgressBar({
               <p className="text-sm font-medium text-primary">{nextArena.name}</p>
             </div>
             <img 
-              src={getArenaImageUrl(nextArena.id)} 
+              src={getArenaImageUrl(nextArena.cdnId)} 
               alt={nextArena.name}
               className="w-10 h-10 object-contain opacity-60"
             />
