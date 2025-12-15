@@ -53,6 +53,7 @@ import {
 import { formatDistanceToNow, differenceInDays, startOfDay, format, getDay } from "date-fns";
 import { useGoals } from "@/hooks/useGoals";
 import { Progress } from "@/components/ui/progress";
+import { getArenaImageUrl } from "@/lib/clashIcons";
 import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
@@ -272,7 +273,7 @@ export default function MePage() {
   const { t, translations } = useLocale();
   
   const { 
-    data: syncData, 
+    syncData, 
     sync, 
     isSyncing,
     lastSyncedAt 
@@ -701,8 +702,8 @@ export default function MePage() {
         )}
 
         {/* Tilt Alert */}
-        {syncData?.tiltLevel && syncData.tiltLevel !== 'none' && (
-          <TiltAlert level={syncData.tiltLevel} />
+        {syncData?.stats?.tiltLevel && syncData.stats.tiltLevel !== 'none' && (
+          <TiltAlert tiltLevel={syncData.stats.tiltLevel} />
         )}
 
         {/* Hero Header Section */}
@@ -725,10 +726,9 @@ export default function MePage() {
                         {player?.name || 'Jogador'}
                       </h1>
                       <SyncButton 
-                        onSync={sync} 
-                        isSyncing={isSyncing} 
-                        lastSyncedAt={lastSyncedAt} 
-                        compact 
+                        variant="ghost"
+                        size="sm"
+                        showLastSync={false}
                       />
                     </div>
                     <p 
@@ -797,7 +797,7 @@ export default function MePage() {
               >
                 {player?.arena?.id && (
                   <img 
-                    src={`https://cdn.royaleapi.com/static/img/arenas/arena${player.arena.id}.png`}
+                    src={getArenaImageUrl(player.arena.id)}
                     alt={player.arena.name}
                     className="w-16 h-16 md:w-20 md:h-20 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}

@@ -45,8 +45,19 @@ export function useLocale() {
   const translations = useMemo(() => getTranslations(locale), [locale]);
   const pricing = useMemo(() => getPricing(currency), [currency]);
 
+  // Returns string for most translations, casts arrays to key for safety
   const translate = (key: string, params?: Record<string, string | number>): string => {
-    return t(key, locale, params);
+    const result = t(key, locale, params);
+    if (Array.isArray(result)) {
+      return result.join(', '); // Fallback for arrays used as strings
+    }
+    return result;
+  };
+
+  // Returns array translations (for feature lists, etc.)
+  const translateArray = (key: string): string[] => {
+    const result = t(key, locale);
+    return Array.isArray(result) ? result : [result];
   };
 
   const format = (amount: number): string => {
@@ -61,6 +72,7 @@ export function useLocale() {
     currency,
     setCurrency,
     t: translate,
+    tArray: translateArray,
     translations,
     pricing,
     formatPrice: format,

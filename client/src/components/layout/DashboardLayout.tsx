@@ -22,9 +22,8 @@ import { useLocale } from "@/hooks/use-locale";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { mockNotifications } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 interface DashboardLayoutProps {
@@ -35,10 +34,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, setLocation] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const { t } = useLocale();
+  const queryClient = useQueryClient();
 
   const { data: subscription } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => api.subscription.get(),
+  });
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api.profile.get(),
   });
 
   const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
@@ -122,12 +127,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <Link href="/settings">
           <div className="flex items-center gap-3 mb-4 cursor-pointer p-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors">
             <Avatar className="w-8 h-8 border border-border">
-              <AvatarImage src="https://github.com/shadcn.png" />
-              <AvatarFallback>KS</AvatarFallback>
+              <AvatarImage src={(profile as any)?.avatarUrl || undefined} />
+              <AvatarFallback>{(() => {
+                const name = (profile as any)?.displayName || (profile as any)?.firstName || '';
+                if (!name) return 'U';
+                const parts = name.trim().split(' ');
+                if (parts.length >= 2) {
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                }
+                return name.substring(0, 2).toUpperCase();
+              })()}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-sidebar-foreground">KingSlayer</span>
+                <span className="text-sm font-medium text-sidebar-foreground">{(profile as any)?.displayName || (profile as any)?.firstName || 'User'}</span>
                 {isPro && (
                   <Badge 
                     className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-[10px] px-1.5 py-0"
@@ -205,7 +218,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
 function NotificationsPopover() {
   const { t } = useLocale();
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const queryClient = useQueryClient();
+  
+  const { data: notificationsData } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => api.notifications.list(),
+  });
+  
+  const notifications = (notificationsData as any[]) || [];
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch('/api/notifications/read-all', { 
+        method: 'POST', 
+        credentials: 'include' 
+      });
+      // Refetch to get fresh server state
+      await queryClient.refetchQueries({ queryKey: ['notifications'] });
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+    }
+  };
 
   return (
     <Popover>
@@ -222,18 +256,24 @@ function NotificationsPopover() {
           <h4 className="font-bold">{t('sidebar.notifications')}</h4>
         </div>
         <div className="max-h-[300px] overflow-y-auto">
-          {mockNotifications.map((notification) => (
-            <div key={notification.id} className={cn("p-4 border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer", !notification.read && "bg-primary/5")}>
-              <div className="flex justify-between items-start mb-1">
-                <h5 className="text-sm font-medium">{notification.title}</h5>
-                <span className="text-[10px] text-muted-foreground">{notification.time}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">{notification.description}</p>
+          {notifications.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No notifications
             </div>
-          ))}
+          ) : (
+            notifications.map((notification: any) => (
+              <div key={notification.id} className={cn("p-4 border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer", !notification.read && "bg-primary/5")}>
+                <div className="flex justify-between items-start mb-1">
+                  <h5 className="text-sm font-medium">{notification.title}</h5>
+                  <span className="text-[10px] text-muted-foreground">{notification.time}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{notification.description}</p>
+              </div>
+            ))
+          )}
         </div>
         <div className="p-2 border-t border-border bg-muted/20">
-          <Button variant="ghost" size="sm" className="w-full text-xs">{t('sidebar.markAllRead')}</Button>
+          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={handleMarkAllRead}>{t('sidebar.markAllRead')}</Button>
         </div>
       </PopoverContent>
     </Popover>

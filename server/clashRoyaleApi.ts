@@ -77,11 +77,15 @@ export async function getCards() {
 }
 
 export async function getPlayerRankings(locationId: string = 'global') {
-  return clashRoyaleRequest(`/locations/${locationId}/rankings/players`);
+  // Path of Legend endpoint accepts "global" for worldwide rankings
+  // or numeric country location IDs for country-specific rankings
+  return clashRoyaleRequest(`/locations/${locationId}/pathoflegend/players`);
 }
 
-export async function getClanRankings(locationId: string = 'global') {
-  return clashRoyaleRequest(`/locations/${locationId}/rankings/clans`);
+export async function getClanRankings(locationId: string = '57000006') {
+  // Use 57000006 for international/global rankings
+  const actualLocationId = locationId === 'global' ? '57000006' : locationId;
+  return clashRoyaleRequest(`/locations/${actualLocationId}/rankings/clans`);
 }
 
 export async function getClanByTag(tag: string) {
