@@ -7,6 +7,11 @@ import {
   favoritePlayers,
   notifications,
   userSettings,
+  playerSyncState,
+  coachMessages,
+  pushAnalyses,
+  trainingPlans,
+  trainingDrills,
   type User,
   type UpsertUser,
   type Profile,
@@ -21,9 +26,18 @@ import {
   type InsertNotification,
   type UserSettings,
   type InsertUserSettings,
+  type PlayerSyncState,
+  type CoachMessage,
+  type InsertCoachMessage,
+  type PushAnalysis,
+  type InsertPushAnalysis,
+  type TrainingPlan,
+  type InsertTrainingPlan,
+  type TrainingDrill,
+  type InsertTrainingDrill,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, sql } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -64,6 +78,34 @@ export interface IStorage {
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, settings: Partial<InsertUserSettings>): Promise<UserSettings | undefined>;
+  
+  // Player Sync State operations
+  getSyncState(userId: string): Promise<PlayerSyncState | undefined>;
+  updateSyncState(userId: string): Promise<PlayerSyncState>;
+  
+  // Coach Messages operations
+  getCoachMessages(userId: string, limit?: number): Promise<CoachMessage[]>;
+  createCoachMessage(message: InsertCoachMessage): Promise<CoachMessage>;
+  countCoachMessagesToday(userId: string): Promise<number>;
+  
+  // Push Analyses operations
+  getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined>;
+  getPushAnalyses(userId: string, limit?: number): Promise<PushAnalysis[]>;
+  createPushAnalysis(analysis: InsertPushAnalysis): Promise<PushAnalysis>;
+  countPushAnalysesToday(userId: string): Promise<number>;
+  
+  // Training Plans operations
+  getActivePlan(userId: string): Promise<TrainingPlan | undefined>;
+  getTrainingPlans(userId: string): Promise<TrainingPlan[]>;
+  createTrainingPlan(plan: InsertTrainingPlan): Promise<TrainingPlan>;
+  updateTrainingPlan(id: string, plan: Partial<InsertTrainingPlan>): Promise<TrainingPlan | undefined>;
+  archiveOldPlans(userId: string): Promise<void>;
+  
+  // Training Drills operations
+  getDrillsByPlan(planId: string): Promise<TrainingDrill[]>;
+  createTrainingDrill(drill: InsertTrainingDrill): Promise<TrainingDrill>;
+  updateTrainingDrill(id: string, drill: Partial<InsertTrainingDrill>): Promise<TrainingDrill | undefined>;
+  countActiveDrills(planId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -243,6 +285,198 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userSettings.userId, userId))
       .returning();
     return settings;
+  }
+
+  // ============================================================================
+  // Player Sync State operations
+  // ============================================================================
+  
+  async getSyncState(userId: string): Promise<PlayerSyncState | undefined> {
+    const [state] = await db.select().from(playerSyncState).where(eq(playerSyncState.userId, userId));
+    return state;
+  }
+
+  async updateSyncState(userId: string): Promise<PlayerSyncState> {
+    const [state] = await db
+      .insert(playerSyncState)
+      .values({ userId, lastSyncedAt: new Date() })
+      .onConflictDoUpdate({
+        target: playerSyncState.userId,
+        set: { lastSyncedAt: new Date() },
+      })
+      .returning();
+    return state;
+  }
+
+  // ============================================================================
+  // Coach Messages operations
+  // ============================================================================
+  
+  async getCoachMessages(userId: string, limit: number = 50): Promise<CoachMessage[]> {
+    return await db
+      .select()
+      .from(coachMessages)
+      .where(eq(coachMessages.userId, userId))
+      .orderBy(desc(coachMessages.createdAt))
+      .limit(limit);
+  }
+
+  async createCoachMessage(messageData: InsertCoachMessage): Promise<CoachMessage> {
+    const [message] = await db.insert(coachMessages).values(messageData).returning();
+    return message;
+  }
+
+  async countCoachMessagesToday(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(coachMessages)
+      .where(
+        and(
+          eq(coachMessages.userId, userId),
+          eq(coachMessages.role, 'user'),
+          gte(coachMessages.createdAt, todayStart)
+        )
+      );
+    return result[0]?.count || 0;
+  }
+
+  // ============================================================================
+  // Push Analyses operations
+  // ============================================================================
+  
+  async getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined> {
+    const [analysis] = await db
+      .select()
+      .from(pushAnalyses)
+      .where(eq(pushAnalyses.userId, userId))
+      .orderBy(desc(pushAnalyses.createdAt))
+      .limit(1);
+    return analysis;
+  }
+
+  async getPushAnalyses(userId: string, limit: number = 10): Promise<PushAnalysis[]> {
+    return await db
+      .select()
+      .from(pushAnalyses)
+      .where(eq(pushAnalyses.userId, userId))
+      .orderBy(desc(pushAnalyses.createdAt))
+      .limit(limit);
+  }
+
+  async createPushAnalysis(analysisData: InsertPushAnalysis): Promise<PushAnalysis> {
+    const [analysis] = await db.insert(pushAnalyses).values(analysisData).returning();
+    return analysis;
+  }
+
+  async countPushAnalysesToday(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(pushAnalyses)
+      .where(
+        and(
+          eq(pushAnalyses.userId, userId),
+          gte(pushAnalyses.createdAt, todayStart)
+        )
+      );
+    return result[0]?.count || 0;
+  }
+
+  // ============================================================================
+  // Training Plans operations
+  // ============================================================================
+  
+  async getActivePlan(userId: string): Promise<TrainingPlan | undefined> {
+    const [plan] = await db
+      .select()
+      .from(trainingPlans)
+      .where(
+        and(
+          eq(trainingPlans.userId, userId),
+          eq(trainingPlans.status, 'active')
+        )
+      )
+      .orderBy(desc(trainingPlans.createdAt))
+      .limit(1);
+    return plan;
+  }
+
+  async getTrainingPlans(userId: string): Promise<TrainingPlan[]> {
+    return await db
+      .select()
+      .from(trainingPlans)
+      .where(eq(trainingPlans.userId, userId))
+      .orderBy(desc(trainingPlans.createdAt));
+  }
+
+  async createTrainingPlan(planData: InsertTrainingPlan): Promise<TrainingPlan> {
+    const [plan] = await db.insert(trainingPlans).values(planData).returning();
+    return plan;
+  }
+
+  async updateTrainingPlan(id: string, planData: Partial<InsertTrainingPlan>): Promise<TrainingPlan | undefined> {
+    const [plan] = await db
+      .update(trainingPlans)
+      .set({ ...planData, updatedAt: new Date() })
+      .where(eq(trainingPlans.id, id))
+      .returning();
+    return plan;
+  }
+
+  async archiveOldPlans(userId: string): Promise<void> {
+    await db
+      .update(trainingPlans)
+      .set({ status: 'archived', updatedAt: new Date() })
+      .where(
+        and(
+          eq(trainingPlans.userId, userId),
+          eq(trainingPlans.status, 'active')
+        )
+      );
+  }
+
+  // ============================================================================
+  // Training Drills operations
+  // ============================================================================
+  
+  async getDrillsByPlan(planId: string): Promise<TrainingDrill[]> {
+    return await db
+      .select()
+      .from(trainingDrills)
+      .where(eq(trainingDrills.planId, planId))
+      .orderBy(desc(trainingDrills.priority));
+  }
+
+  async createTrainingDrill(drillData: InsertTrainingDrill): Promise<TrainingDrill> {
+    const [drill] = await db.insert(trainingDrills).values(drillData).returning();
+    return drill;
+  }
+
+  async updateTrainingDrill(id: string, drillData: Partial<InsertTrainingDrill>): Promise<TrainingDrill | undefined> {
+    const [drill] = await db
+      .update(trainingDrills)
+      .set({ ...drillData, updatedAt: new Date() })
+      .where(eq(trainingDrills.id, id))
+      .returning();
+    return drill;
+  }
+
+  async countActiveDrills(planId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(trainingDrills)
+      .where(
+        and(
+          eq(trainingDrills.planId, planId),
+          sql`${trainingDrills.status} != 'completed'`
+        )
+      );
+    return result[0]?.count || 0;
   }
 }
 
