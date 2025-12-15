@@ -52,17 +52,6 @@ export const mockCards: Card[] = [
   { id: 8, name: "Log", level: 11, elixir: 2, rarity: "legendary", image: "https://placehold.co/100x120/purple/white?text=Log" },
 ];
 
-export const mockPlayer: PlayerStats = {
-  tag: "#2P090J0",
-  name: "KingSlayer",
-  trophies: 5842,
-  bestTrophies: 6103,
-  arena: "Arena 17 - Royal Crypt",
-  winRate: 54.2,
-  cardsFound: 108,
-  totalDonations: 12540,
-};
-
 export const mockBattles: Battle[] = [
   {
     id: "b1",

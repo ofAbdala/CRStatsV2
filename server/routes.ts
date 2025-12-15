@@ -3,7 +3,7 @@ import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
+import { getPlayerByTag, getPlayerBattles, getCards, getPlayerRankings, getClanRankings, getClanByTag, getClanMembers, getTopPlayersInLocation } from "./clashRoyaleApi";
 import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey } from "./stripeClient";
@@ -531,7 +531,39 @@ export async function registerRoutes(
       
       const syncState = await storage.updateSyncState(userId);
       
-      const goals = await storage.getGoals(userId);
+      let goals = await storage.getGoals(userId);
+      
+      for (const goal of goals) {
+        if (goal.completed) continue;
+        
+        let shouldUpdate = false;
+        let newCurrentValue = goal.currentValue || 0;
+        let shouldComplete = false;
+        
+        if (goal.type === 'trophies') {
+          newCurrentValue = player.trophies;
+          shouldUpdate = newCurrentValue !== goal.currentValue;
+          shouldComplete = newCurrentValue >= goal.targetValue;
+        } else if (goal.type === 'winrate') {
+          newCurrentValue = Math.round(stats.winRate);
+          shouldUpdate = newCurrentValue !== goal.currentValue;
+          shouldComplete = newCurrentValue >= goal.targetValue;
+        } else if (goal.type === 'streak' && stats.streak.type === 'win') {
+          newCurrentValue = stats.streak.count;
+          shouldUpdate = newCurrentValue > (goal.currentValue || 0);
+          shouldComplete = newCurrentValue >= goal.targetValue;
+        }
+        
+        if (shouldUpdate) {
+          await storage.updateGoal(goal.id, {
+            currentValue: newCurrentValue,
+            completed: shouldComplete,
+            completedAt: shouldComplete ? new Date() : undefined,
+          });
+        }
+      }
+      
+      goals = await storage.getGoals(userId);
       
       res.json({
         player: {
@@ -767,6 +799,14 @@ export async function registerRoutes(
                 status: 'active',
               });
               console.log(`PRO activated for user: ${userId}`);
+              
+              await storage.createNotification({
+                userId,
+                title: 'Bem-vindo ao PRO!',
+                description: 'Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!',
+                type: 'success',
+                read: false,
+              });
             }
           }
           break;
@@ -799,6 +839,36 @@ export async function registerRoutes(
                 status: 'canceled',
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
+              
+              await storage.createNotification({
+                userId: existing.userId,
+                title: 'Assinatura cancelada',
+                description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
+                type: 'warning',
+                read: false,
+              });
+            }
+          }
+          break;
+        }
+        
+        case 'invoice.payment_failed': {
+          const invoice = event.data?.object;
+          if (invoice?.subscription) {
+            const existing = await storage.getSubscriptionByStripeId(invoice.subscription);
+            if (existing) {
+              await storage.updateSubscription(existing.id, {
+                status: 'past_due',
+              });
+              console.log(`Subscription ${invoice.subscription} marked as past_due due to payment failure`);
+              
+              await storage.createNotification({
+                userId: existing.userId,
+                title: 'Falha no pagamento',
+                description: 'O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento.',
+                type: 'error',
+                read: false,
+              });
             }
           }
           break;
@@ -869,6 +939,9 @@ export async function registerRoutes(
       let playerContext: any = {};
       let lastBattleContext: any = null;
 
+      const userGoals = await storage.getGoals(userId);
+      const activeGoals = userGoals.filter(g => !g.completed).slice(0, 3);
+
       try {
         if (playerTag) {
           const playerResult = await getPlayerByTag(playerTag);
@@ -885,6 +958,25 @@ export async function registerRoutes(
             if (battlesResult.data) {
               const battles = battlesResult.data as any[];
               playerContext.recentBattles = battles.slice(0, 5);
+              
+              const tiltLevel = computeTiltLevel(battles);
+              const stats = computeBattleStats(battles);
+              playerContext.tiltStatus = {
+                level: tiltLevel,
+                recentWinRate: stats.winRate,
+                currentStreak: stats.streak,
+                consecutiveLosses: tiltLevel === 'high' ? stats.streak.type === 'loss' ? stats.streak.count : 0 : 0,
+              };
+              
+              if (activeGoals.length > 0) {
+                playerContext.activeGoals = activeGoals.map(g => ({
+                  title: g.title,
+                  type: g.type,
+                  target: g.targetValue,
+                  current: g.currentValue,
+                  progress: Math.round(((g.currentValue || 0) / g.targetValue) * 100),
+                }));
+              }
               
               if (shouldInjectLastBattle) {
                 const lastLoss = battles.find((b: any) => {
@@ -927,12 +1019,31 @@ export async function registerRoutes(
                 currentDeck: player.currentDeck?.map((c: any) => c.name),
               };
               
-              if (shouldInjectLastBattle) {
-                const battlesResult = await getPlayerBattles(profile.clashTag);
-                if (battlesResult.data) {
-                  const battles = battlesResult.data as any[];
-                  playerContext.recentBattles = battles.slice(0, 5);
-                  
+              const battlesResult = await getPlayerBattles(profile.clashTag);
+              if (battlesResult.data) {
+                const battles = battlesResult.data as any[];
+                playerContext.recentBattles = battles.slice(0, 5);
+                
+                const tiltLevel = computeTiltLevel(battles);
+                const stats = computeBattleStats(battles);
+                playerContext.tiltStatus = {
+                  level: tiltLevel,
+                  recentWinRate: stats.winRate,
+                  currentStreak: stats.streak,
+                  consecutiveLosses: tiltLevel === 'high' ? stats.streak.type === 'loss' ? stats.streak.count : 0 : 0,
+                };
+                
+                if (activeGoals.length > 0) {
+                  playerContext.activeGoals = activeGoals.map(g => ({
+                    title: g.title,
+                    type: g.type,
+                    target: g.targetValue,
+                    current: g.currentValue,
+                    progress: Math.round(((g.currentValue || 0) / g.targetValue) * 100),
+                  }));
+                }
+                
+                if (shouldInjectLastBattle) {
                   const lastLoss = battles.find((b: any) => {
                     const teamCrowns = b.team?.[0]?.crowns || 0;
                     const opponentCrowns = b.opponent?.[0]?.crowns || 0;
@@ -1231,6 +1342,14 @@ export async function registerRoutes(
         )
       );
       
+      await storage.createNotification({
+        userId,
+        title: 'Novo plano de treinamento criado!',
+        description: `"${generatedPlan.title}" está pronto com ${drills.length} exercícios para você praticar.`,
+        type: 'success',
+        read: false,
+      });
+      
       res.json({
         ...plan,
         drills,
@@ -1287,5 +1406,177 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================================================
+  // COMMUNITY RANKINGS ROUTES
+  // ============================================================================
+
+  app.get('/api/community/player-rankings', async (req, res) => {
+    try {
+      const locationId = (req.query.locationId as string) || 'global';
+      const result = await getPlayerRankings(locationId);
+      
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      
+      res.json(result.data);
+    } catch (error) {
+      console.error("Error fetching player rankings:", error);
+      res.status(500).json({ error: "Failed to fetch player rankings" });
+    }
+  });
+
+  app.get('/api/community/clan-rankings', async (req, res) => {
+    try {
+      const locationId = (req.query.locationId as string) || 'global';
+      const result = await getClanRankings(locationId);
+      
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      
+      res.json(result.data);
+    } catch (error) {
+      console.error("Error fetching clan rankings:", error);
+      res.status(500).json({ error: "Failed to fetch clan rankings" });
+    }
+  });
+
+  // ============================================================================
+  // PUBLIC PLAYER AND CLAN ROUTES
+  // ============================================================================
+
+  app.get('/api/public/player/:tag', async (req, res) => {
+    try {
+      const { tag } = req.params;
+      const playerResult = await getPlayerByTag(tag);
+      
+      if (playerResult.error) {
+        return res.status(playerResult.status).json({ error: playerResult.error });
+      }
+      
+      const battlesResult = await getPlayerBattles(tag);
+      const battles = battlesResult.data || [];
+      
+      res.json({
+        player: playerResult.data,
+        recentBattles: (battles as any[]).slice(0, 10),
+      });
+    } catch (error) {
+      console.error("Error fetching public player:", error);
+      res.status(500).json({ error: "Failed to fetch player data" });
+    }
+  });
+
+  app.get('/api/public/clan/:tag', async (req, res) => {
+    try {
+      const { tag } = req.params;
+      const clanResult = await getClanByTag(tag);
+      
+      if (clanResult.error) {
+        return res.status(clanResult.status).json({ error: clanResult.error });
+      }
+      
+      res.json(clanResult.data);
+    } catch (error) {
+      console.error("Error fetching clan:", error);
+      res.status(500).json({ error: "Failed to fetch clan data" });
+    }
+  });
+
+  // ============================================================================
+  // META DECKS ROUTES
+  // ============================================================================
+
+  app.get('/api/meta/decks', async (req, res) => {
+    try {
+      const cachedDecks = await storage.getMetaDecks();
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      const needsRefresh = cachedDecks.length === 0 || 
+        cachedDecks.every(d => new Date(d.lastUpdatedAt || 0) < oneHourAgo);
+      
+      if (needsRefresh) {
+        try {
+          const topPlayersResult = await getTopPlayersInLocation('global', 50);
+          if (topPlayersResult.data) {
+            const items = (topPlayersResult.data as any).items || [];
+            const deckMap = new Map<string, { cards: string[]; count: number; totalTrophies: number }>();
+            
+            for (const player of items) {
+              if (player.currentDeck) {
+                const cardNames = player.currentDeck.map((c: any) => c.name).sort();
+                const deckHash = cardNames.join('|');
+                
+                if (deckMap.has(deckHash)) {
+                  const existing = deckMap.get(deckHash)!;
+                  existing.count++;
+                  existing.totalTrophies += player.trophies || 0;
+                } else {
+                  deckMap.set(deckHash, {
+                    cards: cardNames,
+                    count: 1,
+                    totalTrophies: player.trophies || 0,
+                  });
+                }
+              }
+            }
+            
+            const sortedDecks = Array.from(deckMap.entries())
+              .sort((a, b) => b[1].count - a[1].count)
+              .slice(0, 20);
+            
+            await storage.clearMetaDecks();
+            
+            for (const [deckHash, data] of sortedDecks) {
+              await storage.createMetaDeck({
+                deckHash,
+                cards: data.cards,
+                usageCount: data.count,
+                avgTrophies: Math.round(data.totalTrophies / data.count),
+                archetype: detectArchetype(data.cards),
+              });
+            }
+            
+            const newDecks = await storage.getMetaDecks();
+            return res.json(newDecks);
+          }
+        } catch (refreshError) {
+          console.error("Error refreshing meta decks:", refreshError);
+        }
+      }
+      
+      res.json(cachedDecks);
+    } catch (error) {
+      console.error("Error fetching meta decks:", error);
+      res.status(500).json({ error: "Failed to fetch meta decks" });
+    }
+  });
+
   return httpServer;
+}
+
+function detectArchetype(cards: string[]): string {
+  const cardSet = new Set(cards.map(c => c.toLowerCase()));
+  
+  if (cardSet.has('golem')) return 'Golem Beatdown';
+  if (cardSet.has('lava hound')) return 'LavaLoon';
+  if (cardSet.has('giant skeleton')) return 'Giant Skeleton';
+  if (cardSet.has('x-bow')) return 'X-Bow Cycle';
+  if (cardSet.has('mortar')) return 'Mortar Cycle';
+  if (cardSet.has('hog rider')) return 'Hog Cycle';
+  if (cardSet.has('royal giant')) return 'Royal Giant';
+  if (cardSet.has('giant')) return 'Giant Beatdown';
+  if (cardSet.has('p.e.k.k.a')) return 'P.E.K.K.A Bridge Spam';
+  if (cardSet.has('elixir golem')) return 'Elixir Golem';
+  if (cardSet.has('three musketeers')) return '3M Split';
+  if (cardSet.has('graveyard')) return 'Graveyard Control';
+  if (cardSet.has('mega knight')) return 'Mega Knight';
+  if (cardSet.has('royal hogs')) return 'Royal Hogs';
+  if (cardSet.has('miner') && cardSet.has('wall breakers')) return 'Miner WallBreakers';
+  if (cardSet.has('balloon')) return 'Balloon Cycle';
+  if (cardSet.has('goblin barrel')) return 'Log Bait';
+  if (cardSet.has('sparky')) return 'Sparky';
+  
+  return 'Custom';
 }

@@ -16,10 +16,9 @@ export function useUpdateSettings() {
     mutationFn: (data: any) => api.settings.update(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Configurações atualizadas com sucesso!');
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao atualizar configurações: ${error.message}`);
+      toast.error(error.message);
     },
   });
 }
