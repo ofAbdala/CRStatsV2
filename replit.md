@@ -184,3 +184,62 @@ Centralized Clash Royale icon helpers (`client/src/lib/clashIcons.ts`):
 - `getClanBadgeUrl(badgeId)` - Clan badge images
 - `getGameModeIcon(gameMode)` - Emoji icons for game modes
 - `getCardRarityColor(rarity)` - Color codes by card rarity
+
+### Intelligent Coaching System - December 2025
+Complete coaching overhaul with AI-powered features:
+
+**Unified Data Sync (`/api/player/sync`):**
+- Single endpoint fetches player, battles, and cards
+- SyncButton component with loading state and "last sync X min ago"
+- `usePlayerSync` hook for consistent sync behavior
+
+**Coach Message Limits:**
+- FREE users: 5 messages per day
+- PRO users: Unlimited messages
+- UI shows remaining messages and upgrade CTA when limit reached
+- Backend tracks daily usage in `coach_messages` table
+
+**Tilt Detection:**
+- `computeTiltLevel()` function analyzes recent battles for:
+  - Win rate over last 10 games
+  - Net trophy change
+  - Losing streak detection
+- Three levels: `high`, `medium`, `none`
+- TiltAlert component with contextual advice
+- Integrated into coach system prompt
+
+**Arena Progress Tracking:**
+- ArenaProgressBar component on profile page
+- 28 arenas configured up to 12,000 trophies
+- Visual progress bar to next arena
+
+**Context-Aware Battle Analysis:**
+- Coach detects "why did I lose?" patterns
+- Automatically injects last battle context into AI prompt
+- Includes deck matchup, elixir usage, result
+
+**Push Analysis (PRO Feature):**
+- POST `/api/coach/push-analysis` endpoint
+- GPT-4o-mini analyzes last 5 battles as a "session"
+- Returns structured JSON: summary, strengths, mistakes, recommendations
+- PushAnalysisCard component in me.tsx Overview tab
+- Stored in `push_analyses` table
+
+**Training Center (PRO Feature):**
+- `/training` page with AI-generated training plans
+- POST `/api/training/generate` creates plan from latest push analysis
+- 3-5 drills per plan with focus areas:
+  - tilt (emotional control)
+  - macro (elixir/timing)
+  - deck (card knowledge)
+  - matchup (counter strategies)
+  - fundamentals (basic mechanics)
+- Drill tracking: target games, completed games, status
+- PATCH `/api/training/drills/:id` for progress updates
+- GET `/api/training/plan` for active plan with drills
+
+**Database Schema Additions:**
+- `coach_messages` - Daily message tracking
+- `push_analyses` - Stored AI analysis results
+- `training_plans` - User training plans
+- `training_drills` - Individual drill exercises
