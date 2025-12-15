@@ -1,0 +1,204 @@
+Your last answer was helpful but **too high-level and optimistic**.
+
+You focused only on the "intelligent coaching system" and basically said "it's fully implemented", plus a quick note that Community and Decks use mock data.
+
+That is NOT what I asked for.
+
+I need a **full, brutally honest audit of the entire CRStats app**, not just coaching. I want to see exactly:
+
+- What is 100% done and production-ready.
+- What is implemented but fragile / incomplete.
+- What is still mock / placeholder.
+- What was planned but never implemented.
+
+This time, please:
+
+- DO NOT change any code.
+- DO NOT propose new features.
+- DO NOT just say "fully implemented" without explaining the details.
+- Instead, READ the code and CONFIG as an architect/QA and REPORT.
+
+---
+
+## 1. Buckets (4 categories)
+
+For every major feature area, classify into exactly one of these:
+
+1. ✅ Fully implemented & production-ready  
+2. 🟡 Implemented but incomplete / fragile  
+3. 🧩 Mock / placeholder / skeleton  
+4. 🔴 Planned but NOT implemented
+
+Do NOT skip areas. If you’re unsure, say so explicitly.
+
+---
+
+## 2. Go through ALL these areas one by one
+
+For each area below, I want:
+
+- Status bucket (✅ / 🟡 / 🧩 / 🔴).  
+- Files / routes / components involved.  
+- What works today (from reading the code).  
+- What is missing / fragile / mocked / risky.
+
+Areas (please cover ALL of these separately):
+
+1. **Authentication & Profile**
+   - Auth flow, profile table (`profiles`), settings pages, onboarding (Clash tag), default player selection.
+
+2. **Dashboard (main page)**
+   - Stats cards (current trophies, best season, winrate, wins/losses).
+   - “Last battles” widget.
+   - Whether EVERYTHING here is driven by the unified `/api/player/sync` or if anything still calls older endpoints or mock data.
+
+3. **Player Profile page (`/me`)**
+   - Header (tag, arena, clan, streak, last played).
+   - Arena progress bar (next arena/league thresholds).
+   - Tabs: Overview / History / Decks & Meta / Progress:
+     - Which sub-sections are fully wired to real data, and which still use mock or static values.
+
+4. **Pushes & History**
+   - Logic for grouping battles into pushes (30 min gap, min 2 matches).
+   - "Last push" summary banner.
+   - History tab grouping pushes + matches.
+   - Tilt calculation (how it’s computed, where it’s used).
+   - Any edge cases (no battles, old accounts, etc.).
+
+5. **AI Coach (ChatGPT)**
+   BACKEND:
+   - Exact route(s) calling OpenAI (file names, handler).
+   - How messages are built (system / user / context).
+   - Where FREE vs PRO message limit is enforced, where counts are stored.
+   - How “why did I lose my last game?” is detected and where last battle context is injected.
+   - What **context is actually passed** into the LLM today:
+     - last battle only?
+     - last push?
+     - tilt info?
+     - profile/goals?
+
+   FRONTEND:
+   - Coach UI state (remaining messages, limit banner, disabled send button).
+   - Error handling: what happens if OpenAI fails, or limit is reached?
+
+   Important: if any of the “planned” context (tilt, goals, push stats) is NOT yet wired into the prompt, mark that clearly as 🟡 or 🧩.
+
+6. **Push Analysis (session analysis, usually PRO)**
+   - Route and OpenAI call that generate push analysis.
+   - What data is collected for a push (how many games, which stats).
+   - Shape of `PushAnalysisResult`.
+   - Where, if anywhere, push analysis is stored (DB table or in-memory only).
+   - UI:
+     - Where `PushAnalysisCard` is used.
+     - Under what conditions it appears (PRO only? certain flags?).
+   - Gaps:
+     - Is there any scenario where the UI expects analysis but backend might not return it?
+     - Any TODOs left in this part?
+
+7. **Training Center**
+   This needs a very clear breakdown.
+
+   - Database:
+     - `training_plans`, `training_drills` schemas.
+   - Storage layer:
+     - Which methods are implemented (create/read/update/archive).
+   - Routes:
+     - `GET /api/training/plans`
+     - `POST /api/training/generate-from-last-push`
+     - `PATCH /api/training/drills/:id`
+     - What each route actually does today (input, queries, errors).
+   - Connection to push analysis:
+     - Is the training plan REALLY generated from the latest push analysis and weaknesses?
+     - Or is part of that still hardcoded/mocked?
+
+   - Frontend `/training`:
+     - What a FREE user sees (locked PRO banner).
+     - What a PRO user would see (are drill cards fully dynamic, or still using mock placeholders or commented-out code?).
+
+   For Training Center, I want a clear status: is the full loop “push → analysis → plan → drills → progress” really implemented end-to-end (for PRO), or are some segments still stubs / mock data?
+
+8. **Decks & Meta pages**
+   - Confirm precisely what is real vs mock:
+     - Are “My decks” based on real Clash data or static mockCards?
+     - Are “Meta decks” coming from live `meta_decks_cache` or static JSON?
+   - Mark these clearly as 🧩 (mock) if they’re not pulling real data.
+
+9. **Community / Rankings / Public profiles**
+   - `/community`, `/p/[tag]`, `/clan/[tag]`, leaderboards:
+     - Which pages exist in this codebase.
+     - Whether they use real API + DB or mockRankings/static.
+   - Again, tag each as ✅ / 🟡 / 🧩 / 🔴.
+
+10. **Billing & PRO Gating**
+    - Stripe:
+      - Which routes exist (checkout, webhook, customer portal).
+      - Are they configured for TEST only or LIVE too?
+      - Any TODOs around webhooks, error handling, missing events.
+    - DB:
+      - `subscriptions` lifecycle (how status is updated).
+    - Gating:
+      - Where `isPro` is checked:
+        - Coach (messages per day vs unlimited).
+        - Training Center.
+        - Push Analysis.
+        - Any other PRO features.
+      - Any places where the UI says “PRO only” but the backend does not actually enforce it (or vice-versa).
+
+11. **Goals, Favorites, Notifications, Settings**
+    - Goals (goals table, APIs, UI pages):
+      - Is the current UI actively using them or mostly legacy?
+    - Favorite players:
+      - Are they used to pick the default player for sync/coach?
+    - Notifications:
+      - Do any parts of the UX actually use `notifications` now, or is it mostly infrastructure and not wired into visible flows?
+    - User settings:
+      - Theme, language, default landing page – fully functional or partial?
+
+12. **i18n / Multi-language**
+    - Which pages truly use translations for all labels.
+    - Where there are hard-coded PT-BR strings.
+    - Any missing keys or warnings in logs (e.g., `pushAnalysis.proDescription`).
+
+13. **Technical debt / risks**
+    - Any `TODO`, `FIXME`, `@ts-ignore` or similar hints of unfinished work.
+    - Any legacy routes or components that are no longer used but still in the repo.
+    - Error handling gaps for:
+      - OpenAI failures / timeouts.
+      - Clash API errors / rate limits.
+      - Stripe webhook failures.
+
+---
+
+## 3. Output format
+
+Please follow this structure:
+
+1. **Summary (3–7 bullets)**
+   - Overall honest state of the app.
+
+2. **Features by bucket**
+
+   - ✅ Fully implemented & production-ready  
+     - Bullet list:
+       - Feature → 1–2 lines explanation + key files/routes.
+
+   - 🟡 Implemented but incomplete / fragile  
+     - Bullet list:
+       - Feature → what works vs what is missing/fragile.
+
+   - 🧩 Mock / placeholder / skeleton  
+     - Bullet list:
+       - Feature → where the mock lives (files) + what would be needed to make it real.
+
+   - 🔴 Planned but NOT implemented  
+     - Bullet list:
+       - Feature → brief description (from previous plans) + what’s missing in code.
+
+3. **Top 5 risks before public launch**
+   - Short, concrete bullets:
+     - Risk → why it matters → where in code.
+
+Be very concrete: mention **file names, routes, hooks, components**.  
+If something is only “demo-ready”, SAY that clearly.
+
+Do not sugar-coat. I want an **architect-level forensic report**, not a marketing summary.
