@@ -56,6 +56,10 @@ import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
+import { ArenaProgressBar } from "@/components/ArenaProgressBar";
+import { SyncButton } from "@/components/SyncButton";
+import { TiltAlert } from "@/components/TiltAlert";
+import { usePlayerSync } from "@/hooks/usePlayerSync";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -265,6 +269,13 @@ export default function MePage() {
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals();
   const { t } = useLocale();
+  
+  const { 
+    data: syncData, 
+    sync, 
+    isSyncing,
+    lastSyncedAt 
+  } = usePlayerSync();
 
   const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
   const isLoading = profileLoading || playerLoading;
@@ -688,6 +699,11 @@ export default function MePage() {
           </Alert>
         )}
 
+        {/* Tilt Alert */}
+        {syncData?.tiltLevel && syncData.tiltLevel !== 'none' && (
+          <TiltAlert level={syncData.tiltLevel} />
+        )}
+
         {/* Hero Header Section */}
         <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card via-card/95 to-primary/5 backdrop-blur-sm">
           <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,transparent,black)]" />
@@ -700,12 +716,20 @@ export default function MePage() {
                     <Swords className="w-8 h-8 text-primary" />
                   </div>
                   <div>
-                    <h1 
-                      className="text-2xl md:text-3xl font-display font-bold text-foreground"
-                      data-testid="header-player-name"
-                    >
-                      {player?.name || 'Jogador'}
-                    </h1>
+                    <div className="flex items-center gap-3">
+                      <h1 
+                        className="text-2xl md:text-3xl font-display font-bold text-foreground"
+                        data-testid="header-player-name"
+                      >
+                        {player?.name || 'Jogador'}
+                      </h1>
+                      <SyncButton 
+                        onSync={sync} 
+                        isSyncing={isSyncing} 
+                        lastSyncedAt={lastSyncedAt} 
+                        compact 
+                      />
+                    </div>
                     <p 
                       className="text-muted-foreground font-mono text-sm"
                       data-testid="header-player-tag"
@@ -798,6 +822,17 @@ export default function MePage() {
                 </div>
               </div>
             </div>
+            
+            {/* Arena Progress Bar */}
+            {player?.trophies && (
+              <div className="mt-4">
+                <ArenaProgressBar 
+                  trophies={player.trophies} 
+                  arenaId={player?.arena?.id} 
+                  arenaName={player?.arena?.name}
+                />
+              </div>
+            )}
           </div>
         </div>
 
