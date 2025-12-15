@@ -1206,7 +1206,7 @@ export async function registerRoutes(
       
       const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext);
       
-      await storage.archiveUserActivePlans(userId);
+      await storage.archiveOldPlans(userId);
       
       const plan = await storage.createTrainingPlan({
         userId,

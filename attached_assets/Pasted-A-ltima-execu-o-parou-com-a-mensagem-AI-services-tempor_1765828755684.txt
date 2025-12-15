@@ -1,0 +1,113 @@
+A última execução parou com a mensagem:
+
+"AI services temporarily unavailable. Please try again later."
+
+Isso aconteceu quando você estava:
+
+- Ajustando `server/storage.ts` para adicionar o método `getPushAnalysis`.
+- Corrigindo a chamada de `archiveUserActivePlans` para o método real `archiveOldPlans` nas rotas de treinamento.
+- Criando/ajustando os endpoints de treinamento em `server/routes.ts`.
+
+Quero que você agora faça o seguinte, em ORDEM:
+
+1) **Sanidade de código (storage + rotas)**
+
+- Abrir `shared/schema.ts`, `server/storage.ts` e `server/routes.ts`.
+- Verificar se na última edição algo ficou:
+  - Incompleto,
+  - Com nome de método divergente entre interface e implementação,
+  - Com métodos chamados nas rotas que não existem no storage.
+
+Especificamente:
+
+- Garantir que `server/storage.ts` tenha:
+  - Os métodos relacionados a push analysis (ex.: `getPushAnalysis`, se realmente precisamos).
+  - Os métodos de training (`getTrainingPlans`, `createTrainingPlan`, `createTrainingDrills`, `updateTrainingDrill`, `archiveOldPlans` ou equivalente).
+  - Interface e implementação alinhadas (sem métodos declarados só na interface ou só na implementação).
+
+- Garantir que `server/routes.ts`:
+  - Esteja importando os métodos corretos do storage.
+  - Não chame `archiveUserActivePlans` se o método real chama `archiveOldPlans` (usar um nome só, consistente).
+  - Tenha rotas completas para:
+    - `GET /api/training/plans`
+    - `POST /api/training/generate-from-last-push`
+    - `PATCH /api/training/drills/:id`
+
+2) **Finalizar endpoints do Centro de Treinamento**
+
+Com base no schema e no `server/openai.ts`:
+
+- `GET /api/training/plans`:
+  - Retorna o plano ativo do usuário + drills.
+  - Respeita limites FREE/PRO ao decidir o que mostrar (mas não precisa bloquear leitura).
+
+- `POST /api/training/generate-from-last-push`:
+  - Usa o último push (e, se existir, a última push analysis) para gerar um plano de treino:
+    - Chama uma função `generateTrainingPlan` em `server/openai.ts` ou similar.
+    - Antes de criar, arquiva planos antigos se a regra for “só 1 plano ativo” para FREE.
+  - Aplica limites:
+    - FREE: 1 plano com até 3 drills.
+    - PRO: permitir mais (deixe preparado; se quiser, pode só não bloquear por enquanto, mas documente).
+
+- `PATCH /api/training/drills/:id`:
+  - Permite:
+    - Atualizar `status` (`pending` → `in_progress` → `completed`).
+    - Atualizar `completed_games`.
+  - Checa se o `drill` pertence ao user autenticado.
+
+3) **Conferir integração com Push Analysis**
+
+- Verificar `server/openai.ts` e `server/routes.ts`:
+  - O endpoint de push analysis deve:
+    - Pegar o último push.
+    - Gerar `PushAnalysisResult` via LLM.
+    - (Opcional) salvar em `push_analyses`.
+  - O endpoint de treino (`generate-from-last-push`) pode:
+    - Usar o resultado da análise de push para gerar drills, em vez de reanalisar tudo do zero (se você já implementou isso).
+
+4) **Rodar checagem de build/type**
+
+- Rodar:
+  - `npm run lint` (se existir),
+  - `npm run build`
+- Corrigir todos os erros de TypeScript, imports quebrados, tipos incompatíveis entre storage e rotas.
+
+5) **Verificar rapidamente os fluxos no front**
+
+Usando o código atual (que você já alterou):
+
+- `/me`:
+  - Botão “Atualizar dados” chama `/api/player/sync` e atualiza stats/push.
+  - ArenaProgressBar aparece com progresso correto.
+  - PushAnalysisCard é exibido quando houver análise de push.
+
+- `/coach`:
+  - FREE consegue mandar mensagens até o limite diário (5).
+  - Ao chegar no limite, aparece o banner de limite + CTA de upgrade.
+  - Perguntas tipo “por que perdi a última partida?” usam o last battle context.
+
+- `/training` (ou onde estiver o Centro de Treinamento):
+  - Se existir plano ativo:
+    - Lista drills, permite marcar progresso/concluído.
+  - Se não existir:
+    - Mostra estado vazio sugerindo jogar um push + atualizar dados.
+
+6) **i18n e ajuste final**
+
+- Todas as novas strings:
+  - Botão “Atualizar dados”,
+  - Texto da última atualização,
+  - Mensagens de limite FREE,
+  - Tilt warning,
+  - Barra de arena,
+  - Análise de push,
+  - Centro de Treinamento,
+- Devem estar nos arquivos de tradução PT-BR e EN-US (`shared/i18n/translations/...`).
+
+👉 No final, me dê um resumo curto do que você ajustou nesta rodada:
+- Quais arquivos principais mexeu (schema, storage, routes, openai, pages/components).
+- Como testar rapidamente:
+  - Sync,
+  - Coach (FREE limit + “por que perdi a última partida?”),
+  - Push analysis,
+  - Centro de Treinamento (gerar plano + atualizar drill).

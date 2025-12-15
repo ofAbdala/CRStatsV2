@@ -348,6 +348,14 @@ export class DatabaseStorage implements IStorage {
   // Push Analyses operations
   // ============================================================================
   
+  async getPushAnalysis(id: string): Promise<PushAnalysis | undefined> {
+    const [analysis] = await db
+      .select()
+      .from(pushAnalyses)
+      .where(eq(pushAnalyses.id, id));
+    return analysis;
+  }
+
   async getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined> {
     const [analysis] = await db
       .select()
