@@ -4,7 +4,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
-import { generateCoachResponse, generatePushAnalysis, ChatMessage, BattleContext, PushSessionContext } from "./openai";
+import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey } from "./stripeClient";
 import { db } from "./db";
@@ -1109,6 +1109,181 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in push analysis:", error);
       res.status(500).json({ error: "Falha ao gerar análise de push" });
+    }
+  });
+
+  // ============================================================================
+  // TRAINING CENTER ROUTES
+  // ============================================================================
+
+  app.get('/api/training/plan', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plan = await storage.getActivePlan(userId);
+      
+      if (!plan) {
+        return res.json(null);
+      }
+      
+      const drills = await storage.getDrillsByPlan(plan.id);
+      
+      res.json({
+        ...plan,
+        drills,
+      });
+    } catch (error) {
+      console.error("Error fetching training plan:", error);
+      res.status(500).json({ error: "Falha ao buscar plano de treinamento" });
+    }
+  });
+
+  app.get('/api/training/plans', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plans = await storage.getTrainingPlans(userId);
+      
+      const plansWithDrills = await Promise.all(
+        plans.map(async (plan) => ({
+          ...plan,
+          drills: await storage.getDrillsByPlan(plan.id),
+        }))
+      );
+      
+      res.json(plansWithDrills);
+    } catch (error) {
+      console.error("Error fetching training plans:", error);
+      res.status(500).json({ error: "Falha ao buscar planos de treinamento" });
+    }
+  });
+
+  app.post('/api/training/plan/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return res.status(403).json({ 
+          error: "Geração de planos de treinamento é uma funcionalidade PRO.",
+          code: "PRO_REQUIRED",
+        });
+      }
+      
+      const { pushAnalysisId } = req.body as { pushAnalysisId?: string };
+      
+      let analysisResult;
+      
+      if (pushAnalysisId) {
+        const analysis = await storage.getPushAnalysis(pushAnalysisId);
+        if (!analysis) {
+          return res.status(404).json({ error: "Análise de push não encontrada" });
+        }
+        analysisResult = analysis.resultJson;
+      } else {
+        const latestAnalysis = await storage.getLatestPushAnalysis(userId);
+        if (!latestAnalysis) {
+          return res.status(400).json({ 
+            error: "Nenhuma análise de push encontrada. Execute uma análise de push primeiro.",
+            code: "NO_PUSH_ANALYSIS",
+          });
+        }
+        analysisResult = latestAnalysis.resultJson;
+      }
+      
+      const profile = await storage.getProfile(userId);
+      let playerContext;
+      
+      if (profile?.clashTag) {
+        const playerResult = await getPlayerByTag(profile.clashTag);
+        if (playerResult.data) {
+          const player = playerResult.data as any;
+          playerContext = {
+            trophies: player.trophies,
+            arena: player.arena?.name,
+            currentDeck: player.currentDeck?.map((c: any) => c.name),
+          };
+        }
+      }
+      
+      const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext);
+      
+      await storage.archiveUserActivePlans(userId);
+      
+      const plan = await storage.createTrainingPlan({
+        userId,
+        title: generatedPlan.title,
+        source: 'push_analysis',
+        status: 'active',
+        pushAnalysisId: pushAnalysisId || undefined,
+      });
+      
+      const drills = await Promise.all(
+        generatedPlan.drills.map((drill) =>
+          storage.createTrainingDrill({
+            planId: plan.id,
+            focusArea: drill.focusArea,
+            description: drill.description,
+            targetGames: drill.targetGames,
+            completedGames: 0,
+            mode: drill.mode,
+            priority: drill.priority,
+            status: 'pending',
+          })
+        )
+      );
+      
+      res.json({
+        ...plan,
+        drills,
+      });
+    } catch (error) {
+      console.error("Error generating training plan:", error);
+      res.status(500).json({ error: "Falha ao gerar plano de treinamento" });
+    }
+  });
+
+  app.patch('/api/training/drill/:drillId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { drillId } = req.params;
+      const { completedGames, status } = req.body as { completedGames?: number; status?: string };
+      
+      const updateData: any = {};
+      if (completedGames !== undefined) updateData.completedGames = completedGames;
+      if (status) updateData.status = status;
+      
+      const drill = await storage.updateTrainingDrill(drillId, updateData);
+      
+      if (!drill) {
+        return res.status(404).json({ error: "Drill não encontrado" });
+      }
+      
+      res.json(drill);
+    } catch (error) {
+      console.error("Error updating drill:", error);
+      res.status(500).json({ error: "Falha ao atualizar drill" });
+    }
+  });
+
+  app.patch('/api/training/plan/:planId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { planId } = req.params;
+      const { status } = req.body as { status?: string };
+      
+      if (!status) {
+        return res.status(400).json({ error: "Status é obrigatório" });
+      }
+      
+      const plan = await storage.updateTrainingPlan(planId, { status });
+      
+      if (!plan) {
+        return res.status(404).json({ error: "Plano não encontrado" });
+      }
+      
+      res.json(plan);
+    } catch (error) {
+      console.error("Error updating training plan:", error);
+      res.status(500).json({ error: "Falha ao atualizar plano de treinamento" });
     }
   });
 

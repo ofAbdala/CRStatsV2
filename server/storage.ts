@@ -89,6 +89,7 @@ export interface IStorage {
   countCoachMessagesToday(userId: string): Promise<number>;
   
   // Push Analyses operations
+  getPushAnalysis(id: string): Promise<PushAnalysis | undefined>;
   getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined>;
   getPushAnalyses(userId: string, limit?: number): Promise<PushAnalysis[]>;
   createPushAnalysis(analysis: InsertPushAnalysis): Promise<PushAnalysis>;

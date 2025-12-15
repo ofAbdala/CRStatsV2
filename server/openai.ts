@@ -85,6 +85,130 @@ Responda sempre em português brasileiro de forma amigável e educativa. Seja co
   }
 }
 
+export interface TrainingDrillSpec {
+  focusArea: 'tilt' | 'macro' | 'deck' | 'matchup' | 'fundamentals';
+  description: string;
+  targetGames: number;
+  mode: 'ladder' | 'challenge' | 'friendly';
+  priority: number;
+}
+
+export interface GeneratedTrainingPlan {
+  title: string;
+  drills: TrainingDrillSpec[];
+}
+
+export async function generateTrainingPlan(
+  pushAnalysis: PushAnalysisResult,
+  playerContext?: {
+    trophies?: number;
+    arena?: string;
+    currentDeck?: string[];
+  }
+): Promise<GeneratedTrainingPlan> {
+  const systemPrompt = `Você é um coach especialista de Clash Royale criando um plano de treinamento personalizado.
+
+Baseado na análise de push fornecida, crie um plano de treinamento com exercícios específicos.
+
+Análise do último push:
+- Resumo: ${pushAnalysis.summary}
+- Pontos fortes: ${pushAnalysis.strengths.join(', ')}
+- Erros identificados: ${pushAnalysis.mistakes.join(', ')}
+- Recomendações: ${pushAnalysis.recommendations.join(', ')}
+
+${playerContext ? `
+Contexto do jogador:
+- Troféus: ${playerContext.trophies || 'Não informado'}
+- Arena: ${playerContext.arena || 'Não informado'}
+${playerContext.currentDeck ? `- Deck atual: ${playerContext.currentDeck.join(', ')}` : ''}
+` : ''}
+
+IMPORTANTE: Responda APENAS com um JSON válido no formato abaixo:
+{
+  "title": "Nome curto e motivador para o plano de treinamento",
+  "drills": [
+    {
+      "focusArea": "tilt|macro|deck|matchup|fundamentals",
+      "description": "Descrição clara do exercício em até 2 frases",
+      "targetGames": 3,
+      "mode": "ladder|challenge|friendly",
+      "priority": 1
+    }
+  ]
+}
+
+Regras:
+- title: Nome motivador de até 50 caracteres
+- drills: Exatamente 3-5 exercícios
+- focusArea: Uma das opções (tilt=controle emocional, macro=gerenciamento de elixir/timing, deck=conhecimento do deck, matchup=estratégia contra decks específicos, fundamentals=básicos como posicionamento)
+- targetGames: 2-5 partidas por exercício
+- mode: ladder para prática real, challenge para baixa pressão, friendly para testar
+- priority: 1 (alta), 2 (média), 3 (baixa)
+
+Foque nos erros identificados para criar exercícios corretivos.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Crie um plano de treinamento baseado nesta análise." },
+      ],
+      temperature: 0.6,
+      max_tokens: 800,
+    });
+
+    const content = response.choices[0]?.message?.content || "";
+    
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON found in response");
+      }
+      
+      const parsed = JSON.parse(jsonMatch[0]) as GeneratedTrainingPlan;
+      
+      const validFocusAreas = ['tilt', 'macro', 'deck', 'matchup', 'fundamentals'];
+      const validModes = ['ladder', 'challenge', 'friendly'];
+      
+      return {
+        title: parsed.title?.slice(0, 50) || "Plano de Treinamento",
+        drills: (parsed.drills || []).slice(0, 5).map(drill => ({
+          focusArea: validFocusAreas.includes(drill.focusArea) ? drill.focusArea as any : 'fundamentals',
+          description: drill.description || "Exercício de prática",
+          targetGames: Math.min(5, Math.max(2, drill.targetGames || 3)),
+          mode: validModes.includes(drill.mode) ? drill.mode as any : 'ladder',
+          priority: Math.min(3, Math.max(1, drill.priority || 2)),
+        })),
+      };
+    } catch (parseError) {
+      console.error("Failed to parse training plan JSON:", parseError, content);
+      return {
+        title: "Plano de Melhoria Básico",
+        drills: [
+          {
+            focusArea: 'fundamentals',
+            description: "Foque em posicionamento e contagem de elixir do oponente",
+            targetGames: 3,
+            mode: 'ladder',
+            priority: 1,
+          },
+          {
+            focusArea: 'macro',
+            description: "Pratique não vazar elixir - sempre tenha uma jogada pronta",
+            targetGames: 3,
+            mode: 'ladder',
+            priority: 2,
+          },
+        ],
+      };
+    }
+  } catch (error) {
+    console.error("OpenAI API error in training plan:", error);
+    throw new Error("Falha ao gerar plano de treinamento");
+  }
+}
+
 export async function generatePushAnalysis(
   pushSession: PushSessionContext
 ): Promise<PushAnalysisResult> {
