@@ -10,6 +10,211 @@ import { getStripePublishableKey } from "./stripeClient";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
+const FREE_DAILY_LIMIT = 5;
+
+function computeTiltLevel(battles: any[]): 'high' | 'medium' | 'none' {
+  if (!battles || battles.length === 0) return 'none';
+  
+  const last10 = battles.slice(0, 10);
+  
+  let wins = 0;
+  let losses = 0;
+  let netTrophies = 0;
+  let consecutiveLosses = 0;
+  let maxConsecutiveLosses = 0;
+  
+  for (const battle of last10) {
+    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
+    const trophyChange = battle.team?.[0]?.trophyChange || 0;
+    
+    if (isVictory) {
+      wins++;
+      consecutiveLosses = 0;
+    } else {
+      losses++;
+      consecutiveLosses++;
+      maxConsecutiveLosses = Math.max(maxConsecutiveLosses, consecutiveLosses);
+    }
+    netTrophies += trophyChange;
+  }
+  
+  const winRate = last10.length > 0 ? (wins / last10.length) * 100 : 50;
+  
+  if (maxConsecutiveLosses >= 3 || (winRate < 40 && netTrophies <= -60)) {
+    return 'high';
+  }
+  
+  if (winRate >= 40 && winRate <= 50 && netTrophies < 0) {
+    return 'medium';
+  }
+  
+  return 'none';
+}
+
+interface PushSession {
+  startTime: Date;
+  endTime: Date;
+  battles: any[];
+  wins: number;
+  losses: number;
+  winRate: number;
+  netTrophies: number;
+}
+
+function computePushSessions(battles: any[]): PushSession[] {
+  if (!battles || battles.length < 2) return [];
+  
+  const sortedBattles = [...battles].sort((a, b) => 
+    new Date(b.battleTime).getTime() - new Date(a.battleTime).getTime()
+  );
+  
+  const sessions: PushSession[] = [];
+  let currentSession: any[] = [];
+  
+  for (let i = 0; i < sortedBattles.length; i++) {
+    const battle = sortedBattles[i];
+    const battleTime = new Date(battle.battleTime);
+    
+    if (currentSession.length === 0) {
+      currentSession.push(battle);
+    } else {
+      const lastBattle = currentSession[currentSession.length - 1];
+      const lastBattleTime = new Date(lastBattle.battleTime);
+      const timeDiff = lastBattleTime.getTime() - battleTime.getTime();
+      const thirtyMinutes = 30 * 60 * 1000;
+      
+      if (timeDiff <= thirtyMinutes) {
+        currentSession.push(battle);
+      } else {
+        if (currentSession.length >= 2) {
+          sessions.push(createSessionFromBattles(currentSession));
+        }
+        currentSession = [battle];
+      }
+    }
+  }
+  
+  if (currentSession.length >= 2) {
+    sessions.push(createSessionFromBattles(currentSession));
+  }
+  
+  return sessions;
+}
+
+function createSessionFromBattles(battles: any[]): PushSession {
+  let wins = 0;
+  let losses = 0;
+  let netTrophies = 0;
+  
+  for (const battle of battles) {
+    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
+    const trophyChange = battle.team?.[0]?.trophyChange || 0;
+    
+    if (isVictory) {
+      wins++;
+    } else {
+      losses++;
+    }
+    netTrophies += trophyChange;
+  }
+  
+  const battleTimes = battles.map(b => new Date(b.battleTime));
+  const startTime = new Date(Math.min(...battleTimes.map(t => t.getTime())));
+  const endTime = new Date(Math.max(...battleTimes.map(t => t.getTime())));
+  
+  return {
+    startTime,
+    endTime,
+    battles,
+    wins,
+    losses,
+    winRate: battles.length > 0 ? (wins / battles.length) * 100 : 0,
+    netTrophies,
+  };
+}
+
+function computeBattleStats(battles: any[]) {
+  if (!battles || battles.length === 0) {
+    return {
+      totalMatches: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      streak: { type: 'none' as const, count: 0 },
+      tiltLevel: 'none' as const,
+    };
+  }
+  
+  let wins = 0;
+  let losses = 0;
+  let streakType: 'win' | 'loss' | 'none' = 'none';
+  let streakCount = 0;
+  let currentStreakType: 'win' | 'loss' | null = null;
+  
+  for (let i = 0; i < battles.length; i++) {
+    const battle = battles[i];
+    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
+    
+    if (isVictory) {
+      wins++;
+      if (currentStreakType === 'win') {
+        streakCount++;
+      } else if (currentStreakType === null) {
+        currentStreakType = 'win';
+        streakCount = 1;
+      }
+    } else {
+      losses++;
+      if (currentStreakType === 'loss') {
+        streakCount++;
+      } else if (currentStreakType === null) {
+        currentStreakType = 'loss';
+        streakCount = 1;
+      }
+    }
+    
+    if (i === 0) {
+      streakType = isVictory ? 'win' : 'loss';
+      streakCount = 1;
+      currentStreakType = streakType;
+    } else if (currentStreakType !== null) {
+      const prevIsVictory = battles[i - 1].team?.[0]?.crowns > battles[i - 1].opponent?.[0]?.crowns;
+      if ((isVictory && prevIsVictory) || (!isVictory && !prevIsVictory)) {
+        if (i === 1 || streakType === (isVictory ? 'win' : 'loss')) {
+          streakCount++;
+        }
+      } else {
+        break;
+      }
+    }
+  }
+  
+  let currentStreak = 0;
+  let currentType: 'win' | 'loss' | 'none' = 'none';
+  for (const battle of battles) {
+    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
+    const battleType = isVictory ? 'win' : 'loss';
+    
+    if (currentType === 'none') {
+      currentType = battleType;
+      currentStreak = 1;
+    } else if (currentType === battleType) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+  
+  return {
+    totalMatches: battles.length,
+    wins,
+    losses,
+    winRate: battles.length > 0 ? (wins / battles.length) * 100 : 0,
+    streak: { type: currentType, count: currentStreak },
+    tiltLevel: computeTiltLevel(battles),
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -293,6 +498,82 @@ export async function registerRoutes(
   });
 
   // ============================================================================
+  // PLAYER SYNC ROUTES
+  // ============================================================================
+  
+  app.post('/api/player/sync', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const profile = await storage.getProfile(userId);
+      if (!profile?.clashTag) {
+        return res.status(400).json({ 
+          error: "No Clash Royale tag linked to your profile",
+          code: "NO_CLASH_TAG" 
+        });
+      }
+      
+      const playerResult = await getPlayerByTag(profile.clashTag);
+      if (playerResult.error) {
+        return res.status(playerResult.status).json({ error: playerResult.error });
+      }
+      
+      const battlesResult = await getPlayerBattles(profile.clashTag);
+      if (battlesResult.error) {
+        return res.status(battlesResult.status).json({ error: battlesResult.error });
+      }
+      
+      const player = playerResult.data as any;
+      const battles = (battlesResult.data as any[]) || [];
+      
+      const pushSessions = computePushSessions(battles);
+      const stats = computeBattleStats(battles);
+      
+      const syncState = await storage.updateSyncState(userId);
+      
+      const goals = await storage.getGoals(userId);
+      
+      res.json({
+        player: {
+          tag: player.tag,
+          name: player.name,
+          trophies: player.trophies,
+          arena: player.arena,
+          expLevel: player.expLevel,
+          clan: player.clan,
+          currentDeck: player.currentDeck,
+          bestTrophies: player.bestTrophies,
+          wins: player.wins,
+          losses: player.losses,
+          battleCount: player.battleCount,
+        },
+        battles,
+        pushSessions,
+        stats,
+        lastSyncedAt: syncState.lastSyncedAt,
+        goals,
+      });
+    } catch (error) {
+      console.error("Error syncing player data:", error);
+      res.status(500).json({ error: "Failed to sync player data" });
+    }
+  });
+
+  app.get('/api/player/sync-state', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const syncState = await storage.getSyncState(userId);
+      
+      res.json({
+        lastSyncedAt: syncState?.lastSyncedAt || null,
+      });
+    } catch (error) {
+      console.error("Error fetching sync state:", error);
+      res.status(500).json({ error: "Failed to fetch sync state" });
+    }
+  });
+
+  // ============================================================================
   // STRIPE BILLING ROUTES
   // ============================================================================
   
@@ -543,20 +824,32 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       
       const isPro = await storage.isPro(userId);
+      
       if (!isPro) {
-        return res.status(402).json({ 
-          error: "PRO subscription required",
-          code: "PRO_REQUIRED" 
-        });
+        const messagesToday = await storage.countCoachMessagesToday(userId);
+        if (messagesToday >= FREE_DAILY_LIMIT) {
+          return res.status(403).json({ 
+            error: "Daily message limit reached. Upgrade to PRO for unlimited coaching.",
+            code: "FREE_COACH_DAILY_LIMIT_REACHED",
+            limit: FREE_DAILY_LIMIT,
+            used: messagesToday,
+          });
+        }
       }
       
-      const { messages, playerTag } = req.body as { 
+      const { messages, playerTag, contextType } = req.body as { 
         messages: ChatMessage[]; 
         playerTag?: string;
+        contextType?: string;
       };
 
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: "Messages array is required" });
+      }
+
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      if (!lastUserMessage) {
+        return res.status(400).json({ error: "At least one user message is required" });
       }
 
       let playerContext: any = {};
@@ -599,9 +892,26 @@ export async function registerRoutes(
 
       const aiResponse = await generateCoachResponse(messages, playerContext);
       
+      await storage.createCoachMessage({
+        userId,
+        role: 'user',
+        content: lastUserMessage.content,
+        contextType: contextType || null,
+      });
+      
+      await storage.createCoachMessage({
+        userId,
+        role: 'assistant',
+        content: aiResponse,
+        contextType: contextType || null,
+      });
+      
+      const remainingMessages = isPro ? null : FREE_DAILY_LIMIT - (await storage.countCoachMessagesToday(userId));
+      
       res.json({ 
         message: aiResponse,
         timestamp: new Date().toISOString(),
+        remainingMessages,
       });
     } catch (error) {
       console.error("Error in coach chat:", error);
