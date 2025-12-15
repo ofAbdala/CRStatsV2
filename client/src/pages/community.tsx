@@ -12,7 +12,7 @@ import { useLocale } from "@/hooks/use-locale";
 interface PlayerRanking {
   tag: string;
   name: string;
-  trophies: number;
+  eloRating: number;
   rank: number;
   clan?: {
     tag: string;
@@ -171,7 +171,7 @@ export default function CommunityPage() {
                         <div className="flex items-center gap-2 min-w-[100px] justify-end">
                           <Trophy className="w-4 h-4 text-yellow-500" />
                           <span className="font-bold font-display" data-testid={`text-player-trophies-${player.tag.replace("#", "")}`}>
-                            {(player.trophies ?? 0).toLocaleString()}
+                            {(player.eloRating ?? 0).toLocaleString()}
                           </span>
                         </div>
                       </div>

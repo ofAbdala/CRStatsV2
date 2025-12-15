@@ -77,8 +77,7 @@ export async function getCards() {
 }
 
 export async function getPlayerRankings(locationId: string = 'global') {
-  const actualLocationId = locationId === 'global' ? '57000000' : locationId;
-  return clashRoyaleRequest(`/locations/${actualLocationId}/rankings/players`);
+  return clashRoyaleRequest(`/locations/${locationId}/pathoflegend/players`);
 }
 
 export async function getClanRankings(locationId: string = '57000006') {
