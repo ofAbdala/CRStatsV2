@@ -4,7 +4,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards } from "./clashRoyaleApi";
-import { generateCoachResponse, ChatMessage } from "./openai";
+import { generateCoachResponse, generatePushAnalysis, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey } from "./stripeClient";
 import { db } from "./db";
@@ -992,6 +992,123 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in coach chat:", error);
       res.status(500).json({ error: "Failed to generate coach response" });
+    }
+  });
+
+  // ============================================================================
+  // PUSH ANALYSIS ROUTE (PRO-only)
+  // ============================================================================
+  
+  app.post('/api/coach/push-analysis', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return res.status(403).json({ 
+          error: "Análise de push é uma funcionalidade PRO. Atualize seu plano para ter acesso.",
+          code: "PRO_REQUIRED",
+        });
+      }
+      
+      const { playerTag: providedTag } = req.body as { playerTag?: string };
+      
+      let playerTag = providedTag;
+      if (!playerTag) {
+        const profile = await storage.getProfile(userId);
+        if (!profile?.clashTag) {
+          return res.status(400).json({ 
+            error: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
+            code: "NO_PLAYER_TAG",
+          });
+        }
+        playerTag = profile.clashTag;
+      }
+      
+      const battlesResult = await getPlayerBattles(playerTag);
+      if (!battlesResult.data) {
+        return res.status(404).json({ 
+          error: "Não foi possível buscar as batalhas do jogador.",
+          code: "BATTLES_FETCH_FAILED",
+        });
+      }
+      
+      const battles = battlesResult.data as any[];
+      const pushSessions = computePushSessions(battles);
+      
+      if (pushSessions.length === 0) {
+        return res.status(400).json({ 
+          error: "Nenhuma sessão de push encontrada. Você precisa de pelo menos 2 batalhas com intervalos de até 30 minutos.",
+          code: "NO_PUSH_SESSION",
+        });
+      }
+      
+      const latestPush = pushSessions[0];
+      
+      const battleContexts: BattleContext[] = latestPush.battles.map((battle: any) => {
+        const playerTeam = battle.team?.[0];
+        const opponent = battle.opponent?.[0];
+        const playerCrowns = playerTeam?.crowns || 0;
+        const opponentCrowns = opponent?.crowns || 0;
+        
+        let result: 'win' | 'loss' | 'draw' = 'draw';
+        if (playerCrowns > opponentCrowns) result = 'win';
+        else if (playerCrowns < opponentCrowns) result = 'loss';
+        
+        return {
+          gameMode: battle.gameMode?.name || battle.type || 'Ladder',
+          playerDeck: playerTeam?.cards?.map((c: any) => c.name) || [],
+          opponentDeck: opponent?.cards?.map((c: any) => c.name) || [],
+          playerCrowns,
+          opponentCrowns,
+          trophyChange: playerTeam?.trophyChange || 0,
+          elixirLeaked: playerTeam?.elixirLeaked || 0,
+          result,
+        };
+      });
+      
+      const durationMs = latestPush.endTime.getTime() - latestPush.startTime.getTime();
+      const durationMinutes = Math.round(durationMs / 60000);
+      
+      const pushSessionContext: PushSessionContext = {
+        wins: latestPush.wins,
+        losses: latestPush.losses,
+        winRate: latestPush.winRate,
+        netTrophies: latestPush.netTrophies,
+        durationMinutes,
+        battles: battleContexts,
+      };
+      
+      const analysisResult = await generatePushAnalysis(pushSessionContext);
+      
+      const savedAnalysis = await storage.createPushAnalysis({
+        userId,
+        pushStartTime: latestPush.startTime,
+        pushEndTime: latestPush.endTime,
+        battlesCount: latestPush.battles.length,
+        wins: latestPush.wins,
+        losses: latestPush.losses,
+        netTrophies: latestPush.netTrophies,
+        resultJson: analysisResult,
+      });
+      
+      res.json({
+        id: savedAnalysis.id,
+        summary: analysisResult.summary,
+        strengths: analysisResult.strengths,
+        mistakes: analysisResult.mistakes,
+        recommendations: analysisResult.recommendations,
+        wins: latestPush.wins,
+        losses: latestPush.losses,
+        winRate: latestPush.winRate,
+        netTrophies: latestPush.netTrophies,
+        battlesCount: latestPush.battles.length,
+        pushStartTime: latestPush.startTime.toISOString(),
+        pushEndTime: latestPush.endTime.toISOString(),
+      });
+    } catch (error) {
+      console.error("Error in push analysis:", error);
+      res.status(500).json({ error: "Falha ao gerar análise de push" });
     }
   });
 
