@@ -237,31 +237,63 @@
   },
   "pushAnalysis": {
     "title": "Last Push Analysis",
-    "analyzing": "Analyzing...",
+    "analyzing": "Analyzing your last push...",
+    "analyze": "Analyze Push",
+    "reanalyze": "Re-analyze",
+    "clickToAnalyze": "Click Analyze to get insights on your last game session",
     "summary": "Summary",
     "strengths": "Strengths",
     "mistakes": "Identified mistakes",
+    "recommendations": "Recommendations",
     "tips": "Tips to improve",
     "noData": "No recent push to analyze",
     "analyzeNow": "Analyze now",
-    "proRequired": "PRO feature"
+    "proRequired": "PRO exclusive analysis",
+    "proDescription": "Get detailed analysis of every game session with AI-powered personalized insights.",
+    "battles": "battles"
   },
   "training": {
     "title": "Training Center",
     "subtitle": "Personalized exercises to improve your game",
     "activePlan": "Active Plan",
     "noPlan": "No active plan",
+    "noPlanDesc": "Play some matches, sync your data, and generate a personalized training plan.",
     "generatePlan": "Generate Training Plan",
     "generatingPlan": "Generating plan...",
+    "generateFromPush": "Generate Plan from Last Push",
     "drills": "Drills",
     "drill": "Drill",
     "completed": "Completed",
     "inProgress": "In progress",
     "pending": "Pending",
     "markComplete": "Mark as complete",
+    "startDrill": "Start Drill",
     "progress": "Progress: {completed}/{total}",
-    "focus": "Focus: {area}",
-    "proFeature": "PRO exclusive feature"
+    "gamesProgress": "{completed}/{total} games",
+    "focus": "Focus",
+    "focusAreas": {
+      "tilt": "Emotional Control",
+      "macro": "Macro (Elixir/Timing)",
+      "deck": "Deck Knowledge",
+      "matchup": "Matchups",
+      "fundamentals": "Fundamentals"
+    },
+    "modes": {
+      "ladder": "Ladder",
+      "challenge": "Challenge",
+      "friendly": "Friendly"
+    },
+    "priority": {
+      "high": "High priority",
+      "medium": "Medium priority",
+      "low": "Low priority"
+    },
+    "proFeature": "PRO exclusive feature",
+    "proRequired": "PRO Feature",
+    "proDesc": "Generate AI-powered personalized training plans after every game session.",
+    "archivePlan": "Archive plan",
+    "allCompleted": "All drills completed!",
+    "needPushAnalysis": "Run a push analysis first to generate a training plan."
   },
   "arena": {
     "progress": "Arena Progress",

@@ -237,31 +237,63 @@
   },
   "pushAnalysis": {
     "title": "Análise do Último Push",
-    "analyzing": "Analisando...",
+    "analyzing": "Analisando seu último push...",
+    "analyze": "Analisar Push",
+    "reanalyze": "Reanalisar",
+    "clickToAnalyze": "Clique em Analisar para receber insights sobre sua última sessão de jogo",
     "summary": "Resumo",
     "strengths": "Pontos fortes",
     "mistakes": "Erros identificados",
+    "recommendations": "Recomendações",
     "tips": "Dicas para melhorar",
     "noData": "Nenhum push recente para analisar",
     "analyzeNow": "Analisar agora",
-    "proRequired": "Recurso PRO"
+    "proRequired": "Análise exclusiva para PRO",
+    "proDescription": "Receba análises detalhadas de cada sessão de jogo com insights personalizados da IA.",
+    "battles": "batalhas"
   },
   "training": {
     "title": "Centro de Treinamento",
     "subtitle": "Exercícios personalizados para melhorar seu jogo",
     "activePlan": "Plano Ativo",
     "noPlan": "Nenhum plano ativo",
+    "noPlanDesc": "Jogue algumas partidas, sincronize seus dados e gere um plano de treino personalizado.",
     "generatePlan": "Gerar Plano de Treino",
     "generatingPlan": "Gerando plano...",
+    "generateFromPush": "Gerar Plano do Último Push",
     "drills": "Exercícios",
     "drill": "Exercício",
     "completed": "Concluído",
     "inProgress": "Em progresso",
     "pending": "Pendente",
     "markComplete": "Marcar como concluído",
+    "startDrill": "Iniciar Exercício",
     "progress": "Progresso: {completed}/{total}",
-    "focus": "Foco: {area}",
-    "proFeature": "Recurso exclusivo PRO"
+    "gamesProgress": "{completed}/{total} partidas",
+    "focus": "Foco",
+    "focusAreas": {
+      "tilt": "Controle Emocional",
+      "macro": "Macro (Elixir/Timing)",
+      "deck": "Conhecimento do Deck",
+      "matchup": "Matchups",
+      "fundamentals": "Fundamentos"
+    },
+    "modes": {
+      "ladder": "Ladder",
+      "challenge": "Desafio",
+      "friendly": "Amistoso"
+    },
+    "priority": {
+      "high": "Alta prioridade",
+      "medium": "Média prioridade",
+      "low": "Baixa prioridade"
+    },
+    "proFeature": "Recurso exclusivo PRO",
+    "proRequired": "Recurso PRO",
+    "proDesc": "Gere planos de treino personalizados baseados em IA após cada sessão de jogo.",
+    "archivePlan": "Arquivar plano",
+    "allCompleted": "Todos os exercícios concluídos!",
+    "needPushAnalysis": "Execute uma análise de push primeiro para gerar um plano de treino."
   },
   "arena": {
     "progress": "Progresso na Arena",
