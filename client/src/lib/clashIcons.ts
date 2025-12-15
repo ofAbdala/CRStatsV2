@@ -25,12 +25,12 @@ export function getArenaImageUrl(arenaId: number): string {
     simpleId = arenaId - 54000000;
   }
   
-  if (simpleId >= 1 && simpleId <= 22) {
+  if (simpleId >= 1 && simpleId <= 24) {
     return `${ROYALE_API_CDN}/img/arenas/arena${simpleId}.png`;
   }
   
-  if (simpleId >= 23) {
-    return `${ROYALE_API_CDN}/img/leagues/league1.png`;
+  if (simpleId >= 25) {
+    return `${ROYALE_API_CDN}/img/arenas/arena24.png`;
   }
   
   return `${ROYALE_API_CDN}/img/arenas/arena1.png`;
