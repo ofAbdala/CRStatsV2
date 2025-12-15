@@ -77,9 +77,8 @@ export async function getCards() {
 }
 
 export async function getPlayerRankings(locationId: string = 'global') {
-  // Path of Legend endpoint accepts "global" for worldwide rankings
-  // or numeric country location IDs for country-specific rankings
-  return clashRoyaleRequest(`/locations/${locationId}/pathoflegend/players`);
+  const actualLocationId = locationId === 'global' ? '57000000' : locationId;
+  return clashRoyaleRequest(`/locations/${actualLocationId}/rankings/players`);
 }
 
 export async function getClanRankings(locationId: string = '57000006') {
