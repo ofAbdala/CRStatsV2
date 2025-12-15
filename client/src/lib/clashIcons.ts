@@ -20,14 +20,20 @@ export function getCardImageFromApi(iconUrl?: { medium?: string; small?: string 
 }
 
 export function getArenaImageUrl(arenaId: number): string {
-  // API returns large IDs like 54000016 - convert to simple arena number
-  // Arena IDs: 54000000 = Training Camp (0), 54000001 = Goblin Stadium (1), etc.
-  // Path of Legend arenas: 54000015+ are Champion arenas
   let simpleId = arenaId;
   if (arenaId >= 54000000) {
     simpleId = arenaId - 54000000;
   }
-  return `${ROYALE_API_CDN}/img/arenas/arena${simpleId}.png`;
+  
+  if (simpleId >= 1 && simpleId <= 22) {
+    return `${ROYALE_API_CDN}/img/arenas/arena${simpleId}.png`;
+  }
+  
+  if (simpleId >= 23) {
+    return `${ROYALE_API_CDN}/img/leagues/league1.png`;
+  }
+  
+  return `${ROYALE_API_CDN}/img/arenas/arena1.png`;
 }
 
 export function getArenaImageByName(arenaName: string): string {
