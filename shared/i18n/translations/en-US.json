@@ -207,6 +207,69 @@
       "description": "Ask questions and get personalized tips from our AI Coach."
     }
   },
+  "sync": {
+    "button": "Sync data",
+    "syncing": "Syncing...",
+    "lastSync": "Last sync {time} ago",
+    "never": "Never synced",
+    "success": "Data synced!",
+    "error": "Sync failed"
+  },
+  "tilt": {
+    "title": "Tilt Status",
+    "alertHigh": "⚠️ Tilt Alert",
+    "alertHighDesc": "You're on a losing streak. Consider taking a break.",
+    "alertMedium": "Warning",
+    "alertMediumDesc": "Performance below average. Take a deep breath.",
+    "noTilt": "Stable",
+    "noTiltDesc": "You're playing well. Keep it up!",
+    "takeBreak": "Take a break",
+    "consecutiveLosses": "{n} consecutive losses"
+  },
+  "coachLimits": {
+    "title": "Coach Messages",
+    "remaining": "{n} of {total} messages remaining today",
+    "unlimited": "Unlimited messages",
+    "limitReached": "Daily limit reached",
+    "limitReachedDesc": "You've used all your coach messages today. Wait until midnight or subscribe to PRO for unlimited messages.",
+    "upgradeCta": "Unlock unlimited messages",
+    "freeLimit": "FREE limit: 5 messages/day"
+  },
+  "pushAnalysis": {
+    "title": "Last Push Analysis",
+    "analyzing": "Analyzing...",
+    "summary": "Summary",
+    "strengths": "Strengths",
+    "mistakes": "Identified mistakes",
+    "tips": "Tips to improve",
+    "noData": "No recent push to analyze",
+    "analyzeNow": "Analyze now",
+    "proRequired": "PRO feature"
+  },
+  "training": {
+    "title": "Training Center",
+    "subtitle": "Personalized exercises to improve your game",
+    "activePlan": "Active Plan",
+    "noPlan": "No active plan",
+    "generatePlan": "Generate Training Plan",
+    "generatingPlan": "Generating plan...",
+    "drills": "Drills",
+    "drill": "Drill",
+    "completed": "Completed",
+    "inProgress": "In progress",
+    "pending": "Pending",
+    "markComplete": "Mark as complete",
+    "progress": "Progress: {completed}/{total}",
+    "focus": "Focus: {area}",
+    "proFeature": "PRO exclusive feature"
+  },
+  "arena": {
+    "progress": "Arena Progress",
+    "currentArena": "Current Arena",
+    "nextArena": "Next Arena",
+    "trophiesToNext": "{n} trophies to next arena",
+    "atMax": "You're at the max arena!"
+  },
   "errors": {
     "generic": "Something went wrong. Please try again.",
     "notFound": "Page not found",

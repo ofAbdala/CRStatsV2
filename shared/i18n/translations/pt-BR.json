@@ -207,6 +207,69 @@
       "description": "Tire dúvidas e receba dicas personalizadas do nosso Coach IA."
     }
   },
+  "sync": {
+    "button": "Atualizar dados",
+    "syncing": "Sincronizando...",
+    "lastSync": "Última atualização há {time}",
+    "never": "Nunca sincronizado",
+    "success": "Dados atualizados!",
+    "error": "Erro ao sincronizar"
+  },
+  "tilt": {
+    "title": "Status de Tilt",
+    "alertHigh": "⚠️ Alerta de Tilt",
+    "alertHighDesc": "Você está em uma sequência negativa. Considere fazer uma pausa.",
+    "alertMedium": "Atenção",
+    "alertMediumDesc": "Performance abaixo da média. Respire fundo.",
+    "noTilt": "Estável",
+    "noTiltDesc": "Você está jogando bem. Continue assim!",
+    "takeBreak": "Fazer pausa",
+    "consecutiveLosses": "{n} derrotas seguidas"
+  },
+  "coachLimits": {
+    "title": "Mensagens do Coach",
+    "remaining": "{n} de {total} mensagens restantes hoje",
+    "unlimited": "Mensagens ilimitadas",
+    "limitReached": "Limite diário atingido",
+    "limitReachedDesc": "Você usou todas as suas mensagens de coach hoje. Aguarde até meia-noite ou assine o PRO para mensagens ilimitadas.",
+    "upgradeCta": "Desbloquear mensagens ilimitadas",
+    "freeLimit": "Limite FREE: 5 mensagens/dia"
+  },
+  "pushAnalysis": {
+    "title": "Análise do Último Push",
+    "analyzing": "Analisando...",
+    "summary": "Resumo",
+    "strengths": "Pontos fortes",
+    "mistakes": "Erros identificados",
+    "tips": "Dicas para melhorar",
+    "noData": "Nenhum push recente para analisar",
+    "analyzeNow": "Analisar agora",
+    "proRequired": "Recurso PRO"
+  },
+  "training": {
+    "title": "Centro de Treinamento",
+    "subtitle": "Exercícios personalizados para melhorar seu jogo",
+    "activePlan": "Plano Ativo",
+    "noPlan": "Nenhum plano ativo",
+    "generatePlan": "Gerar Plano de Treino",
+    "generatingPlan": "Gerando plano...",
+    "drills": "Exercícios",
+    "drill": "Exercício",
+    "completed": "Concluído",
+    "inProgress": "Em progresso",
+    "pending": "Pendente",
+    "markComplete": "Marcar como concluído",
+    "progress": "Progresso: {completed}/{total}",
+    "focus": "Foco: {area}",
+    "proFeature": "Recurso exclusivo PRO"
+  },
+  "arena": {
+    "progress": "Progresso na Arena",
+    "currentArena": "Arena Atual",
+    "nextArena": "Próxima Arena",
+    "trophiesToNext": "{n} troféus para próxima arena",
+    "atMax": "Você está na arena máxima!"
+  },
   "errors": {
     "generic": "Algo deu errado. Tente novamente.",
     "notFound": "Página não encontrada",
