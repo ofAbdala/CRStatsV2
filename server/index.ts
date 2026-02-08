@@ -94,6 +94,7 @@ app.post(
 
 app.use(
   express.json({
+    type: (req) => !(req.url ?? "").startsWith("/api/stripe/webhook"),
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -147,7 +148,7 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    console.error("Unhandled application error:", err);
   });
 
   // importantly only setup vite in development and after
