@@ -35,6 +35,7 @@ const codeToTranslationKey: Record<string, string> = {
   SETTINGS_UPDATE_FAILED: "apiErrors.codes.settingsUpdateFailed",
   SETTINGS_FETCH_FAILED: "apiErrors.codes.settingsFetchFailed",
   NOTIFICATION_PREFERENCES_UPDATE_FAILED: "apiErrors.codes.preferencesUpdateFailed",
+  FREE_PROFILE_LIMIT_REACHED: "apiErrors.codes.freeProfileLimitReached",
 };
 
 export function getApiErrorMessage(

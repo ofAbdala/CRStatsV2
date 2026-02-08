@@ -46,10 +46,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     queryFn: () => api.subscription.get(),
   });
 
-  const isPro =
-    (subscription as any)?.plan === "PRO" ||
-    (subscription as any)?.plan === "pro" ||
-    (subscription as any)?.status === "active";
+  const subscriptionPlan =
+    typeof (subscription as any)?.plan === "string" ? ((subscription as any).plan as string).toLowerCase() : "";
+  const isPro = subscriptionPlan === "pro" && (subscription as any)?.status === "active";
 
   const navigation = [
     { key: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },

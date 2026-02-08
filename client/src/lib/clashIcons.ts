@@ -1,10 +1,39 @@
-const ROYALE_API_CDN = 'https://cdn.royaleapi.com/static';
+// RoyaleAPI hosts a convenient static CDN mirror of Clash Royale art assets.
+// Most image assets live under `/static/img/...`.
+const ROYALE_API_CDN = "https://cdn.royaleapi.com/static/img";
+
+const CARD_SLUG_OVERRIDES: Record<string, string> = {
+  // RoyaleAPI uses slugs without punctuation for these cards.
+  "P.E.K.K.A": "pekka",
+  "Mini P.E.K.K.A": "mini-pekka",
+};
+
+function toCardSlug(cardName: string): string {
+  const override = CARD_SLUG_OVERRIDES[cardName];
+  if (override) return override;
+
+  return cardName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function normalizeArenaId(arenaId: number): number {
+  if (!Number.isFinite(arenaId)) return 1;
+
+  // Official API arenas are often in the 54000000+ range (e.g. 54000017). RoyaleAPI CDN uses small ids (e.g. 17).
+  if (arenaId >= 54_000_000) return arenaId - 54_000_000;
+
+  // Some endpoints may already return small ids.
+  if (arenaId >= 1 && arenaId < 1_000) return arenaId;
+
+  // Best-effort fallback: keep the last 3 digits if they look reasonable.
+  const tail = arenaId % 1_000;
+  return tail >= 1 ? tail : 1;
+}
 
 export function getCardImageUrl(cardName: string, size: 'small' | 'medium' | 'large' = 'medium'): string {
-  const slug = cardName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+  const slug = toCardSlug(cardName);
   
   const sizeMap = {
     small: 'cards-75',
@@ -20,7 +49,8 @@ export function getCardImageFromApi(iconUrl?: { medium?: string; small?: string 
 }
 
 export function getArenaImageUrl(arenaId: number): string {
-  return `${ROYALE_API_CDN}/arenas/arena${arenaId}.png`;
+  const normalizedId = normalizeArenaId(arenaId);
+  return `${ROYALE_API_CDN}/arenas/arena${normalizedId}.png`;
 }
 
 export function getArenaImageByName(arenaName: string): string {
@@ -107,4 +137,6 @@ export function getElixirCostColor(cost: number): string {
   return '#F44336';
 }
 
-export const CARD_BACK_URL = `${ROYALE_API_CDN}/cards-150/card-back.png`;
+// 1x1 transparent GIF as a "never 404" placeholder.
+export const CARD_BACK_URL =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";

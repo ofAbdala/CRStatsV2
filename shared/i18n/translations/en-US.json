@@ -191,12 +191,25 @@
       "save": "Save account",
       "dangerTitle": "Danger zone",
       "logoutTitle": "Sign out",
-      "logoutDescription": "Log out from this device."
+      "logoutDescription": "Log out from this device.",
+      "savedProfilesTitle": "Saved profiles",
+      "savedProfilesSubtitle": "Save extra tags to switch quickly.",
+      "savedProfilesEmpty": "No saved profiles yet.",
+      "savedProfilesUse": "Use",
+      "savedProfilesAddTitle": "Add profile",
+      "savedProfilesTagLabel": "Player tag",
+      "savedProfilesTagPlaceholder": "2P090J0",
+      "savedProfilesSetDefault": "Set as default",
+      "savedProfilesSave": "Save",
+      "savedProfilesSaved": "Profile saved successfully.",
+      "savedProfilesDefaultUpdated": "Default profile updated."
     },
     "billing": {
       "currentPlan": "Current plan",
       "description": "Quick overview of plan and billing history.",
       "upgrade": "Manage plan",
+      "planLabel": "Plan",
+      "statusLabel": "Status",
       "cycleLabel": "Cycle",
       "monthly": "Monthly",
       "nextRenewal": "Next renewal",
@@ -385,7 +398,8 @@
       "notificationsClearFailed": "Failed to clear notifications.",
       "settingsUpdateFailed": "Failed to update settings.",
       "settingsFetchFailed": "Failed to load settings.",
-      "preferencesUpdateFailed": "Failed to update notification preferences."
+      "preferencesUpdateFailed": "Failed to update notification preferences.",
+      "freeProfileLimitReached": "On the FREE plan, you can save only 1 profile. Upgrade to save more."
     }
   },
   "pages": {
@@ -655,6 +669,11 @@
       "planTitle": "Current plan",
       "planActive": "PRO active",
       "planFree": "FREE plan",
+      "interval": {
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "savePercent": "Save {percent}%"
+      },
       "subscribe": "Subscribe PRO",
       "manage": "Manage subscription",
       "renewal": {

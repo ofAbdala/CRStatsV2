@@ -191,12 +191,25 @@
       "save": "Salvar conta",
       "dangerTitle": "Zona de risco",
       "logoutTitle": "Encerrar sessão",
-      "logoutDescription": "Saia da sua conta neste dispositivo."
+      "logoutDescription": "Saia da sua conta neste dispositivo.",
+      "savedProfilesTitle": "Perfis salvos",
+      "savedProfilesSubtitle": "Salve tags adicionais para alternar rapidamente.",
+      "savedProfilesEmpty": "Nenhum perfil salvo.",
+      "savedProfilesUse": "Usar",
+      "savedProfilesAddTitle": "Adicionar perfil",
+      "savedProfilesTagLabel": "Tag do jogador",
+      "savedProfilesTagPlaceholder": "2P090J0",
+      "savedProfilesSetDefault": "Definir como padrão",
+      "savedProfilesSave": "Salvar",
+      "savedProfilesSaved": "Perfil salvo com sucesso.",
+      "savedProfilesDefaultUpdated": "Perfil padrão atualizado."
     },
     "billing": {
       "currentPlan": "Plano atual",
       "description": "Resumo rápido do seu plano e histórico.",
       "upgrade": "Gerenciar plano",
+      "planLabel": "Plano",
+      "statusLabel": "Status",
       "cycleLabel": "Ciclo",
       "monthly": "Mensal",
       "nextRenewal": "Próxima renovação",
@@ -385,7 +398,8 @@
       "notificationsClearFailed": "Falha ao limpar notificações.",
       "settingsUpdateFailed": "Falha ao atualizar configurações.",
       "settingsFetchFailed": "Falha ao carregar configurações.",
-      "preferencesUpdateFailed": "Falha ao atualizar preferências de notificação."
+      "preferencesUpdateFailed": "Falha ao atualizar preferências de notificação.",
+      "freeProfileLimitReached": "No plano FREE, você pode salvar apenas 1 perfil. Faça upgrade para salvar mais."
     }
   },
   "pages": {
@@ -655,6 +669,11 @@
       "planTitle": "Plano atual",
       "planActive": "PRO ativo",
       "planFree": "Plano FREE",
+      "interval": {
+        "monthly": "Mensal",
+        "yearly": "Anual",
+        "savePercent": "Economize {percent}%"
+      },
       "subscribe": "Assinar PRO",
       "manage": "Gerenciar assinatura",
       "renewal": {

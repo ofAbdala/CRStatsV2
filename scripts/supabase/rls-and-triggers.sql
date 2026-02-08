@@ -115,6 +115,9 @@ alter table public.notification_preferences force row level security;
 alter table public.player_sync_state enable row level security;
 alter table public.player_sync_state force row level security;
 
+alter table public.battle_history enable row level security;
+alter table public.battle_history force row level security;
+
 alter table public.coach_messages enable row level security;
 alter table public.coach_messages force row level security;
 
@@ -145,6 +148,7 @@ grant select, insert, update, delete on public.notifications to authenticated;
 grant select, insert, update, delete on public.user_settings to authenticated;
 grant select, insert, update, delete on public.notification_preferences to authenticated;
 grant select, insert, update, delete on public.player_sync_state to authenticated;
+grant select, insert, update, delete on public.battle_history to authenticated;
 grant select, insert, update, delete on public.coach_messages to authenticated;
 grant select, insert, update, delete on public.push_analyses to authenticated;
 grant select, insert, update, delete on public.training_plans to authenticated;
@@ -230,6 +234,14 @@ to authenticated
 using (user_id = auth.uid()::text)
 with check (user_id = auth.uid()::text);
 
+drop policy if exists battle_history_user_own on public.battle_history;
+create policy battle_history_user_own
+on public.battle_history
+for all
+to authenticated
+using (user_id = auth.uid()::text)
+with check (user_id = auth.uid()::text);
+
 drop policy if exists coach_messages_user_own on public.coach_messages;
 create policy coach_messages_user_own
 on public.coach_messages
@@ -292,4 +304,3 @@ on public.meta_decks_cache
 for select
 to authenticated
 using (true);
-

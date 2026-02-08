@@ -31,9 +31,10 @@ import {
   computeTiltLevel,
   evaluateFreeCoachLimit,
 } from "./domain/syncRules";
+import { FREE_BATTLE_LIMIT, clampHistoryDays, clampHistoryLimit } from "./domain/battleHistory";
+import { validateCheckoutPriceId } from "./domain/stripeCheckout";
 
 const FREE_DAILY_LIMIT = 5;
-const PRO_BRL_MONTHLY_PRICE_ID = PRICING.BRL.monthlyPriceId;
 
 type ApiProvider = "internal" | "supabase-auth" | "clash-royale" | "stripe" | "openai";
 
@@ -809,6 +810,28 @@ export async function registerRoutes(
         });
       }
 
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        const existingFavorites = await storage.getFavoritePlayers(userId);
+        const normalizedIncomingTag = normalizeTag(parsed.data.playerTag) || parsed.data.playerTag;
+        const alreadyHasTag = existingFavorites.some(
+          (fav) => (normalizeTag(fav.playerTag) || fav.playerTag) === normalizedIncomingTag,
+        );
+
+        if (existingFavorites.length >= 1 && !alreadyHasTag) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 403,
+            error: {
+              code: "FREE_PROFILE_LIMIT_REACHED",
+              message: "No plano FREE, você pode salvar apenas 1 perfil. Faça upgrade para salvar mais.",
+            },
+          });
+        }
+      }
+
       const favorite = await storage.createFavoritePlayer({
         userId,
         playerTag: normalizeTag(parsed.data.playerTag) || parsed.data.playerTag,
@@ -1386,6 +1409,7 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
       const payload = parseRequestBody(playerSyncRequestSchema, req.body);
       if (!payload.ok) {
         return sendApiError(res, {
@@ -1468,6 +1492,25 @@ export async function registerRoutes(
         });
       } else {
         battles = (battlesResult.data as any[]) || [];
+      }
+
+      const canonicalPlayerTag = normalizeTag(player.tag) || player.tag || tagToSync;
+      const battlesForPlan = isPro ? battles : battles.slice(0, FREE_BATTLE_LIMIT);
+      battles = battlesForPlan;
+
+      if (battlesForPlan.length > 0) {
+        try {
+          await storage.upsertBattleHistory(userId, canonicalPlayerTag, battlesForPlan);
+          await storage.pruneBattleHistory(userId, canonicalPlayerTag, { isPro });
+        } catch (historyError) {
+          console.warn("Battle history persistence failed during player sync:", historyError);
+          syncStatus = "partial";
+          syncErrors.push({
+            source: "battlelog",
+            code: "BATTLE_HISTORY_PERSIST_FAILED",
+            message: "Battle history could not be persisted",
+          });
+        }
       }
 
       pushSessions = computePushSessions(battles);
@@ -1576,6 +1619,62 @@ export async function registerRoutes(
         provider: "internal",
         status: 500,
         error: { code: "SYNC_STATE_FETCH_FAILED", message: "Failed to fetch sync state" },
+      });
+    }
+  });
+
+  // ============================================================================
+  // HISTORY ROUTES
+  // ============================================================================
+
+  app.get('/api/history/battles', requireAuth, async (req: any, res) => {
+    const route = "/api/history/battles";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
+      const profile = await storage.getProfile(userId);
+      const playerTag = getCanonicalProfileTag(profile);
+
+      if (!playerTag) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: { code: "NO_CLASH_TAG", message: "No Clash Royale tag linked to your profile" },
+        });
+      }
+
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        const battles = await storage.getBattleHistory(userId, playerTag, { limit: FREE_BATTLE_LIMIT });
+        return res.json(battles);
+      }
+
+      const days = clampHistoryDays(req.query.days);
+      const limit = clampHistoryLimit(req.query.limit);
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const battles = await storage.getBattleHistory(userId, playerTag, { since, limit });
+      return res.json(battles);
+    } catch (error) {
+      console.error("Error fetching battle history:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "BATTLE_HISTORY_FETCH_FAILED", message: "Failed to fetch battle history" },
       });
     }
   });
@@ -1760,27 +1859,20 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
-      const { priceId } = req.body as { priceId?: string };
-
-      if (!priceId) {
-        return sendApiError(res, {
-          route,
-          userId,
-          provider: "stripe",
-          status: 400,
-          error: { code: "PRICE_ID_REQUIRED", message: "Price ID is required" },
-        });
-      }
-
-      if (priceId !== PRO_BRL_MONTHLY_PRICE_ID) {
+      const { priceId } = req.body as { priceId?: unknown };
+      const validatedPrice = validateCheckoutPriceId(priceId);
+      if (!validatedPrice.ok) {
         return sendApiError(res, {
           route,
           userId,
           provider: "stripe",
           status: 400,
           error: {
-            code: "INVALID_PRICE_ID",
-            message: "Only PRO BRL monthly checkout is allowed",
+            code: validatedPrice.code,
+            message:
+              validatedPrice.code === "PRICE_ID_REQUIRED"
+                ? "Price ID is required"
+                : "Invalid price ID for checkout",
           },
         });
       }
@@ -1801,7 +1893,7 @@ export async function registerRoutes(
       const baseUrl = process.env.APP_BASE_URL || "http://localhost:5000";
       const session = await stripeService.createCheckoutSession(
         customerId,
-        priceId,
+        validatedPrice.priceId,
         `${baseUrl}/billing?success=true`,
         `${baseUrl}/billing?canceled=true`,
         userId,
@@ -2467,6 +2559,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/coach/messages', requireAuth, async (req: any, res) => {
+    const route = "/api/coach/messages";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
+      const limitRaw = req.query.limit;
+      const parsedLimit = typeof limitRaw === "string" ? Number.parseInt(limitRaw, 10) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? Math.min(200, Math.max(1, parsedLimit)) : 50;
+
+      const messages = await storage.getCoachMessages(userId, limit);
+      const chronological = messages.slice().reverse();
+
+      return res.json(
+        chronological.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          timestamp: message.createdAt?.toISOString?.() || null,
+        })),
+      );
+    } catch (error) {
+      console.error("Error fetching coach messages:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "COACH_MESSAGES_FETCH_FAILED", message: "Failed to fetch coach messages" },
+      });
+    }
+  });
+
   // ============================================================================
   // PUSH ANALYSIS ROUTE (PRO-only)
   // ============================================================================
@@ -2678,6 +2813,20 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Este recurso requer plano PRO.",
+          },
+        });
+      }
+
       const analysis = await storage.getLatestPushAnalysis(userId);
       if (!analysis) {
         return res.json(null);
@@ -2742,6 +2891,19 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Treinos personalizados são uma funcionalidade PRO.",
+          },
+        });
+      }
       const plan = await storage.getActivePlan(userId);
 
       if (!plan) {
@@ -2782,6 +2944,19 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Treinos personalizados são uma funcionalidade PRO.",
+          },
+        });
+      }
       const plans = await storage.getTrainingPlans(userId);
 
       const plansWithDrills = await Promise.all(
@@ -2942,6 +3117,19 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Treinos personalizados são uma funcionalidade PRO.",
+          },
+        });
+      }
       const parsed = parseRequestBody(trainingDrillUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -3027,6 +3215,19 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Treinos personalizados são uma funcionalidade PRO.",
+          },
+        });
+      }
       const parsed = parseRequestBody(trainingPlanUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {

@@ -27,16 +27,23 @@ export default function ClashCardImage({
   className?: string;
   showLevel?: boolean;
 }) {
-  const primarySrc = useMemo(() => {
-    const fromApi = getCardImageFromApi(iconUrls ?? undefined);
-    return fromApi || getCardImageUrl(name, size === "sm" ? "small" : size === "lg" ? "large" : "medium");
-  }, [iconUrls, name, size]);
+  // Prefer RoyaleAPI CDN images first. They ship permissive CORS headers, avoiding
+  // browser console noise when `api-assets.clashroyale.com` blocks cross-origin usage.
+  const cdnSrc = useMemo(() => {
+    return getCardImageUrl(name, size === "sm" ? "small" : size === "lg" ? "large" : "medium");
+  }, [name, size]);
 
-  const [src, setSrc] = useState(primarySrc);
+  const apiSrc = useMemo(() => {
+    return getCardImageFromApi(iconUrls ?? undefined);
+  }, [iconUrls]);
+
+  const [src, setSrc] = useState(cdnSrc);
+  const [fallbackStep, setFallbackStep] = useState<0 | 1 | 2>(0);
 
   useEffect(() => {
-    setSrc(primarySrc);
-  }, [primarySrc]);
+    setSrc(cdnSrc);
+    setFallbackStep(0);
+  }, [cdnSrc]);
 
   return (
     <div
@@ -50,10 +57,27 @@ export default function ClashCardImage({
       <img
         src={src}
         alt={name}
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
         loading="lazy"
         onError={() => {
-          if (src !== CARD_BACK_URL) setSrc(CARD_BACK_URL);
+          setFallbackStep((step) => {
+            // Step 0: CDN failed. Step 1: API failed. Step 2: placeholder.
+            if (step === 0) {
+              if (apiSrc) {
+                setSrc(apiSrc);
+                return 1;
+              }
+              setSrc(CARD_BACK_URL);
+              return 2;
+            }
+
+            if (step === 1) {
+              setSrc(CARD_BACK_URL);
+              return 2;
+            }
+
+            return step;
+          });
         }}
       />
       {showLevel && typeof level === "number" ? (
@@ -64,4 +88,3 @@ export default function ClashCardImage({
     </div>
   );
 }
-

@@ -193,6 +193,16 @@ export const api = {
     getSyncState: () => fetchAPI("/player/sync-state"),
   },
 
+  history: {
+    getBattles: (options?: { days?: number; limit?: number }) => {
+      const params = new URLSearchParams();
+      if (typeof options?.days === "number") params.set("days", String(options.days));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const query = params.toString();
+      return fetchAPI<any[]>(`/history/battles${query ? `?${query}` : ""}`);
+    },
+  },
+
   coach: {
     chat: (
       messages: { role: "user" | "assistant" | "system"; content: string }[],
@@ -240,6 +250,10 @@ export const api = {
         durationMinutes?: number;
         tiltLevel?: "high" | "medium" | "none";
       } | null>("/coach/push-analysis/latest"),
+    getMessages: (limit: number = 50) =>
+      fetchAPI<{ id: string; role: "user" | "assistant" | "system"; content: string; timestamp: string | null }[]>(
+        `/coach/messages?limit=${encodeURIComponent(String(limit))}`,
+      ),
   },
 
   training: {

@@ -9,7 +9,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "test:critical": "node --import tsx --test server/domain/syncRules.test.ts shared/contracts/playerSyncPayload.test.ts",
+    "test:critical": "node --import tsx --test server/domain/syncRules.test.ts server/domain/battleHistory.test.ts server/domain/stripeCheckout.test.ts shared/contracts/playerSyncPayload.test.ts",
     "audit:data": "tsx scripts/audit-data-authenticity.ts",
     "audit:data:strict": "tsx scripts/audit-data-authenticity.ts --strict",
     "db:push": "drizzle-kit push",

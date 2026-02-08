@@ -369,21 +369,23 @@ export default function DashboardPage() {
                       <p className="text-sm text-muted-foreground text-center py-4">{t("pages.dashboard.emptyFavorites")}</p>
                     ) : (
                       (favorites as any[]).slice(0, 6).map((fav: any) => (
-                        <div
+                        <Link
                           key={fav.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-background/40 hover:bg-background/60 transition-colors cursor-pointer group"
+                          href={fav.playerTag ? `/p/${String(fav.playerTag).replace(/^#/, "")}` : "/me"}
                         >
-                          <div className="flex items-center gap-3">
-                            <Avatar className="w-8 h-8 border border-border">
-                              <AvatarFallback>{String(fav.name || "").substring(0, 2).toUpperCase() || "PL"}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-bold text-sm">{fav.name}</div>
-                              <div className="text-xs text-muted-foreground">{fav.clan || fav.tag || ""}</div>
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-background/40 hover:bg-background/60 transition-colors cursor-pointer group">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="w-8 h-8 border border-border">
+                                <AvatarFallback>{String(fav.name || "").substring(0, 2).toUpperCase() || "PL"}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-bold text-sm">{fav.name}</div>
+                                <div className="text-xs text-muted-foreground">{fav.clan || fav.playerTag || ""}</div>
+                              </div>
                             </div>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
+                        </Link>
                       ))
                     )}
                     <Link href="/community">

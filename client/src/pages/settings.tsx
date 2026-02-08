@@ -1,16 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   Check,
   CreditCard,
+  ExternalLink,
   Hash,
   Loader2,
   LogOut,
   Monitor,
   Moon,
+  Plus,
   Search,
+  Trash2,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,13 +23,32 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
+
+function formatDate(value: string | null | undefined, locale: "pt-BR" | "en-US") {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function formatMoneyFromCents(amountInCents: number, currency: string, locale: "pt-BR" | "en-US") {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format((amountInCents || 0) / 100);
+}
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
@@ -37,6 +59,22 @@ export default function SettingsPage() {
   const updateSettings = useUpdateSettings();
   const { toast } = useToast();
   const { t, locale, setLocale } = useLocale();
+  const queryClient = useQueryClient();
+
+  const subscriptionQuery = useQuery({
+    queryKey: ["subscription"],
+    queryFn: () => api.subscription.get() as Promise<any>,
+  });
+
+  const invoicesQuery = useQuery({
+    queryKey: ["billing-invoices"],
+    queryFn: () => api.billing.getInvoices() as Promise<any[]>,
+  });
+
+  const favoritesQuery = useQuery({
+    queryKey: ["favorites"],
+    queryFn: () => api.favorites.list() as Promise<any[]>,
+  });
 
   const [displayName, setDisplayName] = useState("");
   const [clashTag, setClashTag] = useState("");
@@ -47,6 +85,10 @@ export default function SettingsPage() {
   const [notifyTraining, setNotifyTraining] = useState(true);
   const [notifyBilling, setNotifyBilling] = useState(true);
   const [preferredLanguage, setPreferredLanguage] = useState<"pt" | "en">(locale === "en-US" ? "en" : "pt");
+
+  const [newProfileTag, setNewProfileTag] = useState("");
+  const [newProfilePreview, setNewProfilePreview] = useState<any | null>(null);
+  const [newProfileSetAsDefault, setNewProfileSetAsDefault] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -87,6 +129,103 @@ export default function SettingsPage() {
       toast({
         title: t("settings.toast.tagInvalidTitle"),
         description: error.message || t("settings.toast.tagInvalidDescription"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const validateNewProfileMutation = useMutation({
+    mutationFn: async (tag: string) => {
+      const normalizedTag = tag.startsWith("#") ? tag : `#${tag}`;
+      return api.clash.getPlayer(normalizedTag);
+    },
+    onSuccess: (data: any) => {
+      setNewProfilePreview(data);
+      toast({
+        title: t("settings.toast.tagValidatedTitle"),
+        description: t("settings.toast.tagValidatedDescription", { name: data.name }),
+      });
+    },
+    onError: (error: Error) => {
+      setNewProfilePreview(null);
+      toast({
+        title: t("settings.toast.tagInvalidTitle"),
+        description: error.message || t("settings.toast.tagInvalidDescription"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const saveNewProfileMutation = useMutation({
+    mutationFn: async () => {
+      const rawTag = newProfileTag.trim().toUpperCase();
+      const normalizedTag = rawTag ? `#${rawTag.replace(/^#/, "")}` : null;
+
+      if (!normalizedTag || !newProfilePreview) {
+        throw new Error("Missing player tag");
+      }
+
+      const payload = {
+        playerTag: normalizedTag,
+        name: newProfilePreview.name,
+        trophies: newProfilePreview.trophies,
+        clan: newProfilePreview.clan?.name,
+        setAsDefault: newProfileSetAsDefault,
+      };
+
+      return api.favorites.create(payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["favorites"] });
+      if (newProfileSetAsDefault) {
+        queryClient.invalidateQueries({ queryKey: ["profile"] });
+      }
+      setNewProfileTag("");
+      setNewProfilePreview(null);
+      setNewProfileSetAsDefault(false);
+      toast({
+        title: t("common.success"),
+        description: t("settings.account.savedProfilesSaved"),
+      });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: t("common.error"),
+        description: getApiErrorMessage(error, t),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteFavoriteMutation = useMutation({
+    mutationFn: (id: string) => api.favorites.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["favorites"] });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: t("common.error"),
+        description: getApiErrorMessage(error, t),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const setDefaultProfileMutation = useMutation({
+    mutationFn: (tag: string) => api.profile.update({ defaultPlayerTag: tag, clashTag: tag }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["player-sync"] });
+      queryClient.invalidateQueries({ queryKey: ["history-battles"] });
+      toast({
+        title: t("common.success"),
+        description: t("settings.account.savedProfilesDefaultUpdated"),
+      });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: t("common.error"),
+        description: getApiErrorMessage(error, t),
         variant: "destructive",
       });
     },
@@ -135,6 +274,21 @@ export default function SettingsPage() {
 
     setLocale(preferredLanguage === "en" ? "en-US" : "pt-BR");
   };
+
+  const subscription = subscriptionQuery.data as any;
+  const invoices = (invoicesQuery.data as any[]) || [];
+  const favorites = (favoritesQuery.data as any[]) || [];
+  const isPro = subscription?.plan === "pro" && subscription?.status === "active";
+
+  const inferredCycle = (() => {
+    const first = invoices[0];
+    if (!first?.periodStart || !first?.periodEnd) return null;
+    const start = new Date(first.periodStart);
+    const end = new Date(first.periodEnd);
+    const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (!Number.isFinite(diffDays) || diffDays <= 0) return null;
+    return diffDays > 200 ? "yearly" : "monthly";
+  })();
 
   return (
     <DashboardLayout>
@@ -236,6 +390,139 @@ export default function SettingsPage() {
               </CardFooter>
             </Card>
 
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle>{t("settings.account.savedProfilesTitle")}</CardTitle>
+                <CardDescription>{t("settings.account.savedProfilesSubtitle")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {favoritesQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : favorites.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {t("settings.account.savedProfilesEmpty")}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {favorites.map((fav: any) => (
+                      <div
+                        key={fav.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/30 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{fav.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono truncate">{fav.playerTag}</div>
+                          {fav.clan ? (
+                            <div className="text-xs text-muted-foreground truncate">{fav.clan}</div>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDefaultProfileMutation.mutate(fav.playerTag)}
+                            disabled={setDefaultProfileMutation.isPending}
+                          >
+                            {t("settings.account.savedProfilesUse")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            onClick={() => deleteFavoriteMutation.mutate(fav.id)}
+                            disabled={deleteFavoriteMutation.isPending}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-border/50 bg-background/30 p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="font-medium">{t("settings.account.savedProfilesAddTitle")}</h4>
+                    {!isPro ? <Badge variant="outline">FREE</Badge> : <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500">PRO</Badge>}
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="new-profile-tag">{t("settings.account.savedProfilesTagLabel")}</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Hash className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="new-profile-tag"
+                          value={newProfileTag}
+                          onChange={(event) => {
+                            setNewProfileTag(event.target.value.toUpperCase().replace("#", ""));
+                            setNewProfilePreview(null);
+                          }}
+                          placeholder={t("settings.account.savedProfilesTagPlaceholder")}
+                          className="pl-9 font-mono uppercase"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => validateNewProfileMutation.mutate(newProfileTag)}
+                        disabled={validateNewProfileMutation.isPending || !newProfileTag.trim()}
+                      >
+                        {validateNewProfileMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => saveNewProfileMutation.mutate()}
+                        disabled={saveNewProfileMutation.isPending || !newProfilePreview}
+                      >
+                        {saveNewProfileMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        ) : (
+                          <Plus className="w-4 h-4 mr-2" />
+                        )}
+                        {t("settings.account.savedProfilesSave")}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={newProfileSetAsDefault}
+                        onCheckedChange={(checked) => setNewProfileSetAsDefault(checked)}
+                        disabled={saveNewProfileMutation.isPending}
+                      />
+                      <span className="text-sm">{t("settings.account.savedProfilesSetDefault")}</span>
+                    </div>
+                    {!isPro ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setLocation("/billing")}>
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        {t("settings.billing.upgrade")}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {newProfilePreview ? (
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">{newProfilePreview.name}</span>
+                      {" • "}
+                      {typeof newProfilePreview.trophies === "number"
+                        ? `${newProfilePreview.trophies} ${t("pages.dashboard.stats.trophies")}`
+                        : ""}
+                      {newProfilePreview.clan?.name ? ` • ${newProfilePreview.clan.name}` : ""}
+                    </div>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="border-destructive/30 bg-destructive/5">
               <CardHeader>
                 <CardTitle className="text-destructive">{t("settings.account.dangerTitle")}</CardTitle>
@@ -265,39 +552,103 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="billing" className="mt-6 space-y-6">
-            <Card className="border-primary/50 bg-gradient-to-br from-card to-primary/5">
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  {t("settings.billing.currentPlan")}
-                  <Button size="sm" className="font-bold" onClick={() => setLocation("/billing")}>
-                    {t("settings.billing.upgrade")}
-                  </Button>
-                </CardTitle>
-                <CardDescription>{t("settings.billing.description")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4">
-                  <div className="flex justify-between py-2 border-b border-border/50">
-                    <span className="text-muted-foreground">{t("settings.billing.cycleLabel")}</span>
-                    <span className="font-medium">{t("settings.billing.monthly")}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-border/50">
-                    <span className="text-muted-foreground">{t("settings.billing.nextRenewal")}</span>
-                    <span className="font-medium">-</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+	            <Card className="border-primary/50 bg-gradient-to-br from-card to-primary/5">
+	              <CardHeader>
+	                <CardTitle className="flex justify-between items-center">
+	                  {t("settings.billing.currentPlan")}
+	                  <Button size="sm" className="font-bold" onClick={() => setLocation("/billing")}>
+	                    {t("settings.billing.upgrade")}
+	                  </Button>
+	                </CardTitle>
+	                <CardDescription>{t("settings.billing.description")}</CardDescription>
+	              </CardHeader>
+	              <CardContent>
+	                <div className="grid gap-4">
+	                  <div className="flex justify-between py-2 border-b border-border/50">
+	                    <span className="text-muted-foreground">{t("settings.billing.planLabel")}</span>
+	                    <span className="font-medium uppercase">{subscription?.plan || "-"}</span>
+	                  </div>
+	                  <div className="flex justify-between py-2 border-b border-border/50">
+	                    <span className="text-muted-foreground">{t("settings.billing.statusLabel")}</span>
+	                    <span className="font-medium">{subscription?.status || "-"}</span>
+	                  </div>
+	                  <div className="flex justify-between py-2 border-b border-border/50">
+	                    <span className="text-muted-foreground">{t("settings.billing.cycleLabel")}</span>
+	                    <span className="font-medium">
+	                      {inferredCycle === "yearly"
+	                        ? t("billing.yearly")
+	                        : inferredCycle === "monthly"
+	                          ? t("billing.monthly")
+	                          : "-"}
+	                    </span>
+	                  </div>
+	                  <div className="flex justify-between py-2 border-b border-border/50">
+	                    <span className="text-muted-foreground">{t("settings.billing.nextRenewal")}</span>
+	                    <span className="font-medium">{formatDate(subscription?.currentPeriodEnd, locale)}</span>
+	                  </div>
+	                </div>
+	              </CardContent>
+	            </Card>
 
-            <Card className="border-border/50 bg-card/50">
-              <CardHeader>
-                <CardTitle>{t("settings.billing.invoiceHistory")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground text-center py-8">{t("settings.billing.emptyInvoices")}</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+	            <Card className="border-border/50 bg-card/50">
+	              <CardHeader>
+	                <CardTitle>{t("settings.billing.invoiceHistory")}</CardTitle>
+	              </CardHeader>
+	              <CardContent>
+	                {invoicesQuery.isLoading ? (
+	                  <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+	                    <Loader2 className="w-4 h-4 animate-spin" />
+	                    {t("common.loading")}
+	                  </div>
+	                ) : invoices.length === 0 ? (
+	                  <p className="text-sm text-muted-foreground text-center py-8">{t("settings.billing.emptyInvoices")}</p>
+	                ) : (
+	                  <Table>
+	                    <TableHeader>
+	                      <TableRow>
+	                        <TableHead>{t("pages.billing.invoices.table.date")}</TableHead>
+	                        <TableHead>{t("pages.billing.invoices.table.status")}</TableHead>
+	                        <TableHead>{t("pages.billing.invoices.table.amount")}</TableHead>
+	                        <TableHead className="text-right">{t("pages.billing.invoices.table.actions")}</TableHead>
+	                      </TableRow>
+	                    </TableHeader>
+	                    <TableBody>
+	                      {invoices.slice(0, 5).map((invoice: any) => (
+	                        <TableRow key={invoice.id}>
+	                          <TableCell>{formatDate(invoice.createdAt, locale)}</TableCell>
+	                          <TableCell>
+	                            <Badge variant="outline">{invoice.status || "-"}</Badge>
+	                          </TableCell>
+	                          <TableCell>
+	                            {formatMoneyFromCents(
+	                              invoice.amountPaid || invoice.amountDue || 0,
+	                              invoice.currency || "BRL",
+	                              locale,
+	                            )}
+	                          </TableCell>
+	                          <TableCell className="text-right">
+	                            {invoice.hostedInvoiceUrl ? (
+	                              <a
+	                                href={invoice.hostedInvoiceUrl}
+	                                target="_blank"
+	                                rel="noreferrer"
+	                                className="inline-flex items-center text-sm text-primary hover:underline"
+	                              >
+	                                {t("pages.billing.invoices.open")}
+	                                <ExternalLink className="w-3 h-3 ml-1" />
+	                              </a>
+	                            ) : (
+	                              <span className="text-xs text-muted-foreground">-</span>
+	                            )}
+	                          </TableCell>
+	                        </TableRow>
+	                      ))}
+	                    </TableBody>
+	                  </Table>
+	                )}
+	              </CardContent>
+	            </Card>
+	          </TabsContent>
 
           <TabsContent value="preferences" className="mt-6 space-y-6">
             <Card className="border-border/50 bg-card/50">

@@ -3,6 +3,7 @@
 // npx tsx scripts/seed-products.ts
 
 import { getUncachableStripeClient } from '../server/stripeClient';
+import { PRICING } from '../shared/pricing';
 
 async function createProducts() {
   const stripe = await getUncachableStripeClient();
@@ -14,52 +15,62 @@ async function createProducts() {
     query: "name:'CRStats PRO'" 
   });
   
-  if (existingProducts.data.length > 0) {
-    console.log('CRStats PRO product already exists:', existingProducts.data[0].id);
-    return;
-  }
+  const monthlyAmount = Math.round(PRICING.BRL.monthlyPrice * 100);
+  const yearlyAmount = typeof PRICING.BRL.yearlyPrice === "number" ? Math.round(PRICING.BRL.yearlyPrice * 100) : null;
 
-  // Create the PRO subscription product
-  const product = await stripe.products.create({
-    name: 'CRStats PRO',
-    description: 'Acesso completo ao Coach IA, análises avançadas e estatísticas detalhadas de Clash Royale',
-    metadata: {
-      tier: 'pro',
-      features: 'ai_coach,advanced_stats,battle_analysis,unlimited_favorites',
-    },
-  });
+  const product = existingProducts.data.length > 0
+    ? existingProducts.data[0]
+    : await stripe.products.create({
+        name: 'CRStats PRO',
+        description: 'Acesso completo ao Coach IA, análises avançadas e estatísticas detalhadas de Clash Royale',
+        metadata: {
+          tier: 'pro',
+          features: 'ai_coach,advanced_stats,battle_analysis,unlimited_favorites',
+        },
+      });
 
   console.log('Created product:', product.id);
 
-  // Create monthly price
-  const monthlyPrice = await stripe.prices.create({
+  const existingPrices = await stripe.prices.list({ product: product.id, limit: 100 });
+  const brlRecurring = existingPrices.data.filter((price) => price.currency === 'brl' && price.recurring);
+
+  const monthlyExisting = brlRecurring.find(
+    (price) => price.recurring?.interval === 'month' && price.unit_amount === monthlyAmount,
+  );
+
+  const monthlyPrice = monthlyExisting || await stripe.prices.create({
     product: product.id,
-    unit_amount: 1990, // R$19.90 in cents
+    unit_amount: monthlyAmount,
     currency: 'brl',
     recurring: { interval: 'month' },
-    metadata: {
-      plan: 'monthly',
-    },
+    metadata: { plan: 'monthly' },
   });
 
-  console.log('Created monthly price:', monthlyPrice.id, '- R$19.90/month');
+  console.log('Monthly price:', monthlyPrice.id, `- BRL ${monthlyAmount / 100}/month`);
 
-  // Create yearly price (discount)
-  const yearlyPrice = await stripe.prices.create({
-    product: product.id,
-    unit_amount: 15900, // R$159.00 in cents (save 2 months)
-    currency: 'brl',
-    recurring: { interval: 'year' },
-    metadata: {
-      plan: 'yearly',
-    },
-  });
+  let yearlyPriceId: string | null = null;
+  if (yearlyAmount !== null) {
+    const yearlyExisting = brlRecurring.find(
+      (price) => price.recurring?.interval === 'year' && price.unit_amount === yearlyAmount,
+    );
 
-  console.log('Created yearly price:', yearlyPrice.id, '- R$159.00/year');
+    const yearlyPrice = yearlyExisting || await stripe.prices.create({
+      product: product.id,
+      unit_amount: yearlyAmount,
+      currency: 'brl',
+      recurring: { interval: 'year' },
+      metadata: { plan: 'yearly' },
+    });
+
+    yearlyPriceId = yearlyPrice.id;
+    console.log('Yearly price:', yearlyPrice.id, `- BRL ${yearlyAmount / 100}/year`);
+  }
 
   console.log('\nProducts created successfully!');
   console.log('Monthly Price ID:', monthlyPrice.id);
-  console.log('Yearly Price ID:', yearlyPrice.id);
+  if (yearlyPriceId) {
+    console.log('Yearly Price ID:', yearlyPriceId);
+  }
 }
 
 createProducts().catch(console.error);

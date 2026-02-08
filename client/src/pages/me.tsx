@@ -25,6 +25,7 @@ import {
   Zap,
   Award,
   ChevronDown,
+  RotateCcw,
   Timer,
   ThumbsUp,
   ThumbsDown,
@@ -33,9 +34,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/useProfile";
-import { useClashPlayer, useClashBattles } from "@/hooks/useClashPlayer";
+import { useClashPlayer } from "@/hooks/useClashPlayer";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   Area,
@@ -57,8 +58,10 @@ import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
 import { buildTrophyChartData } from "@/lib/analytics/trophyChart";
+import ClashCardImage from "@/components/clash/ClashCardImage";
+import { getArenaImageUrl } from "@/lib/clashIcons";
 
-type PeriodFilter = 'today' | '7days' | '30days' | 'season';
+type PeriodFilter = 'today' | '7days' | '30days' | 'season' | '60days';
 
 function parseBattleTime(battleTime: string): Date {
   return new Date(battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
@@ -254,10 +257,10 @@ function PushSummaryRow({
 }
 
 export default function MePage() {
+  const queryClient = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const clashTag = (profile as any)?.clashTag;
   const { data: playerData, isLoading: playerLoading, error: playerError } = useClashPlayer(clashTag);
-  const { data: battlesData, isLoading: battlesLoading } = useClashBattles(clashTag);
   
   const { data: subscription } = useQuery({
     queryKey: ['subscription'],
@@ -269,8 +272,28 @@ export default function MePage() {
 
   const subscriptionPlan = typeof (subscription as any)?.plan === "string" ? ((subscription as any).plan as string).toLowerCase() : "";
   const isPro = subscriptionPlan === "pro" && (subscription as any)?.status === "active";
+
+  const historyBattlesQuery = useQuery({
+    queryKey: ["history-battles", clashTag, isPro ? "pro" : "free"],
+    queryFn: () => api.history.getBattles(isPro ? { days: 60, limit: 2000 } : undefined),
+    enabled: Boolean(clashTag),
+    staleTime: 2 * 60 * 1000,
+    retry: 1,
+  });
+
+  const battlesLoading = historyBattlesQuery.isLoading || historyBattlesQuery.isFetching;
+  const battles = (historyBattlesQuery.data as any) || [];
+
+  const syncMutation = useMutation({
+    mutationFn: () => api.player.sync(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["history-battles"] });
+      await queryClient.invalidateQueries({ queryKey: ["player-sync"] });
+      await historyBattlesQuery.refetch();
+    },
+  });
+
   const isLoading = profileLoading || playerLoading;
-  const battles = (battlesData as any) || [];
   const player = playerData as any;
 
   const [periodFilter, setPeriodFilter] = React.useState<PeriodFilter>('7days');
@@ -295,6 +318,8 @@ export default function MePage() {
           return daysDiff <= 30;
         case 'season':
           return daysDiff <= 35;
+        case '60days':
+          return daysDiff <= 60;
         default:
           return true;
       }
@@ -837,7 +862,7 @@ export default function MePage() {
               >
                 {player?.arena?.id && (
                   <img 
-                    src={`https://cdn.royaleapi.com/static/img/arenas/arena${player.arena.id}.png`}
+                    src={getArenaImageUrl(player.arena.id)}
                     alt={player.arena.name}
                     className="w-16 h-16 md:w-20 md:h-20 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
@@ -1058,43 +1083,79 @@ export default function MePage() {
             </div>
           </TabsContent>
 
-          {/* History Tab */}
-          <TabsContent value="history" className="mt-6 space-y-4">
-            {/* Filter Buttons */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={periodFilter === 'today' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPeriodFilter('today')}
-                data-testid="filter-today"
-              >
-                Hoje
-              </Button>
-              <Button
-                variant={periodFilter === '7days' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPeriodFilter('7days')}
-                data-testid="filter-7days"
-              >
-                7 dias
-              </Button>
-              <Button
-                variant={periodFilter === '30days' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPeriodFilter('30days')}
-                data-testid="filter-30days"
-              >
-                30 dias
-              </Button>
-              <Button
-                variant={periodFilter === 'season' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPeriodFilter('season')}
-                data-testid="filter-season"
-              >
-                Temporada
-              </Button>
-            </div>
+	          {/* History Tab */}
+	          <TabsContent value="history" className="mt-6 space-y-4">
+	            {/* Filter Buttons */}
+	            <div className="flex flex-wrap items-center justify-between gap-2">
+	              <div className="flex flex-wrap gap-2">
+	                <Button
+	                  variant={periodFilter === 'today' ? 'default' : 'outline'}
+	                  size="sm"
+	                  onClick={() => setPeriodFilter('today')}
+	                  data-testid="filter-today"
+	                >
+	                  Hoje
+	                </Button>
+	                <Button
+	                  variant={periodFilter === '7days' ? 'default' : 'outline'}
+	                  size="sm"
+	                  onClick={() => setPeriodFilter('7days')}
+	                  data-testid="filter-7days"
+	                >
+	                  7 dias
+	                </Button>
+	                <Button
+	                  variant={periodFilter === '30days' ? 'default' : 'outline'}
+	                  size="sm"
+	                  onClick={() => setPeriodFilter('30days')}
+	                  data-testid="filter-30days"
+	                >
+	                  30 dias
+	                </Button>
+	                <Button
+	                  variant={periodFilter === 'season' ? 'default' : 'outline'}
+	                  size="sm"
+	                  onClick={() => setPeriodFilter('season')}
+	                  data-testid="filter-season"
+	                >
+	                  Temporada
+	                </Button>
+
+	                {isPro ? (
+	                  <Button
+	                    variant={periodFilter === '60days' ? 'default' : 'outline'}
+	                    size="sm"
+	                    onClick={() => setPeriodFilter('60days')}
+	                    data-testid="filter-60days"
+	                  >
+	                    60 dias
+	                  </Button>
+	                ) : (
+	                  <Link href="/billing">
+	                    <Button variant="outline" size="sm" data-testid="filter-60days-locked">
+	                      <Lock className="w-4 h-4 mr-2" />
+	                      60 dias
+	                    </Button>
+	                  </Link>
+	                )}
+	              </div>
+
+	              <Button
+	                type="button"
+	                variant="outline"
+	                size="sm"
+	                onClick={() => syncMutation.mutate()}
+	                disabled={syncMutation.isPending || !clashTag}
+	                data-testid="button-refresh-history"
+	              >
+	                {syncMutation.isPending ? (
+	                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+	                ) : (
+	                  <RotateCcw className="w-4 h-4 mr-2" />
+	                )}
+	                {t("pages.dashboard.sync")}
+	              </Button>
+	            </div>
 
             {/* Summary - Shows last push if valid (2+ games within 30min gaps), otherwise shows recent stats */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
@@ -1288,11 +1349,12 @@ export default function MePage() {
                                   <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                                     {playerCards.map((card: any, cardIdx: number) => (
                                       <div key={card?.id || cardIdx} className="flex flex-col items-center">
-                                        <img
-                                          src={card?.iconUrls?.medium || ''}
-                                          alt={card?.name || 'Card'}
-                                          className="w-12 h-14 md:w-14 md:h-16 object-contain rounded bg-background/50"
-                                          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                                        <ClashCardImage
+                                          name={card?.name || "Card"}
+                                          iconUrls={card?.iconUrls}
+                                          size="md"
+                                          showLevel={false}
+                                          className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
                                         />
                                         <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
                                           {card?.name}
@@ -1313,11 +1375,12 @@ export default function MePage() {
                                   <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                                     {opponentCards.map((card: any, cardIdx: number) => (
                                       <div key={card?.id || cardIdx} className="flex flex-col items-center">
-                                        <img
-                                          src={card?.iconUrls?.medium || ''}
-                                          alt={card?.name || 'Card'}
-                                          className="w-12 h-14 md:w-14 md:h-16 object-contain rounded bg-background/50"
-                                          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                                        <ClashCardImage
+                                          name={card?.name || "Card"}
+                                          iconUrls={card?.iconUrls}
+                                          size="md"
+                                          showLevel={false}
+                                          className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
                                         />
                                         <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
                                           {card?.name}
@@ -1359,11 +1422,12 @@ export default function MePage() {
                   <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
                     {player.currentDeck.map((card: any, idx: number) => (
                       <div key={card?.id || idx} className="flex flex-col items-center">
-                        <img
-                          src={card?.iconUrls?.medium || ''}
-                          alt={card?.name || 'Card'}
-                          className="w-14 h-16 md:w-16 md:h-20 object-contain rounded bg-background/30"
-                          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                        <ClashCardImage
+                          name={card?.name || "Card"}
+                          iconUrls={card?.iconUrls}
+                          size="md"
+                          showLevel={false}
+                          className="w-14 h-16 md:w-16 md:h-20 rounded bg-background/30 border-0"
                         />
                         <span className="text-[10px] md:text-xs text-muted-foreground mt-1 text-center truncate w-full">
                           {card?.name}
@@ -1410,12 +1474,13 @@ export default function MePage() {
                       <CardContent className="space-y-3">
                         <div className="grid grid-cols-4 gap-1">
                           {deck.cards.slice(0, 8).map((card: any, cardIdx: number) => (
-                            <img
+                            <ClashCardImage
                               key={card?.id || cardIdx}
-                              src={card?.iconUrls?.medium || ''}
-                              alt={card?.name || 'Card'}
-                              className="w-10 h-12 object-contain rounded bg-background/30"
-                              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                              name={card?.name || "Card"}
+                              iconUrls={card?.iconUrls}
+                              size="sm"
+                              showLevel={false}
+                              className="w-10 h-12 rounded bg-background/30 border-0"
                             />
                           ))}
                         </div>

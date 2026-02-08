@@ -48,6 +48,7 @@ export default function CoachPage() {
   const [retryContent, setRetryContent] = useState<string | null>(null);
   const [remainingMessages, setRemainingMessages] = useState<number | null>(null);
   const [limitReached, setLimitReached] = useState(false);
+  const [hasHydratedHistory, setHasHydratedHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery({
@@ -62,10 +63,40 @@ export default function CoachPage() {
 
   const isPro = (subscription as any)?.plan === "pro" && (subscription as any)?.status === "active";
 
+  const coachMessagesQuery = useQuery({
+    queryKey: ["coach-messages"],
+    queryFn: () => api.coach.getMessages(50),
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (hasHydratedHistory) return;
+    if (!coachMessagesQuery.data) return;
+    if (messages.length > 1 || messages[0]?.id !== "welcome") {
+      setHasHydratedHistory(true);
+      return;
+    }
+
+    const history = coachMessagesQuery.data;
+    if (Array.isArray(history) && history.length > 0) {
+      setMessages(
+        history.map((message) => ({
+          id: message.id,
+          role: message.role === "system" ? "assistant" : message.role,
+          content: message.content,
+          timestamp: message.timestamp || new Date().toISOString(),
+        })),
+      );
+    }
+
+    setHasHydratedHistory(true);
+  }, [coachMessagesQuery.data, hasHydratedHistory, messages]);
+
   const latestAnalysisQuery = useQuery({
     queryKey: ["latest-push-analysis"],
     queryFn: () => api.coach.getLatestPushAnalysis(),
     refetchOnWindowFocus: false,
+    enabled: isPro,
   });
 
   const pushAnalysisMutation = useMutation({
@@ -333,7 +364,17 @@ export default function CoachPage() {
               </CardContent>
             </Card>
 
-            {latestAnalysisQuery.isLoading ? (
+            {!isPro ? (
+              <Card className="border-border/50 bg-card/50">
+                <CardContent className="py-6 text-sm text-muted-foreground">
+                  {t("apiErrors.codes.proRequired")}{" "}
+                  <Link href="/billing" className="underline">
+                    {t("pages.coach.upgradeCta")}
+                  </Link>
+                  .
+                </CardContent>
+              </Card>
+            ) : latestAnalysisQuery.isLoading ? (
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-6 flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />

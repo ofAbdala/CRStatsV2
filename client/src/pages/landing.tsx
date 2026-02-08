@@ -3,9 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Swords, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
 import heroBg from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.png";
 import { useLocale } from "@/hooks/use-locale";
+import { PRICING } from "@shared/pricing";
 
 export default function LandingPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+
+  const proMonthlyPriceText = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: PRICING.BRL.currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(PRICING.BRL.monthlyPrice);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -161,7 +169,10 @@ export default function LandingPage() {
               </div>
               <div className="mb-4">
                 <h3 className="text-xl font-bold font-display text-primary">{t("pages.landing.pricing.proTitle")}</h3>
-                <div className="text-3xl font-bold mt-2">R$ 19,90 <span className="text-sm font-normal text-muted-foreground">/{t("common.month")}</span></div>
+                <div className="text-3xl font-bold mt-2">
+                  {proMonthlyPriceText}{" "}
+                  <span className="text-sm font-normal text-muted-foreground">/{t("common.month")}</span>
+                </div>
               </div>
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-center gap-3 text-sm">

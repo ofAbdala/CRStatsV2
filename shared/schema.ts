@@ -1,6 +1,7 @@
 import { sql, relations } from "drizzle-orm";
 import {
   index,
+  uniqueIndex,
   jsonb,
   pgTable,
   timestamp,
@@ -128,7 +129,10 @@ export const favoritePlayers = pgTable(
     clan: varchar("clan"),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("IDX_favorite_players_user_id").on(table.userId)],
+  (table) => [
+    index("IDX_favorite_players_user_id").on(table.userId),
+    uniqueIndex("UIDX_favorite_players_user_id_player_tag").on(table.userId, table.playerTag),
+  ],
 );
 
 export const insertFavoritePlayerSchema = createInsertSchema(favoritePlayers).omit({
@@ -223,6 +227,31 @@ export const insertPlayerSyncStateSchema = createInsertSchema(playerSyncState).o
 });
 export type InsertPlayerSyncState = z.infer<typeof insertPlayerSyncStateSchema>;
 export type PlayerSyncState = typeof playerSyncState.$inferSelect;
+
+// ============================================================================
+// BATTLE HISTORY TABLE
+// ============================================================================
+
+export const battleHistory = pgTable(
+  "battle_history",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    playerTag: varchar("player_tag").notNull(),
+    battleTime: timestamp("battle_time").notNull(),
+    battleKey: varchar("battle_key").notNull().unique(),
+    battleJson: jsonb("battle_json").notNull().$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("IDX_battle_history_user_tag_time").on(table.userId, table.playerTag, table.battleTime)],
+);
+
+export const insertBattleHistorySchema = createInsertSchema(battleHistory).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBattleHistory = z.infer<typeof insertBattleHistorySchema>;
+export type BattleHistory = typeof battleHistory.$inferSelect;
 
 // ============================================================================
 // COACH MESSAGES TABLE
@@ -503,6 +532,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [playerSyncState.userId],
   }),
+  battleHistory: many(battleHistory),
   coachMessages: many(coachMessages),
   pushAnalyses: many(pushAnalyses),
   trainingPlans: many(trainingPlans),

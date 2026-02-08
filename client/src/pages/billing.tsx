@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Crown, ExternalLink, Loader2, ReceiptText } from "lucide-react";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
+import { getYearlySavingsPercent } from "@shared/pricing";
 
 interface SubscriptionResponse {
   plan?: string;
@@ -64,6 +65,7 @@ export default function BillingPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [activeAction, setActiveAction] = useState<"checkout" | "portal" | null>(null);
+  const [billingInterval, setBillingInterval] = useState<"month" | "year">("month");
 
   const subscriptionQuery = useQuery({
     queryKey: ["subscription"],
@@ -76,7 +78,7 @@ export default function BillingPage() {
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: () => api.stripe.createCheckout(PRICING.BRL.monthlyPriceId, "BRL"),
+    mutationFn: (priceId: string) => api.stripe.createCheckout(priceId, "BRL"),
     onMutate: () => setActiveAction("checkout"),
     onSuccess: ({ url }) => {
       window.location.href = url;
@@ -130,6 +132,17 @@ export default function BillingPage() {
   const invoices = invoicesQuery.data || [];
 
   const isPro = subscription?.plan === "pro" && subscription?.status === "active";
+  const hasYearly = Boolean(PRICING.BRL.yearlyPriceId) && typeof PRICING.BRL.yearlyPrice === "number";
+  const savingsPercent = hasYearly ? getYearlySavingsPercent("BRL") : 0;
+
+  const selectedPriceId =
+    billingInterval === "year" && hasYearly ? (PRICING.BRL.yearlyPriceId as string) : PRICING.BRL.monthlyPriceId;
+  const selectedPriceAmount =
+    billingInterval === "year" && hasYearly ? (PRICING.BRL.yearlyPrice as number) : PRICING.BRL.monthlyPrice;
+  const selectedPriceLabel =
+    billingInterval === "year"
+      ? `${formatMoneyFromCents(Math.round(selectedPriceAmount * 100), "BRL", locale)}/${t("common.year")}`
+      : `${formatMoneyFromCents(Math.round(selectedPriceAmount * 100), "BRL", locale)}/${t("common.month")}`;
 
   const renewalText = useMemo(() => {
     if (!subscription?.currentPeriodEnd) return t("pages.billing.renewal.none");
@@ -187,11 +200,41 @@ export default function BillingPage() {
                     {isPro ? t("pages.billing.planActive") : t("pages.billing.planFree")}
                   </Badge>
                   <Badge variant="outline">
-                    {formatMoneyFromCents(Math.round(PRICING.BRL.monthlyPrice * 100), "BRL", locale)}/{t("common.month")}
+                    {selectedPriceLabel}
                   </Badge>
+                  {!isPro && billingInterval === "year" && savingsPercent > 0 ? (
+                    <Badge variant="outline" className="border-green-500/30 text-green-600">
+                      {t("pages.billing.interval.savePercent", { percent: savingsPercent })}
+                    </Badge>
+                  ) : null}
                 </div>
 
                 <p className="text-sm text-muted-foreground">{renewalText}</p>
+
+                {!isPro && hasYearly ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={billingInterval === "month" ? "default" : "outline"}
+                      onClick={() => setBillingInterval("month")}
+                      disabled={checkoutMutation.isPending || portalMutation.isPending}
+                      data-testid="button-billing-interval-month"
+                    >
+                      {t("pages.billing.interval.monthly")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={billingInterval === "year" ? "default" : "outline"}
+                      onClick={() => setBillingInterval("year")}
+                      disabled={checkoutMutation.isPending || portalMutation.isPending}
+                      data-testid="button-billing-interval-year"
+                    >
+                      {t("pages.billing.interval.yearly")}
+                    </Button>
+                  </div>
+                ) : null}
 
                 <div className="grid md:grid-cols-2 gap-3">
                   <FeatureItem text={t("pages.billing.features.coach")} />
@@ -213,7 +256,7 @@ export default function BillingPage() {
                   ) : (
                     <Button
                       className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
-                      onClick={() => checkoutMutation.mutate()}
+                      onClick={() => checkoutMutation.mutate(selectedPriceId)}
                       disabled={checkoutMutation.isPending || portalMutation.isPending}
                       data-testid="button-upgrade-pro-brl"
                     >

@@ -8,6 +8,7 @@ import {
   userSettings,
   notificationPreferences,
   playerSyncState,
+  battleHistory,
   coachMessages,
   pushAnalyses,
   trainingPlans,
@@ -30,6 +31,8 @@ import {
   type NotificationPreferences,
   type InsertNotificationPreferences,
   type PlayerSyncState,
+  type BattleHistory,
+  type InsertBattleHistory,
   type CoachMessage,
   type InsertCoachMessage,
   type PushAnalysis,
@@ -41,8 +44,9 @@ import {
   type MetaDeckCache,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, gte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lt, notInArray, sql } from "drizzle-orm";
 import type { SupabaseAuthContext } from "./supabaseAuth";
+import { FREE_BATTLE_LIMIT, PRO_HISTORY_MAX_DAYS, buildBattleKey, extractBattleTime } from "./domain/battleHistory";
 
 interface BootstrapResult {
   profile: Profile;
@@ -154,6 +158,15 @@ export interface IStorage {
   // Player Sync State operations
   getSyncState(userId: string): Promise<PlayerSyncState | undefined>;
   updateSyncState(userId: string): Promise<PlayerSyncState>;
+
+  // Battle History operations
+  upsertBattleHistory(userId: string, playerTag: string, battles: any[]): Promise<{ inserted: number }>;
+  getBattleHistory(
+    userId: string,
+    playerTag: string,
+    options?: { since?: Date; limit?: number },
+  ): Promise<any[]>;
+  pruneBattleHistory(userId: string, playerTag: string, policy: { isPro: boolean; now?: Date }): Promise<void>;
 
   // Coach Messages operations
   getCoachMessages(userId: string, limit?: number): Promise<CoachMessage[]>;
@@ -593,7 +606,18 @@ export class DatabaseStorage implements IStorage {
         playerTag: normalizePlayerTag(playerData.playerTag) ?? playerData.playerTag,
       };
 
-      const [player] = await conn.insert(favoritePlayers).values(payload).returning();
+      const [player] = await conn
+        .insert(favoritePlayers)
+        .values(payload)
+        .onConflictDoUpdate({
+          target: [favoritePlayers.userId, favoritePlayers.playerTag],
+          set: {
+            name: payload.name,
+            trophies: payload.trophies ?? null,
+            clan: payload.clan ?? null,
+          },
+        })
+        .returning();
       return player;
     });
   }
@@ -748,6 +772,105 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       return state;
+    });
+  }
+
+  async upsertBattleHistory(userId: string, playerTag: string, battles: any[]): Promise<{ inserted: number }> {
+    const canonicalTag = normalizePlayerTag(playerTag) ?? playerTag;
+    const rows: InsertBattleHistory[] = [];
+
+    for (const battle of Array.isArray(battles) ? battles : []) {
+      const battleTime = extractBattleTime(battle?.battleTime);
+      if (!battleTime) continue;
+
+      rows.push({
+        userId,
+        playerTag: canonicalTag,
+        battleTime,
+        battleKey: buildBattleKey({ userId, playerTag: canonicalTag, battle }),
+        battleJson: (battle || {}) as any,
+      });
+    }
+
+    if (rows.length === 0) {
+      return { inserted: 0 };
+    }
+
+    return this.runAsUser(async (conn) => {
+      const insertedRows = await conn
+        .insert(battleHistory)
+        .values(rows)
+        .onConflictDoNothing({ target: battleHistory.battleKey })
+        .returning({ battleKey: battleHistory.battleKey });
+
+      return { inserted: insertedRows.length };
+    });
+  }
+
+  async getBattleHistory(
+    userId: string,
+    playerTag: string,
+    options?: { since?: Date; limit?: number },
+  ): Promise<any[]> {
+    const canonicalTag = normalizePlayerTag(playerTag) ?? playerTag;
+    const limit = typeof options?.limit === "number" && Number.isFinite(options.limit) ? Math.max(1, options.limit) : 2000;
+
+    return this.runAsUser(async (conn) => {
+      const rows = await conn
+        .select({ battleJson: battleHistory.battleJson })
+        .from(battleHistory)
+        .where(
+          and(
+            eq(battleHistory.userId, userId),
+            eq(battleHistory.playerTag, canonicalTag),
+            options?.since ? gte(battleHistory.battleTime, options.since) : undefined,
+          ),
+        )
+        .orderBy(desc(battleHistory.battleTime))
+        .limit(limit);
+
+      return rows.map((row: { battleJson: any }) => row.battleJson);
+    });
+  }
+
+  async pruneBattleHistory(userId: string, playerTag: string, policy: { isPro: boolean; now?: Date }): Promise<void> {
+    const canonicalTag = normalizePlayerTag(playerTag) ?? playerTag;
+
+    await this.runAsUser(async (conn) => {
+      if (policy.isPro) {
+        const now = policy.now ?? new Date();
+        const cutoff = new Date(now.getTime() - PRO_HISTORY_MAX_DAYS * 24 * 60 * 60 * 1000);
+        await conn
+          .delete(battleHistory)
+          .where(
+            and(
+              eq(battleHistory.userId, userId),
+              eq(battleHistory.playerTag, canonicalTag),
+              lt(battleHistory.battleTime, cutoff),
+            ),
+          );
+        return;
+      }
+
+      const keep = await conn
+        .select({ id: battleHistory.id })
+        .from(battleHistory)
+        .where(and(eq(battleHistory.userId, userId), eq(battleHistory.playerTag, canonicalTag)))
+        .orderBy(desc(battleHistory.battleTime))
+        .limit(FREE_BATTLE_LIMIT);
+
+      const keepIds = keep.map((row: { id: string }) => row.id).filter(Boolean);
+      if (keepIds.length === 0) return;
+
+      await conn
+        .delete(battleHistory)
+        .where(
+          and(
+            eq(battleHistory.userId, userId),
+            eq(battleHistory.playerTag, canonicalTag),
+            notInArray(battleHistory.id, keepIds),
+          ),
+        );
     });
   }
 
