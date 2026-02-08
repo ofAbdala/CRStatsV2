@@ -1,5 +1,4 @@
-// Database schema for CRStats - from javascript_log_in_with_replit and javascript_database blueprints
-import { sql } from 'drizzle-orm';
+import { sql, relations } from "drizzle-orm";
 import {
   index,
   jsonb,
@@ -12,7 +11,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from "drizzle-orm";
 
 // ============================================================================
 // SESSION & AUTH TABLES (Required by Replit Auth - DO NOT DROP)
@@ -42,16 +40,17 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 // ============================================================================
-// PROFILES TABLE (Extended user information)
+// PROFILES TABLE
 // ============================================================================
 
 export const profiles = pgTable("profiles", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   displayName: varchar("display_name"),
-  clashTag: varchar("clash_tag"), // Clash Royale player tag like #2P090J0
+  clashTag: varchar("clash_tag"),
+  defaultPlayerTag: varchar("default_player_tag"),
   region: varchar("region").default("BR"),
   language: varchar("language").default("pt"),
-  role: varchar("role").default("user"), // user | admin
+  role: varchar("role").default("user"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -64,7 +63,7 @@ export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type Profile = typeof profiles.$inferSelect;
 
 // ============================================================================
-// SUBSCRIPTIONS TABLE (Stripe billing)
+// SUBSCRIPTIONS TABLE
 // ============================================================================
 
 export const subscriptions = pgTable("subscriptions", {
@@ -72,8 +71,8 @@ export const subscriptions = pgTable("subscriptions", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
-  plan: varchar("plan").notNull().default("free"), // free | pro
-  status: varchar("status").notNull().default("inactive"), // active | inactive | canceled | past_due
+  plan: varchar("plan").notNull().default("free"),
+  status: varchar("status").notNull().default("inactive"),
   currentPeriodEnd: timestamp("current_period_end"),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -89,7 +88,7 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 
 // ============================================================================
-// GOALS TABLE (User goals/targets)
+// GOALS TABLE
 // ============================================================================
 
 export const goals = pgTable("goals", {
@@ -97,7 +96,7 @@ export const goals = pgTable("goals", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
-  type: varchar("type").notNull(), // trophies | streak | winrate | custom
+  type: varchar("type").notNull(),
   targetValue: integer("target_value").notNull(),
   currentValue: integer("current_value").default(0),
   completed: boolean("completed").default(false),
@@ -121,7 +120,7 @@ export type Goal = typeof goals.$inferSelect;
 export const favoritePlayers = pgTable("favorite_players", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  playerTag: varchar("player_tag").notNull(), // Clash Royale player tag
+  playerTag: varchar("player_tag").notNull(),
   name: varchar("name").notNull(),
   trophies: integer("trophies"),
   clan: varchar("clan"),
@@ -144,7 +143,7 @@ export const notifications = pgTable("notifications", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
-  type: varchar("type").notNull(), // info | success | warning | error
+  type: varchar("type").notNull(),
   read: boolean("read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -162,11 +161,14 @@ export type Notification = typeof notifications.$inferSelect;
 
 export const userSettings = pgTable("user_settings", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
-  theme: varchar("theme").default("dark"), // light | dark | system
+  theme: varchar("theme").default("dark"),
   preferredLanguage: varchar("preferred_language").default("pt"),
-  defaultLandingPage: varchar("default_landing_page").default("dashboard"), // dashboard | community | goals | coach
+  defaultLandingPage: varchar("default_landing_page").default("dashboard"),
   showAdvancedStats: boolean("show_advanced_stats").default(false),
   notificationsEnabled: boolean("notifications_enabled").default(true),
+  notificationsTraining: boolean("notifications_training").default(true),
+  notificationsBilling: boolean("notifications_billing").default(true),
+  notificationsSystem: boolean("notifications_system").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -177,6 +179,277 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
 });
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
+
+// ============================================================================
+// NOTIFICATION PREFERENCES TABLE
+// ============================================================================
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  training: boolean("training").notNull().default(true),
+  billing: boolean("billing").notNull().default(true),
+  system: boolean("system").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+// ============================================================================
+// PLAYER SYNC STATE TABLE
+// ============================================================================
+
+export const playerSyncState = pgTable("player_sync_state", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  lastSyncedAt: timestamp("last_synced_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPlayerSyncStateSchema = createInsertSchema(playerSyncState).omit({
+  updatedAt: true,
+});
+export type InsertPlayerSyncState = z.infer<typeof insertPlayerSyncStateSchema>;
+export type PlayerSyncState = typeof playerSyncState.$inferSelect;
+
+// ============================================================================
+// COACH MESSAGES TABLE
+// ============================================================================
+
+export const coachMessages = pgTable("coach_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: varchar("role").notNull(),
+  content: text("content").notNull(),
+  contextType: varchar("context_type"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCoachMessageSchema = createInsertSchema(coachMessages).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCoachMessage = z.infer<typeof insertCoachMessageSchema>;
+export type CoachMessage = typeof coachMessages.$inferSelect;
+
+// ============================================================================
+// PUSH ANALYSES TABLE
+// ============================================================================
+
+export const pushAnalyses = pgTable("push_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  pushStartTime: timestamp("push_start_time").notNull(),
+  pushEndTime: timestamp("push_end_time").notNull(),
+  battlesCount: integer("battles_count").notNull(),
+  wins: integer("wins").notNull(),
+  losses: integer("losses").notNull(),
+  netTrophies: integer("net_trophies").notNull(),
+  resultJson: jsonb("result_json").notNull().$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPushAnalysisSchema = createInsertSchema(pushAnalyses).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPushAnalysis = z.infer<typeof insertPushAnalysisSchema>;
+export type PushAnalysis = typeof pushAnalyses.$inferSelect;
+
+// ============================================================================
+// TRAINING PLANS TABLE
+// ============================================================================
+
+export const trainingPlans = pgTable("training_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title").notNull(),
+  source: varchar("source").notNull().default("manual"),
+  status: varchar("status").notNull().default("active"),
+  pushAnalysisId: varchar("push_analysis_id").references(() => pushAnalyses.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTrainingPlanSchema = createInsertSchema(trainingPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTrainingPlan = z.infer<typeof insertTrainingPlanSchema>;
+export type TrainingPlan = typeof trainingPlans.$inferSelect;
+
+// ============================================================================
+// TRAINING DRILLS TABLE
+// ============================================================================
+
+export const trainingDrills = pgTable("training_drills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: varchar("plan_id").notNull().references(() => trainingPlans.id, { onDelete: "cascade" }),
+  focusArea: varchar("focus_area").notNull(),
+  description: text("description").notNull(),
+  targetGames: integer("target_games").notNull(),
+  completedGames: integer("completed_games").notNull().default(0),
+  mode: varchar("mode").notNull(),
+  priority: integer("priority").notNull().default(1),
+  status: varchar("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTrainingDrillSchema = createInsertSchema(trainingDrills).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTrainingDrill = z.infer<typeof insertTrainingDrillSchema>;
+export type TrainingDrill = typeof trainingDrills.$inferSelect;
+
+// ============================================================================
+// META DECK CACHE TABLE
+// ============================================================================
+
+export const metaDecksCache = pgTable("meta_decks_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deckHash: varchar("deck_hash").notNull().unique(),
+  cards: jsonb("cards").notNull().$type<string[]>(),
+  usageCount: integer("usage_count").notNull().default(0),
+  avgTrophies: integer("avg_trophies"),
+  archetype: varchar("archetype"),
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+});
+
+export const insertMetaDeckCacheSchema = createInsertSchema(metaDecksCache).omit({
+  id: true,
+});
+export type InsertMetaDeckCache = z.infer<typeof insertMetaDeckCacheSchema>;
+export type MetaDeckCache = typeof metaDecksCache.$inferSelect;
+
+// ============================================================================
+// REQUEST ZOD SCHEMAS FOR ROUTES
+// ============================================================================
+
+const normalizedTagSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(16)
+  .regex(/^#?[A-Za-z0-9]+$/, "Invalid Clash Royale tag")
+  .transform((value) => {
+    const withoutHash = value.replace(/^#/, "").toUpperCase();
+    return `#${withoutHash}`;
+  });
+
+const nullableTagSchema = z.union([normalizedTagSchema, z.null()]);
+
+export const profileCreateInputSchema = z.object({
+  displayName: z.string().trim().min(1).max(80).optional(),
+  clashTag: nullableTagSchema.optional(),
+  defaultPlayerTag: nullableTagSchema.optional(),
+  region: z.string().trim().min(2).max(10).optional(),
+  language: z.string().trim().min(2).max(10).optional(),
+  role: z.enum(["user", "admin"]).optional(),
+});
+
+export const profileUpdateInputSchema = profileCreateInputSchema
+  .partial()
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: "At least one profile field is required",
+  });
+
+export const settingsNotificationCategoriesSchema = z.object({
+  training: z.boolean().optional(),
+  billing: z.boolean().optional(),
+  system: z.boolean().optional(),
+});
+
+export const settingsUpdateInputSchema = z
+  .object({
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    preferredLanguage: z.string().trim().min(2).max(10).optional(),
+    defaultLandingPage: z.enum(["dashboard", "community", "goals", "coach"]).optional(),
+    showAdvancedStats: z.boolean().optional(),
+    notificationsEnabled: z.boolean().optional(),
+    notificationsTraining: z.boolean().optional(),
+    notificationsBilling: z.boolean().optional(),
+    notificationsSystem: z.boolean().optional(),
+    notificationPreferences: settingsNotificationCategoriesSchema.optional(),
+  })
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: "At least one settings field is required",
+  });
+
+export const notificationPreferencesUpdateInputSchema = settingsNotificationCategoriesSchema.refine(
+  (payload) => Object.keys(payload).length > 0,
+  { message: "At least one notification preference is required" },
+);
+
+export const playerSyncRequestSchema = z.object({}).strict();
+
+export const goalCreateInputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).optional(),
+  type: z.enum(["trophies", "streak", "winrate", "custom"]),
+  targetValue: z.number().int().nonnegative(),
+  currentValue: z.number().int().nonnegative().optional(),
+  completed: z.boolean().optional(),
+  completedAt: z.coerce.date().optional(),
+});
+
+export const goalUpdateInputSchema = goalCreateInputSchema.partial().refine(
+  (payload) => Object.keys(payload).length > 0,
+  { message: "At least one goal field is required" },
+);
+
+export const favoriteCreateInputSchema = z.object({
+  playerTag: normalizedTagSchema,
+  name: z.string().trim().min(1).max(80),
+  trophies: z.number().int().nonnegative().optional(),
+  clan: z.string().trim().max(80).optional(),
+  setAsDefault: z.boolean().optional(),
+});
+
+export const coachChatInputSchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().trim().min(1),
+      }),
+    )
+    .min(1),
+  playerTag: normalizedTagSchema.optional(),
+  contextType: z.string().trim().max(50).optional(),
+});
+
+export const trainingDrillUpdateInputSchema = z
+  .object({
+    completedGames: z.number().int().nonnegative().optional(),
+    status: z.enum(["pending", "in_progress", "completed", "skipped"]).optional(),
+  })
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: "At least one drill field is required",
+  });
+
+export const trainingPlanUpdateInputSchema = z.object({
+  status: z.enum(["active", "archived", "completed"]),
+});
+
+export type ProfileCreateInput = z.infer<typeof profileCreateInputSchema>;
+export type ProfileUpdateInput = z.infer<typeof profileUpdateInputSchema>;
+export type SettingsUpdateInput = z.infer<typeof settingsUpdateInputSchema>;
+export type NotificationPreferencesUpdateInput = z.infer<typeof notificationPreferencesUpdateInputSchema>;
+export type GoalCreateInput = z.infer<typeof goalCreateInputSchema>;
+export type GoalUpdateInput = z.infer<typeof goalUpdateInputSchema>;
+export type FavoriteCreateInput = z.infer<typeof favoriteCreateInputSchema>;
+export type CoachChatInput = z.infer<typeof coachChatInputSchema>;
+export type TrainingDrillUpdateInput = z.infer<typeof trainingDrillUpdateInputSchema>;
+export type TrainingPlanUpdateInput = z.infer<typeof trainingPlanUpdateInputSchema>;
+export type PlayerSyncRequestInput = z.infer<typeof playerSyncRequestSchema>;
 
 // ============================================================================
 // RELATIONS
@@ -198,6 +471,17 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [userSettings.userId],
   }),
+  notificationPreferences: one(notificationPreferences, {
+    fields: [users.id],
+    references: [notificationPreferences.userId],
+  }),
+  syncState: one(playerSyncState, {
+    fields: [users.id],
+    references: [playerSyncState.userId],
+  }),
+  coachMessages: many(coachMessages),
+  pushAnalyses: many(pushAnalyses),
+  trainingPlans: many(trainingPlans),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -239,5 +523,52 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(users, {
     fields: [userSettings.userId],
     references: [users.id],
+  }),
+}));
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const playerSyncStateRelations = relations(playerSyncState, ({ one }) => ({
+  user: one(users, {
+    fields: [playerSyncState.userId],
+    references: [users.id],
+  }),
+}));
+
+export const coachMessagesRelations = relations(coachMessages, ({ one }) => ({
+  user: one(users, {
+    fields: [coachMessages.userId],
+    references: [users.id],
+  }),
+}));
+
+export const pushAnalysesRelations = relations(pushAnalyses, ({ one }) => ({
+  user: one(users, {
+    fields: [pushAnalyses.userId],
+    references: [users.id],
+  }),
+}));
+
+export const trainingPlansRelations = relations(trainingPlans, ({ one, many }) => ({
+  user: one(users, {
+    fields: [trainingPlans.userId],
+    references: [users.id],
+  }),
+  pushAnalysis: one(pushAnalyses, {
+    fields: [trainingPlans.pushAnalysisId],
+    references: [pushAnalyses.id],
+  }),
+  drills: many(trainingDrills),
+}));
+
+export const trainingDrillsRelations = relations(trainingDrills, ({ one }) => ({
+  plan: one(trainingPlans, {
+    fields: [trainingDrills.planId],
+    references: [trainingPlans.id],
   }),
 }));

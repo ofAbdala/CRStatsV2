@@ -2,8 +2,11 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Swords, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
 import heroBg from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.png";
+import { useLocale } from "@/hooks/use-locale";
 
 export default function LandingPage() {
+  const { t } = useLocale();
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Navbar */}
@@ -17,17 +20,17 @@ export default function LandingPage() {
           </div>
           
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Funcionalidades</a>
-            <a href="#how-it-works" className="hover:text-foreground transition-colors">Como funciona</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Preços</a>
+            <a href="#features" className="hover:text-foreground transition-colors">{t("pages.landing.nav.features")}</a>
+            <a href="#how-it-works" className="hover:text-foreground transition-colors">{t("pages.landing.nav.howItWorks")}</a>
+            <a href="#pricing" className="hover:text-foreground transition-colors">{t("pages.landing.nav.pricing")}</a>
           </nav>
 
           <div className="flex items-center gap-4">
             <a href="/api/login">
-              <Button variant="ghost" className="hidden md:flex">Entrar</Button>
+              <Button variant="ghost" className="hidden md:flex">{t("nav.login")}</Button>
             </a>
             <a href="/api/login">
-              <Button className="font-bold">Começar Grátis</Button>
+              <Button className="font-bold">{t("landing.hero.cta")}</Button>
             </a>
           </div>
         </div>
@@ -48,28 +51,28 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <Zap className="w-3 h-3" />
-            IA Coach v1.0 Disponível
+            {t("pages.landing.badge")}
           </div>
           
           <h1 className="font-display text-5xl md:text-7xl font-black tracking-tight mb-6 bg-gradient-to-r from-white via-white to-white/50 bg-clip-text text-transparent animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-            Domine a Arena com<br />
-            <span className="text-primary block mt-2">Coach de IA</span>
+            {t("pages.landing.heroTitleLine1")}<br />
+            <span className="text-primary block mt-2">{t("pages.landing.heroTitleLine2")}</span>
           </h1>
           
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            Analise suas batalhas, descubra seus erros e receba dicas personalizadas para subir de troféus mais rápido do que nunca.
+            {t("pages.landing.heroDescription")}
           </p>
           
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
             <Link href="/auth?signup=true">
               <Button size="lg" className="h-12 px-8 text-base font-bold shadow-lg shadow-primary/20 interactive-hover">
-                Analisar meu Perfil
+                {t("pages.landing.primaryCta")}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
             <Link href="#features">
               <Button variant="outline" size="lg" className="h-12 px-8 text-base interactive-hover">
-                Ver Funcionalidades
+                {t("pages.landing.secondaryCta")}
               </Button>
             </Link>
           </div>
@@ -80,9 +83,9 @@ export default function LandingPage() {
       <section id="features" className="py-24 bg-card/30 border-y border-white/5">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Tudo que você precisa para evoluir</h2>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">{t("pages.landing.features.title")}</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Nossa IA analisa cada movimento seu para entregar insights que coaches humanos levariam horas para encontrar.
+              {t("pages.landing.features.subtitle")}
             </p>
           </div>
 
@@ -91,8 +94,8 @@ export default function LandingPage() {
               <div className="cursor-pointer">
                 <FeatureCard 
                   icon={<TrendingUp className="w-6 h-6 text-primary" />}
-                  title="Análise de Winrate"
-                  description="Entenda quais cartas e decks estão funcionando melhor para você em cada meta."
+                  title={t("pages.landing.features.winrateTitle")}
+                  description={t("pages.landing.features.winrateDescription")}
                 />
               </div>
             </Link>
@@ -100,8 +103,8 @@ export default function LandingPage() {
               <div className="cursor-pointer">
                 <FeatureCard 
                   icon={<ShieldCheck className="w-6 h-6 text-secondary" />}
-                  title="Coach de IA 24/7"
-                  description="Converse com nosso coach inteligente para receber dicas específicas sobre matchups difíceis."
+                  title={t("pages.landing.features.coachTitle")}
+                  description={t("pages.landing.features.coachDescription")}
                 />
               </div>
             </Link>
@@ -109,8 +112,8 @@ export default function LandingPage() {
               <div className="cursor-pointer">
                 <FeatureCard 
                   icon={<Swords className="w-6 h-6 text-purple-400" />}
-                  title="Revisão de Batalhas"
-                  description="Identifique exatamente onde você errou em suas últimas derrotas e como corrigir."
+                  title={t("pages.landing.features.reviewTitle")}
+                  description={t("pages.landing.features.reviewDescription")}
                 />
               </div>
             </Link>
@@ -122,9 +125,9 @@ export default function LandingPage() {
       <section id="pricing" className="py-24 bg-background">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Planos Simples</h2>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">{t("pages.landing.pricing.title")}</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Comece grátis e evolua conforme suas necessidades.
+              {t("pages.landing.pricing.subtitle")}
             </p>
           </div>
 
@@ -132,50 +135,50 @@ export default function LandingPage() {
             {/* Free Plan */}
             <div className="p-8 rounded-2xl bg-card border border-border flex flex-col">
               <div className="mb-4">
-                <h3 className="text-xl font-bold font-display">Iniciante</h3>
-                <div className="text-3xl font-bold mt-2">R$ 0 <span className="text-sm font-normal text-muted-foreground">/mês</span></div>
+                <h3 className="text-xl font-bold font-display">{t("pages.landing.pricing.freeTitle")}</h3>
+                <div className="text-3xl font-bold mt-2">R$ 0 <span className="text-sm font-normal text-muted-foreground">/{t("common.month")}</span></div>
               </div>
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> 1 Perfil de Jogador
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.freeFeature1")}
                 </li>
                 <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> 5 Mensagens de Coach/dia
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.freeFeature2")}
                 </li>
                 <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> Últimas 10 batalhas
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.freeFeature3")}
                 </li>
               </ul>
               <Link href="/auth?signup=true">
-                <Button variant="outline" className="w-full interactive-hover">Começar Grátis</Button>
+                <Button variant="outline" className="w-full interactive-hover">{t("landing.hero.cta")}</Button>
               </Link>
             </div>
 
             {/* Pro Plan */}
             <div className="p-8 rounded-2xl bg-gradient-to-br from-card to-primary/5 border border-primary/50 flex flex-col relative overflow-hidden interactive-hover">
               <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
-                POPULAR
+                {t("pages.landing.pricing.popular")}
               </div>
               <div className="mb-4">
-                <h3 className="text-xl font-bold font-display text-primary">Pro Player</h3>
-                <div className="text-3xl font-bold mt-2">R$ 19,90 <span className="text-sm font-normal text-muted-foreground">/mês</span></div>
+                <h3 className="text-xl font-bold font-display text-primary">{t("pages.landing.pricing.proTitle")}</h3>
+                <div className="text-3xl font-bold mt-2">R$ 19,90 <span className="text-sm font-normal text-muted-foreground">/{t("common.month")}</span></div>
               </div>
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-center gap-3 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> Perfis Ilimitados
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.proFeature1")}
                 </li>
                 <li className="flex items-center gap-3 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> Coach IA Ilimitado
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.proFeature2")}
                 </li>
                 <li className="flex items-center gap-3 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> Histórico de 60 dias
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.proFeature3")}
                 </li>
                 <li className="flex items-center gap-3 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-primary" /> Treinos Personalizados
+                  <CheckCircle2 className="w-4 h-4 text-primary" /> {t("pages.landing.pricing.proFeature4")}
                 </li>
               </ul>
               <Link href="/auth?signup=true">
-                <Button className="w-full font-bold shadow-lg shadow-primary/20 interactive-hover">Assinar Pro</Button>
+                <Button className="w-full font-bold shadow-lg shadow-primary/20 interactive-hover">{t("pages.landing.pricing.proCta")}</Button>
               </Link>
             </div>
           </div>
@@ -189,13 +192,13 @@ export default function LandingPage() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-3xl rounded-full -mr-32 -mt-32" />
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/20 blur-3xl rounded-full -ml-32 -mb-32" />
             
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-6 relative z-10">Pronto para chegar na Rota das Lendas?</h2>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-6 relative z-10">{t("pages.landing.finalCta.title")}</h2>
             <p className="text-muted-foreground max-w-xl mx-auto mb-8 relative z-10">
-              Junte-se a milhares de jogadores que já estão subindo de arena com o CRStats.
+              {t("pages.landing.finalCta.subtitle")}
             </p>
             <Link href="/auth?signup=true">
               <Button size="lg" className="font-bold h-14 px-10 text-lg relative z-10 interactive-hover shadow-lg shadow-primary/20">
-                Começar Agora Grátis
+                {t("pages.landing.finalCta.button")}
               </Button>
             </Link>
           </div>
@@ -211,9 +214,9 @@ export default function LandingPage() {
             <span>© 2025</span>
           </div>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-foreground">Termos</a>
-            <a href="#" className="hover:text-foreground">Privacidade</a>
-            <a href="#" className="hover:text-foreground">Twitter</a>
+            <a href="#" className="hover:text-foreground">{t("pages.landing.footer.terms")}</a>
+            <a href="#" className="hover:text-foreground">{t("pages.landing.footer.privacy")}</a>
+            <a href="#" className="hover:text-foreground">{t("pages.landing.footer.twitter")}</a>
           </div>
         </div>
       </footer>

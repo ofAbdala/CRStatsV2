@@ -36,7 +36,9 @@
     "billing": "Subscription",
     "profile": "My Profile",
     "logout": "Logout",
-    "login": "Login"
+    "login": "Login",
+    "myProfile": "My Profile",
+    "notifications": "Notifications"
   },
   "landing": {
     "hero": {
@@ -153,7 +155,65 @@
       "language": "Language",
       "notifications": "Notifications",
       "notificationsEnabled": "Enabled",
-      "notificationsDisabled": "Disabled"
+      "notificationsDisabled": "Disabled",
+      "appearanceTitle": "Appearance",
+      "appearanceDescription": "Adjust visual app preferences.",
+      "darkMode": "Dark mode",
+      "languageTitle": "Language",
+      "languageDescription": "Set the primary app language.",
+      "languagePt": "Português (Brasil)",
+      "languageEn": "English (US)",
+      "notificationsTitle": "Notifications",
+      "notificationsDescription": "Choose which categories you want to receive.",
+      "systemNotifications": "System notifications",
+      "trainingNotifications": "Training notifications",
+      "billingNotifications": "Billing notifications",
+      "save": "Save preferences"
+    },
+    "pageTitle": "Settings",
+    "pageSubtitle": "Manage account, billing, and preferences.",
+    "tabs": {
+      "account": "Account",
+      "billing": "Billing",
+      "preferences": "Preferences"
+    },
+    "account": {
+      "title": "Account details",
+      "subtitle": "Update your profile and player tag.",
+      "emailUnavailable": "Email unavailable",
+      "accountProvider": "Connected authentication account",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "How should we call you",
+      "clashTag": "Clash Royale player tag",
+      "clashTagPlaceholder": "2P090J0",
+      "tagValidatedHint": "Tag validated successfully.",
+      "tagValidationHint": "Validate your tag before saving.",
+      "save": "Save account",
+      "dangerTitle": "Danger zone",
+      "logoutTitle": "Sign out",
+      "logoutDescription": "Log out from this device."
+    },
+    "billing": {
+      "currentPlan": "Current plan",
+      "description": "Quick overview of plan and billing history.",
+      "upgrade": "Manage plan",
+      "cycleLabel": "Cycle",
+      "monthly": "Monthly",
+      "nextRenewal": "Next renewal",
+      "invoiceHistory": "Invoice history",
+      "emptyInvoices": "No invoices available."
+    },
+    "toast": {
+      "emptyTagTitle": "Tag required",
+      "emptyTagDescription": "Enter a tag before validating.",
+      "tagValidatedTitle": "Tag validated",
+      "tagValidatedDescription": "Player found: {name}",
+      "tagInvalidTitle": "Invalid tag",
+      "tagInvalidDescription": "Could not validate the provided tag.",
+      "updateSuccess": "Settings updated successfully.",
+      "updateError": "Failed to update settings: {message}",
+      "preferencesUpdateSuccess": "Preferences updated successfully.",
+      "preferencesUpdateError": "Failed to update preferences: {message}"
     }
   },
   "profile": {
@@ -214,5 +274,501 @@
     "playerNotFound": "Player not found",
     "invalidTag": "Invalid tag",
     "networkError": "Connection error"
+  },
+  "layout": {
+    "defaultPlayerName": "CR Player",
+    "planFree": "FREE Plan",
+    "planPro": "PRO Plan",
+    "proBadge": "PRO",
+    "unlimitedAccess": "Unlimited access to PRO features.",
+    "freePlanHint": "Upgrade to unlock advanced analysis, coach, and full training.",
+    "upgrade": "Upgrade",
+    "viewProfile": "View profile"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error happened in this area.",
+    "retry": "Retry",
+    "reload": "Reload page",
+    "showDetails": "Show technical details",
+    "hideDetails": "Hide technical details",
+    "context": {
+      "global": "Global application failure.",
+      "dashboard": "Failed to render dashboard.",
+      "me": "Failed to render player profile.",
+      "coach": "Failed to render AI Coach.",
+      "training": "Failed to render training center.",
+      "billing": "Failed to render billing.",
+      "notifications": "Failed to render notifications."
+    }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "We could not find the requested content."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "{count} notification(s)",
+    "unreadBadge": "{count} unread",
+    "loading": "Loading notifications...",
+    "listTitle": "Notification list",
+    "emptyTitle": "No notifications",
+    "emptyDescription": "You're all caught up. New alerts will appear here.",
+    "errorTitle": "Failed to load notifications",
+    "errorDescription": "Could not fetch your notifications.",
+    "markRead": "Mark as read",
+    "markAllRead": "Mark all as read",
+    "clearAll": "Clear all",
+    "clearConfirm": "Are you sure you want to remove all notifications?",
+    "openPage": "Open notifications page",
+    "unread": "Unread",
+    "read": "Read",
+    "toast": {
+      "markReadErrorTitle": "Failed to mark notification",
+      "markAllReadSuccessTitle": "Notifications marked as read",
+      "markAllReadErrorTitle": "Failed to mark all as read",
+      "clearSuccessTitle": "Notifications cleared",
+      "clearErrorTitle": "Failed to clear notifications"
+    }
+  },
+  "components": {
+    "pushAnalysis": {
+      "title": "Push analysis",
+      "winLoss": "{wins}W / {losses}L",
+      "netTrophies": "{value} trophies",
+      "matches": "{count} matches",
+      "minutes": "{value} min",
+      "summaryTitle": "Summary",
+      "strengthsTitle": "Strengths",
+      "mistakesTitle": "Mistakes",
+      "recommendationsTitle": "Recommendations",
+      "emptyStrengths": "No strengths detected.",
+      "emptyMistakes": "No mistakes detected.",
+      "emptyRecommendations": "No recommendations available.",
+      "tilt": {
+        "high": "High tilt",
+        "medium": "Moderate tilt",
+        "none": "Controlled tilt"
+      }
+    }
+  },
+  "apiErrors": {
+    "codes": {
+      "unauthorized": "You must be authenticated.",
+      "validation": "Invalid request payload.",
+      "playerSyncFailed": "Failed to sync player data.",
+      "noClashTag": "No Clash Royale tag linked to profile.",
+      "coachLimitReached": "You reached the FREE daily Coach limit.",
+      "coachChatFailed": "Temporary failure while processing Coach message.",
+      "noUserMessage": "No user message was sent.",
+      "proRequired": "This feature requires PRO.",
+      "noPushSession": "No valid push session found.",
+      "pushAnalysisFailed": "Failed to generate push analysis.",
+      "pushAnalysisFetchFailed": "Failed to load push analysis.",
+      "noPushAnalysis": "No push analysis available.",
+      "drillUpdateFailed": "Failed to update training drill.",
+      "trainingPlanUpdateFailed": "Failed to update training plan.",
+      "trainingPlanNotFound": "Training plan not found.",
+      "clashPlayerFetchFailed": "Failed to fetch player from Clash API.",
+      "clashBattlesFetchFailed": "Failed to fetch battles from Clash API.",
+      "clashCardsFetchFailed": "Failed to fetch cards from Clash API.",
+      "stripeNotConfigured": "Stripe is not configured in this environment.",
+      "priceIdRequired": "Price ID is required.",
+      "invalidPriceId": "Invalid checkout price ID.",
+      "noSubscription": "No active subscription found.",
+      "checkoutFailed": "Failed to start checkout.",
+      "portalFailed": "Failed to open billing portal.",
+      "invoicesFailed": "Failed to load invoices.",
+      "notificationsFetchFailed": "Failed to load notifications.",
+      "notificationReadFailed": "Failed to mark notification as read.",
+      "notificationsMarkAllReadFailed": "Failed to mark all notifications.",
+      "notificationsClearFailed": "Failed to clear notifications.",
+      "settingsUpdateFailed": "Failed to update settings.",
+      "settingsFetchFailed": "Failed to load settings.",
+      "preferencesUpdateFailed": "Failed to update notification preferences."
+    }
+  },
+  "pages": {
+    "landing": {
+      "badge": "AI Coach v1.0 available",
+      "nav": {
+        "features": "Features",
+        "howItWorks": "How it works",
+        "pricing": "Pricing"
+      },
+      "heroTitleLine1": "Master the Arena with",
+      "heroTitleLine2": "AI Coach",
+      "heroDescription": "Analyze your battles, uncover mistakes, and get personalized advice to climb trophies faster.",
+      "primaryCta": "Analyze my profile",
+      "secondaryCta": "See features",
+      "features": {
+        "title": "Everything you need to improve",
+        "subtitle": "Our AI reviews every move and turns it into actionable insights.",
+        "winrateTitle": "Winrate analysis",
+        "winrateDescription": "Understand which cards and decks work best for you.",
+        "coachTitle": "24/7 AI Coach",
+        "coachDescription": "Get specific tips for difficult matchups.",
+        "reviewTitle": "Battle review",
+        "reviewDescription": "Find exactly where you made mistakes and how to fix them."
+      },
+      "pricing": {
+        "title": "Simple plans",
+        "subtitle": "Start free and scale as you improve.",
+        "freeTitle": "Starter",
+        "freeFeature1": "1 player profile",
+        "freeFeature2": "5 coach messages/day",
+        "freeFeature3": "Last 10 battles",
+        "popular": "POPULAR",
+        "proTitle": "Pro Player",
+        "proFeature1": "Unlimited profiles",
+        "proFeature2": "Unlimited AI Coach",
+        "proFeature3": "60-day history",
+        "proFeature4": "Personalized training",
+        "proCta": "Subscribe PRO"
+      },
+      "finalCta": {
+        "title": "Ready for Path of Legends?",
+        "subtitle": "Join players improving with data-driven analysis and coaching.",
+        "button": "Start free now"
+      },
+      "footer": {
+        "terms": "Terms",
+        "privacy": "Privacy",
+        "twitter": "Twitter"
+      }
+    },
+    "onboarding": {
+      "title": "Connect your profile",
+      "subtitle": "We need your player tag to sync and analyze your battles.",
+      "searchTitle": "Find player",
+      "searchDescription": "You can find your tag in-game below your player name.",
+      "playerTagLabel": "Player tag",
+      "playerTagHint": "Ex: #2P090J0 or 2P090J0",
+      "searchButton": "Search profile",
+      "searching": "Fetching data from Supercell...",
+      "tagInvalidLength": "Tag must have at least 3 characters after #.",
+      "tagPrefix": "Tag: {tag}",
+      "trophiesCount": "{count} trophies",
+      "arenaFallback": "Arena",
+      "clanPrefix": "Clan: {name}",
+      "notMe": "Not me",
+      "downloadPrompt": "Don’t have the game installed?",
+      "downloadLink": "Download Clash Royale",
+      "toast": {
+        "profileConnectedTitle": "Profile connected",
+        "profileConnectedDescription": "Loading your stats...",
+        "profileSaveErrorTitle": "Failed to save profile"
+      }
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Consolidated view of your recent performance.",
+      "sync": "Sync",
+      "noSync": "No sync yet",
+      "lastUpdate": "Last update: {time}",
+      "partialSync": "Some data could not be refreshed in this sync.",
+      "recentBattlesTitle": "Recent battles",
+      "opponentFallback": "Opponent",
+      "goalsTitle": "Goals",
+      "manageGoals": "Manage goals",
+      "favoritesTitle": "Favorites",
+      "emptyBattles": "No recent battles.",
+      "emptyGoals": "No active goals.",
+      "emptyFavorites": "No favorite players yet.",
+      "stats": {
+        "trophies": "Trophies",
+        "winRate": "Win rate",
+        "wins": "Wins",
+        "losses": "Losses"
+      },
+      "tilt": {
+        "high": "High tilt",
+        "medium": "Moderate tilt",
+        "none": "Controlled tilt"
+      }
+    },
+    "me": {
+      "title": "My profile",
+      "noTag": "No linked tag",
+      "noSync": "No sync yet",
+      "lastUpdate": "Last update: {time}",
+      "sync": "Sync",
+      "validPush": "Valid push ({count} matches)",
+      "recentSession": "Recent session ({count} matches)",
+      "minutes": "{value} min",
+      "session": {
+        "valid": "Push session",
+        "simple": "Simple session"
+      },
+      "singleSession": "Single-match session",
+      "matchesBadge": "{count} matches",
+      "emptyBattles": "No battles for selected period.",
+      "emptyGoals": "No active goals.",
+      "activeGoals": "Active goals",
+      "viewPro": "View PRO features",
+      "tabs": {
+        "history": "History",
+        "goals": "Goals"
+      },
+      "filters": {
+        "today": "Today",
+        "season": "Season"
+      },
+      "stats": {
+        "trophies": "Trophies",
+        "winRate": "Win rate",
+        "winLoss": "W/L",
+        "matches": "Matches"
+      },
+      "tilt": {
+        "high": "High tilt",
+        "medium": "Moderate tilt",
+        "none": "Controlled tilt"
+      }
+    },
+    "coach": {
+      "subtitle": "Chat with AI Coach using real battle context.",
+      "chatTitle": "Coach chat",
+      "inputPlaceholder": "Ask about matchups, cycle, tilt, or battle decisions...",
+      "welcome": "Hi! I’m your AI Coach. Tell me about your latest session.",
+      "youShort": "You",
+      "planPro": "PRO plan",
+      "planFree": "FREE plan",
+      "freeLimitDescription": "FREE users have a daily Coach message limit.",
+      "remainingToday": "{count} message(s) remaining today.",
+      "limitReached": "You reached the FREE daily Coach limit.",
+      "upgradeCta": "Upgrade",
+      "upgradeUnlimited": "Upgrade for unlimited usage",
+      "providerTemporaryError": "AI provider is temporarily unavailable.",
+      "pushAnalysisTitle": "Push analysis",
+      "generateAnalysis": "Generate analysis",
+      "generating": "Generating...",
+      "loadingLatestAnalysis": "Loading latest analysis...",
+      "noSavedAnalysis": "No saved analysis yet.",
+      "pushAnalysisError": "Failed to generate push analysis.",
+      "quickPrompts": {
+        "lastLoss": "Why did I lose my last match?",
+        "reduceTilt": "How can I reduce tilt after back-to-back losses?",
+        "deckAdjust": "How should I adjust my deck for the current meta?"
+      },
+      "latestAnalysisErrorTitle": "Failed to load latest analysis"
+    },
+    "training": {
+      "title": "Training center",
+      "subtitle": "Drill plan powered by push analysis.",
+      "loading": "Loading training data...",
+      "planPro": "PRO plan",
+      "planFree": "FREE plan",
+      "proOnly": "Full guided training is a PRO feature.",
+      "upgradeCta": "Upgrade",
+      "activePlanTitle": "Active plan",
+      "status": {
+        "active": "Active",
+        "pending": "Pending",
+        "inProgress": "In progress",
+        "completed": "Completed"
+      },
+      "planProgress": "Plan progress",
+      "drillMeta": "Mode: {mode} • Priority {priority}",
+      "drillProgress": "{completed}/{target} matches",
+      "incrementDrill": "+1 match",
+      "markDrillCompleted": "Mark completed",
+      "completingPlan": "Completing plan...",
+      "markPlanCompleted": "Mark plan as completed",
+      "finishAllDrillsHint": "Complete all drills to finish the plan.",
+      "completedStateTitle": "Plan completed",
+      "completedStateDescription": "You already completed \"{title}\". Generate a new analysis to start next cycle.",
+      "generatingAnalysis": "Generating analysis...",
+      "generatingPlan": "Generating plan...",
+      "generateNewAnalysis": "Generate new push analysis",
+      "generateNewPlan": "Generate new plan",
+      "emptyStateTitle": "No active plan",
+      "emptyStateDescription": "Start by generating an analysis, then build your custom drill plan.",
+      "generateAnalysis": "Generate push analysis",
+      "generatePlan": "Generate training plan",
+      "analysisRequiredHint": "You need a push analysis before generating a plan.",
+      "pushAnalysisTitle": "Push analysis",
+      "pushAnalysisDescription": "Generate an analysis to feed your next training plan.",
+      "executionTipTitle": "Execution tip",
+      "executionTip1": "Run drills in short 3–5 match blocks to reduce variance.",
+      "executionTip2": "If high tilt appears, pause after 2 consecutive losses.",
+      "errors": {
+        "loadData": "Failed to load training data.",
+        "generateAnalysis": "Failed to generate analysis.",
+        "generatePlan": "Failed to generate plan.",
+        "updateDrill": "Failed to update drill.",
+        "completePlan": "Failed to complete plan.",
+        "loadTitle": "Failed to load training data"
+      },
+      "toast": {
+        "analysisGeneratedTitle": "Analysis generated",
+        "analysisGeneratedDescription": "Push analysis was updated successfully.",
+        "analysisGenerateErrorTitle": "Failed to generate analysis",
+        "planCreatedTitle": "Plan created",
+        "planCreatedDescription": "Plan \"{title}\" created successfully.",
+        "planCreateErrorTitle": "Failed to generate plan",
+        "drillUpdateErrorTitle": "Failed to update drill",
+        "planCompletedTitle": "Plan completed",
+        "planCompletedDescription": "Great job! Your plan is complete.",
+        "planCompleteErrorTitle": "Failed to complete plan"
+      }
+    },
+    "billing": {
+      "title": "Billing",
+      "subtitle": "Manage your PRO plan, renewal, and invoice history.",
+      "errorTitle": "Failed to load billing data",
+      "loadingSubscription": "Loading subscription...",
+      "planTitle": "Current plan",
+      "planActive": "PRO active",
+      "planFree": "FREE plan",
+      "subscribe": "Subscribe PRO",
+      "manage": "Manage subscription",
+      "renewal": {
+        "none": "No active renewal",
+        "cancelAt": "Cancellation scheduled for {date}",
+        "nextAt": "Renews on {date}"
+      },
+      "features": {
+        "coach": "Unlimited AI Coach",
+        "pushAnalysis": "Advanced push analysis",
+        "training": "Full training center",
+        "portal": "Stripe management portal"
+      },
+      "status": {
+        "title": "Subscription status",
+        "plan": "Plan",
+        "status": "Status",
+        "nextCycle": "Next cycle",
+        "cancelAtEnd": "Cancel at period end",
+        "freeFallback": "free",
+        "inactiveFallback": "inactive"
+      },
+      "invoices": {
+        "title": "Invoice history",
+        "loading": "Loading invoices...",
+        "empty": "No invoices available.",
+        "open": "Open",
+        "unknownStatus": "unknown",
+        "table": {
+          "date": "Date",
+          "status": "Status",
+          "amount": "Amount paid",
+          "period": "Period",
+          "actions": "Actions"
+        }
+      },
+      "errors": {
+        "load": "Failed to load billing data.",
+        "checkout": "Failed to start checkout.",
+        "portal": "Failed to open billing portal."
+      },
+      "toast": {
+        "activatedTitle": "Subscription activated",
+        "activatedDescription": "Your PRO plan is active.",
+        "canceledTitle": "Checkout canceled",
+        "canceledDescription": "You can try again anytime.",
+        "checkoutErrorTitle": "Failed to start checkout",
+        "portalErrorTitle": "Failed to open portal"
+      }
+    },
+    "decks": {
+      "title": "Decks & meta",
+      "subtitle": "Your real sync decks + meta decks with predictable caching.",
+      "refreshSync": "Refresh sync",
+      "tabs": {
+        "myDecks": "My decks",
+        "metaDecks": "Meta decks"
+      },
+      "loadingMyDecks": "Loading player decks...",
+      "emptyMyDecks": "No decks found in recent history.",
+      "deckIndex": "Deck #{index}",
+      "mainDeckBadge": "Main",
+      "matches": "{count} matches",
+      "netTrophies": "{value} trophies",
+      "avgElixir": "{value} elixir",
+      "staleCache": "Showing stale meta cache because external refresh failed.",
+      "loadingMetaDecks": "Loading meta decks...",
+      "metaErrorTitle": "Failed to load meta decks",
+      "metaErrorDescription": "Could not load meta decks.",
+      "emptyMetaDecks": "No meta data available right now.",
+      "metaDeckFallback": "Meta deck",
+      "estimatedWr": "{value}% estimated WR",
+      "sampleSize": "sample {value}",
+      "usageCount": "usage {value}",
+      "avgTrophies": "{value} avg trophies"
+    },
+    "community": {
+      "title": "Community",
+      "subtitle": "Public player and clan rankings with cross links.",
+      "tabs": {
+        "players": "Top players",
+        "clans": "Top clans"
+      },
+      "playersRankingTitle": "Player ranking",
+      "loadingPlayers": "Loading player ranking...",
+      "playersErrorTitle": "Failed to load player ranking",
+      "playersErrorDescription": "Could not load player ranking.",
+      "emptyPlayers": "No ranking data at the moment.",
+      "trophiesLabel": "trophies",
+      "clansRankingTitle": "Clan ranking",
+      "loadingClans": "Loading clan ranking...",
+      "clansErrorTitle": "Failed to load clan ranking",
+      "clansErrorDescription": "Could not load clan ranking.",
+      "emptyClans": "No clan data at the moment.",
+      "clanScoreLine": "Score {score} • {members} members",
+      "viewMembers": "View members",
+      "publicClanTitle": "Public clan {tag}",
+      "loadingPublicClan": "Loading public clan data...",
+      "publicClanErrorTitle": "Failed to load public clan",
+      "publicClanErrorDescription": "Could not load public clan data.",
+      "clanFallback": "Clan",
+      "publicClanMeta": "{tag} • {members} members",
+      "partialMembers": "Partial member data. {reason}",
+      "externalUnavailable": "External source unavailable.",
+      "emptyMembers": "No members available for this clan.",
+      "memberLine": "{tag} • {role}",
+      "memberFallbackRole": "member"
+    },
+    "publicProfile": {
+      "backToCommunity": "Back to community",
+      "loading": "Loading public profile...",
+      "errorTitle": "Failed to load public profile",
+      "errorDescription": "Could not load public profile for {tag}.",
+      "playerFallback": "Player",
+      "arenaFallback": "Unknown arena",
+      "stats": {
+        "trophies": "Trophies",
+        "best": "Best",
+        "winRate": "Win rate",
+        "winLoss": "W/L"
+      },
+      "recentHistoryTitle": "Recent history",
+      "emptyBattles": "No recent battles available.",
+      "battleLine": "{result} vs {opponent}",
+      "coachCtaTitle": "Want tactical analysis for this player?",
+      "coachCtaDescription": "Use AI Coach to compare loss patterns and adjustments.",
+      "openCoach": "Open Coach"
+    },
+    "profile": {
+      "title": "My profile",
+      "subtitle": "Manage your account and subscription",
+      "personalDataTitle": "Personal data",
+      "changePhoto": "Change photo",
+      "displayName": "Display name",
+      "email": "Email",
+      "saveChanges": "Save changes",
+      "clashAccountTitle": "Clash Royale account",
+      "clashAccountDescription": "This is the account currently being monitored.",
+      "disconnect": "Disconnect",
+      "currentPlanTitle": "Current plan",
+      "freeBadge": "FREE",
+      "freePlanDescription": "You are on the basic free plan.",
+      "coachDailyMessages": "Daily Coach messages",
+      "proBenefitsTitle": "PRO benefits",
+      "proBenefit1": "Unlimited AI Coach",
+      "proBenefit2": "Full battle history",
+      "proBenefit3": "Advanced deck analysis",
+      "upgradeCta": "Upgrade to PRO"
+    }
   }
 }

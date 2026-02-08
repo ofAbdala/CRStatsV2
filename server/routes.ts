@@ -1,5 +1,5 @@
 // From javascript_log_in_with_replit blueprint
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import { type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
@@ -7,131 +7,219 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards, getPlayerRankings, getClanRankings, getClanByTag, getClanMembers, getTopPlayersInLocation } from "./clashRoyaleApi";
 import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
-import { getStripePublishableKey, getStripeSecretKey } from "./stripeClient";
+import { getStripePublishableKey, getStripeSecretKey, getUncachableStripeClient } from "./stripeClient";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { PRICING } from "@shared/pricing";
+import {
+  coachChatInputSchema,
+  favoriteCreateInputSchema,
+  goalCreateInputSchema,
+  goalUpdateInputSchema,
+  notificationPreferencesUpdateInputSchema,
+  playerSyncRequestSchema,
+  profileCreateInputSchema,
+  profileUpdateInputSchema,
+  settingsUpdateInputSchema,
+  trainingDrillUpdateInputSchema,
+  trainingPlanUpdateInputSchema,
+} from "@shared/schema";
+import {
+  type PushSession,
+  computeConsecutiveLosses,
+  computeGoalAutoProgress,
+  computePushSessions,
+  computeTiltLevel,
+  evaluateFreeCoachLimit,
+} from "./domain/syncRules";
 
 const FREE_DAILY_LIMIT = 5;
+const PRO_BRL_MONTHLY_PRICE_ID = PRICING.BRL.monthlyPriceId;
 
-function computeTiltLevel(battles: any[]): 'high' | 'medium' | 'none' {
-  if (!battles || battles.length === 0) return 'none';
-  
-  const last10 = battles.slice(0, 10);
-  
-  let wins = 0;
-  let losses = 0;
-  let netTrophies = 0;
-  let consecutiveLosses = 0;
-  let maxConsecutiveLosses = 0;
-  
-  for (const battle of last10) {
-    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    const trophyChange = battle.team?.[0]?.trophyChange || 0;
-    
-    if (isVictory) {
-      wins++;
-      consecutiveLosses = 0;
-    } else {
-      losses++;
-      consecutiveLosses++;
-      maxConsecutiveLosses = Math.max(maxConsecutiveLosses, consecutiveLosses);
-    }
-    netTrophies += trophyChange;
-  }
-  
-  const winRate = last10.length > 0 ? (wins / last10.length) * 100 : 50;
-  
-  if (maxConsecutiveLosses >= 3 || (winRate < 40 && netTrophies <= -60)) {
-    return 'high';
-  }
-  
-  if (winRate >= 40 && winRate <= 50 && netTrophies < 0) {
-    return 'medium';
-  }
-  
-  return 'none';
+type ApiProvider = "internal" | "replit-oidc" | "clash-royale" | "stripe" | "openai";
+
+interface ApiErrorPayload {
+  code: string;
+  message: string;
+  details?: unknown;
+  requestId?: string;
 }
 
-interface PushSession {
-  startTime: Date;
-  endTime: Date;
-  battles: any[];
-  wins: number;
-  losses: number;
-  winRate: number;
-  netTrophies: number;
+interface SyncErrorItem {
+  source: "profile" | "player" | "battlelog" | "goals";
+  code: string;
+  message: string;
+  status?: number;
 }
 
-function computePushSessions(battles: any[]): PushSession[] {
-  if (!battles || battles.length < 2) return [];
-  
-  const sortedBattles = [...battles].sort((a, b) => 
-    new Date(b.battleTime).getTime() - new Date(a.battleTime).getTime()
+function getUserId(req: any): string | null {
+  return req?.user?.claims?.sub ?? null;
+}
+
+function logApiContext(
+  route: string,
+  userId: string | null,
+  provider: ApiProvider,
+  status: number,
+  requestId?: string,
+) {
+  console.info(
+    JSON.stringify({
+      route,
+      userId: userId ?? "anonymous",
+      provider,
+      status,
+      requestId,
+      at: new Date().toISOString(),
+    }),
   );
-  
-  const sessions: PushSession[] = [];
-  let currentSession: any[] = [];
-  
-  for (let i = 0; i < sortedBattles.length; i++) {
-    const battle = sortedBattles[i];
-    const battleTime = new Date(battle.battleTime);
-    
-    if (currentSession.length === 0) {
-      currentSession.push(battle);
-    } else {
-      const lastBattle = currentSession[currentSession.length - 1];
-      const lastBattleTime = new Date(lastBattle.battleTime);
-      const timeDiff = lastBattleTime.getTime() - battleTime.getTime();
-      const thirtyMinutes = 30 * 60 * 1000;
-      
-      if (timeDiff <= thirtyMinutes) {
-        currentSession.push(battle);
-      } else {
-        if (currentSession.length >= 2) {
-          sessions.push(createSessionFromBattles(currentSession));
-        }
-        currentSession = [battle];
-      }
-    }
-  }
-  
-  if (currentSession.length >= 2) {
-    sessions.push(createSessionFromBattles(currentSession));
-  }
-  
-  return sessions;
 }
 
-function createSessionFromBattles(battles: any[]): PushSession {
-  let wins = 0;
-  let losses = 0;
-  let netTrophies = 0;
-  
-  for (const battle of battles) {
-    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    const trophyChange = battle.team?.[0]?.trophyChange || 0;
-    
-    if (isVictory) {
-      wins++;
-    } else {
-      losses++;
-    }
-    netTrophies += trophyChange;
+function getResponseRequestId(res: Response): string | undefined {
+  const headerValue = res.getHeader("x-request-id");
+  if (typeof headerValue === "string") return headerValue;
+  if (Array.isArray(headerValue) && typeof headerValue[0] === "string") return headerValue[0];
+  return undefined;
+}
+
+function sendApiError(
+  res: Response,
+  {
+    route,
+    userId,
+    provider,
+    status,
+    error,
+  }: {
+    route: string;
+    userId: string | null;
+    provider: ApiProvider;
+    status: number;
+    error: ApiErrorPayload;
+  },
+) {
+  const requestId = getResponseRequestId(res);
+  logApiContext(route, userId, provider, status, requestId);
+  return res.status(status).json({
+    ...error,
+    requestId,
+  });
+}
+
+function parseRequestBody<T>(schema: z.ZodType<T>, payload: unknown) {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      details: parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+        code: issue.code,
+      })),
+    };
   }
-  
-  const battleTimes = battles.map(b => new Date(b.battleTime));
-  const startTime = new Date(Math.min(...battleTimes.map(t => t.getTime())));
-  const endTime = new Date(Math.max(...battleTimes.map(t => t.getTime())));
-  
-  return {
-    startTime,
-    endTime,
-    battles,
-    wins,
-    losses,
-    winRate: battles.length > 0 ? (wins / battles.length) * 100 : 0,
-    netTrophies,
-  };
+
+  return { ok: true as const, data: parsed.data };
+}
+
+function normalizeTag(tag: string | null | undefined): string | null | undefined {
+  if (tag === undefined) return undefined;
+  if (tag === null) return null;
+  const withoutHash = tag.trim().replace(/^#/, "").toUpperCase();
+  return withoutHash ? `#${withoutHash}` : null;
+}
+
+function getCanonicalProfileTag(profile: { defaultPlayerTag?: string | null; clashTag?: string | null } | null | undefined) {
+  return profile?.defaultPlayerTag || profile?.clashTag || null;
+}
+
+function isTemporaryProviderStatus(status: number) {
+  return status === 429 || status >= 500;
+}
+
+function getClashErrorCode(status: number) {
+  if (status === 404) return "CLASH_RESOURCE_NOT_FOUND";
+  if (status === 429) return "CLASH_RATE_LIMIT";
+  if (status >= 500) return "CLASH_PROVIDER_UNAVAILABLE";
+  return "CLASH_PROVIDER_ERROR";
+}
+
+type NotificationCategory = "training" | "billing" | "system";
+
+async function isNotificationAllowed(userId: string, category: NotificationCategory) {
+  const prefs = await storage.getNotificationPreferences(userId);
+  if (prefs) {
+    return prefs[category];
+  }
+
+  const settings = await storage.getUserSettings(userId);
+  if (!settings) {
+    return true;
+  }
+
+  if (settings.notificationsEnabled === false) {
+    return false;
+  }
+
+  if (category === "training") return settings.notificationsTraining ?? true;
+  if (category === "billing") return settings.notificationsBilling ?? true;
+  return settings.notificationsSystem ?? true;
+}
+
+async function createNotificationIfAllowed(
+  userId: string,
+  category: NotificationCategory,
+  payload: {
+    title: string;
+    description?: string | null;
+    type: string;
+  },
+) {
+  if (!(await isNotificationAllowed(userId, category))) {
+    return null;
+  }
+
+  return storage.createNotification({
+    userId,
+    title: payload.title,
+    description: payload.description ?? null,
+    type: payload.type,
+    read: false,
+  });
+}
+
+function getStripeSubscriptionPeriodEnd(subscription: Stripe.Subscription | null | undefined): Date | null {
+  const itemPeriodEnd = subscription?.items?.data?.[0]?.current_period_end;
+  if (typeof itemPeriodEnd === "number") {
+    return new Date(itemPeriodEnd * 1000);
+  }
+
+  return null;
+}
+
+function getBattleModeName(battle: any): string {
+  return battle?.gameMode?.name || battle?.type || "Ladder";
+}
+
+function buildPushModeBreakdown(battles: any[]) {
+  const byMode = new Map<string, { mode: string; matches: number; wins: number; losses: number; netTrophies: number }>();
+
+  for (const battle of battles) {
+    const mode = getBattleModeName(battle);
+    const isWin = (battle?.team?.[0]?.crowns || 0) > (battle?.opponent?.[0]?.crowns || 0);
+    const isLoss = (battle?.team?.[0]?.crowns || 0) < (battle?.opponent?.[0]?.crowns || 0);
+    const trophyChange = battle?.team?.[0]?.trophyChange || 0;
+
+    const current = byMode.get(mode) || { mode, matches: 0, wins: 0, losses: 0, netTrophies: 0 };
+    current.matches += 1;
+    if (isWin) current.wins += 1;
+    if (isLoss) current.losses += 1;
+    current.netTrophies += trophyChange;
+    byMode.set(mode, current);
+  }
+
+  return Array.from(byMode.values()).sort((a, b) => b.matches - a.matches);
 }
 
 function computeBattleStats(battles: any[]) {
@@ -228,13 +316,33 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    const route = "/api/auth/user";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const user = await storage.getUser(userId);
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "USER_NOT_FOUND", message: "User not found" },
+        });
       }
+
+      await storage.bootstrapUserData(userId);
 
       // Get associated data
       const profile = await storage.getProfile(userId);
@@ -248,8 +356,14 @@ export async function registerRoutes(
         settings,
       });
     } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      console.error("Error fetching auth user:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "AUTH_USER_FETCH_FAILED", message: "Failed to fetch user" },
+      });
     }
   });
 
@@ -258,35 +372,142 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
       const profile = await storage.getProfile(userId);
-      res.json(profile);
+
+      if (!profile) {
+        return res.json(null);
+      }
+
+      const canonicalTag = getCanonicalProfileTag(profile);
+
+      res.json({
+        ...profile,
+        defaultPlayerTag: canonicalTag,
+        clashTag: profile.clashTag ?? canonicalTag,
+      });
     } catch (error) {
       console.error("Error fetching profile:", error);
-      res.status(500).json({ message: "Failed to fetch profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_FETCH_FAILED", message: "Failed to fetch profile" },
+      });
     }
   });
 
   app.post('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const profile = await storage.createProfile({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(profileCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid profile payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const profile = await storage.createProfile({
+        userId,
+        ...parsed.data,
+        clashTag: normalizeTag(parsed.data.clashTag as string | null | undefined),
+        defaultPlayerTag: normalizeTag(parsed.data.defaultPlayerTag as string | null | undefined),
+      });
+
       res.json(profile);
     } catch (error) {
       console.error("Error creating profile:", error);
-      res.status(500).json({ message: "Failed to create profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_CREATE_FAILED", message: "Failed to create profile" },
+      });
     }
   });
 
   app.patch('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const profile = await storage.updateProfile(userId, req.body);
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(profileUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid profile payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const profile = await storage.updateProfile(userId, {
+        ...parsed.data,
+        clashTag: normalizeTag(parsed.data.clashTag as string | null | undefined),
+        defaultPlayerTag: normalizeTag(parsed.data.defaultPlayerTag as string | null | undefined),
+      });
+
       res.json(profile);
     } catch (error) {
       console.error("Error updating profile:", error);
-      res.status(500).json({ message: "Failed to update profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_UPDATE_FAILED", message: "Failed to update profile" },
+      });
     }
   });
 
@@ -326,35 +547,113 @@ export async function registerRoutes(
   });
 
   app.post('/api/goals', isAuthenticated, async (req: any, res) => {
+    const route = "/api/goals";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const goal = await storage.createGoal({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(goalCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid goal payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const goal = await storage.createGoal({ userId, ...parsed.data });
       res.json(goal);
     } catch (error) {
       console.error("Error creating goal:", error);
-      res.status(500).json({ message: "Failed to create goal" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOAL_CREATE_FAILED", message: "Failed to create goal" },
+      });
     }
   });
 
   app.patch('/api/goals/:id', isAuthenticated, async (req: any, res) => {
+    const route = "/api/goals/:id";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(goalUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid goal payload",
+            details: parsed.details,
+          },
+        });
+      }
+
       const { id } = req.params;
       const existingGoal = await storage.getGoal(id);
       if (!existingGoal || existingGoal.userId !== userId) {
-        return res.status(404).json({ message: "Goal not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "GOAL_NOT_FOUND", message: "Goal not found" },
+        });
       }
 
-      const goal = await storage.updateGoal(id, req.body);
+      const goal = await storage.updateGoal(id, parsed.data);
 
       if (!goal) {
-        return res.status(404).json({ message: "Goal not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "GOAL_NOT_FOUND", message: "Goal not found" },
+        });
       }
 
       res.json(goal);
     } catch (error) {
       console.error("Error updating goal:", error);
-      res.status(500).json({ message: "Failed to update goal" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOAL_UPDATE_FAILED", message: "Failed to update goal" },
+      });
     }
   });
 
@@ -391,13 +690,60 @@ export async function registerRoutes(
   });
 
   app.post('/api/favorites', isAuthenticated, async (req: any, res) => {
+    const route = "/api/favorites";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const favorite = await storage.createFavoritePlayer({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(favoriteCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid favorite payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const favorite = await storage.createFavoritePlayer({
+        userId,
+        playerTag: normalizeTag(parsed.data.playerTag) || parsed.data.playerTag,
+        name: parsed.data.name,
+        trophies: parsed.data.trophies,
+        clan: parsed.data.clan,
+      });
+
+      if (parsed.data.setAsDefault) {
+        await storage.updateProfile(userId, {
+          defaultPlayerTag: favorite.playerTag,
+          clashTag: favorite.playerTag,
+        });
+      }
+
       res.json(favorite);
     } catch (error) {
       console.error("Error creating favorite:", error);
-      res.status(500).json({ message: "Failed to create favorite" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "FAVORITE_CREATE_FAILED", message: "Failed to create favorite" },
+      });
     }
   });
 
@@ -423,41 +769,130 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const notifications = await storage.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
       console.error("Error fetching notifications:", error);
-      res.status(500).json({ message: "Failed to fetch notifications" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_FETCH_FAILED", message: "Failed to fetch notifications" },
+      });
     }
   });
 
   app.post('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications/:id/read";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const { id } = req.params;
       const notification = await storage.getNotification(id);
       if (!notification || notification.userId !== userId) {
-        return res.status(404).json({ message: "Notification not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "NOTIFICATION_NOT_FOUND", message: "Notification not found" },
+        });
       }
 
       await storage.markNotificationAsRead(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking notification as read:", error);
-      res.status(500).json({ message: "Failed to mark notification as read" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATION_READ_FAILED", message: "Failed to mark notification as read" },
+      });
     }
   });
 
   app.post('/api/notifications/read-all', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications/read-all";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       await storage.markAllNotificationsAsRead(userId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
-      res.status(500).json({ message: "Failed to mark all notifications as read" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_MARK_ALL_READ_FAILED", message: "Failed to mark all notifications as read" },
+      });
+    }
+  });
+
+  app.delete('/api/notifications', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.deleteNotificationsByUser(userId);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_CLEAR_FAILED", message: "Failed to clear notifications" },
+      });
     }
   });
 
@@ -466,24 +901,240 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/settings', isAuthenticated, async (req: any, res) => {
+    const route = "/api/settings";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
       const settings = await storage.getUserSettings(userId);
-      res.json(settings);
+      const prefs = await storage.getNotificationPreferences(userId);
+
+      if (!settings) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "SETTINGS_NOT_FOUND", message: "Settings not found" },
+        });
+      }
+
+      res.json({
+        ...settings,
+        notificationPreferences: {
+          training: prefs?.training ?? settings.notificationsTraining ?? true,
+          billing: prefs?.billing ?? settings.notificationsBilling ?? true,
+          system: prefs?.system ?? settings.notificationsSystem ?? true,
+        },
+      });
     } catch (error) {
       console.error("Error fetching settings:", error);
-      res.status(500).json({ message: "Failed to fetch settings" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SETTINGS_FETCH_FAILED", message: "Failed to fetch settings" },
+      });
     }
   });
 
   app.patch('/api/settings', isAuthenticated, async (req: any, res) => {
+    const route = "/api/settings";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const settings = await storage.updateUserSettings(userId, req.body);
-      res.json(settings);
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(settingsUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid settings payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const categoryPayload = {
+        training: parsed.data.notificationPreferences?.training ?? parsed.data.notificationsTraining,
+        billing: parsed.data.notificationPreferences?.billing ?? parsed.data.notificationsBilling,
+        system: parsed.data.notificationPreferences?.system ?? parsed.data.notificationsSystem,
+      };
+
+      const settingsPayload = {
+        theme: parsed.data.theme,
+        preferredLanguage: parsed.data.preferredLanguage,
+        defaultLandingPage: parsed.data.defaultLandingPage,
+        showAdvancedStats: parsed.data.showAdvancedStats,
+        notificationsEnabled: parsed.data.notificationsEnabled,
+        notificationsTraining: categoryPayload.training,
+        notificationsBilling: categoryPayload.billing,
+        notificationsSystem: categoryPayload.system,
+      };
+
+      let settings = await storage.updateUserSettings(userId, settingsPayload);
+
+      const hasCategoryOverride =
+        categoryPayload.training !== undefined ||
+        categoryPayload.billing !== undefined ||
+        categoryPayload.system !== undefined;
+
+      let prefs = await storage.getNotificationPreferences(userId);
+      if (hasCategoryOverride) {
+        prefs = await storage.upsertNotificationPreferences(userId, categoryPayload);
+
+        if (parsed.data.notificationsEnabled === undefined) {
+          settings = await storage.updateUserSettings(userId, {
+            notificationsEnabled: prefs.training || prefs.billing || prefs.system,
+          });
+        }
+      }
+
+      prefs = prefs || (await storage.getNotificationPreferences(userId));
+
+      res.json({
+        ...settings,
+        notificationPreferences: {
+          training: prefs?.training ?? settings?.notificationsTraining ?? true,
+          billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
+          system: prefs?.system ?? settings?.notificationsSystem ?? true,
+        },
+      });
     } catch (error) {
       console.error("Error updating settings:", error);
-      res.status(500).json({ message: "Failed to update settings" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SETTINGS_UPDATE_FAILED", message: "Failed to update settings" },
+      });
+    }
+  });
+
+  // ============================================================================
+  // NOTIFICATION PREFERENCES ROUTES
+  // ============================================================================
+
+  app.get('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notification-preferences";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
+      const prefs = await storage.getNotificationPreferences(userId);
+      const settings = await storage.getUserSettings(userId);
+
+      res.json({
+        training: prefs?.training ?? settings?.notificationsTraining ?? true,
+        billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
+        system: prefs?.system ?? settings?.notificationsSystem ?? true,
+      });
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: {
+          code: "NOTIFICATION_PREFERENCES_FETCH_FAILED",
+          message: "Failed to fetch notification preferences",
+        },
+      });
+    }
+  });
+
+  app.patch('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notification-preferences";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(notificationPreferencesUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid notification preferences payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const updatedPrefs = await storage.upsertNotificationPreferences(userId, parsed.data);
+
+      await storage.updateUserSettings(userId, {
+        notificationsTraining: updatedPrefs.training,
+        notificationsBilling: updatedPrefs.billing,
+        notificationsSystem: updatedPrefs.system,
+        notificationsEnabled: updatedPrefs.training || updatedPrefs.billing || updatedPrefs.system,
+      });
+
+      res.json({
+        training: updatedPrefs.training,
+        billing: updatedPrefs.billing,
+        system: updatedPrefs.system,
+      });
+    } catch (error) {
+      console.error("Error updating notification preferences:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: {
+          code: "NOTIFICATION_PREFERENCES_UPDATE_FAILED",
+          message: "Failed to update notification preferences",
+        },
+      });
     }
   });
 
@@ -492,49 +1143,103 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/clash/player/:tag', async (req: any, res) => {
+    const route = "/api/clash/player/:tag";
+    const userId = getUserId(req);
+
     try {
       const { tag } = req.params;
       const result = await getPlayerByTag(tag);
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch player data",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching player:", error);
-      res.status(500).json({ error: "Failed to fetch player data" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_PLAYER_FETCH_FAILED", message: "Failed to fetch player data" },
+      });
     }
   });
 
   app.get('/api/clash/player/:tag/battles', async (req: any, res) => {
+    const route = "/api/clash/player/:tag/battles";
+    const userId = getUserId(req);
+
     try {
       const { tag } = req.params;
       const result = await getPlayerBattles(tag);
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch battle history",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching battles:", error);
-      res.status(500).json({ error: "Failed to fetch battle history" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_BATTLES_FETCH_FAILED", message: "Failed to fetch battle history" },
+      });
     }
   });
 
   app.get('/api/clash/cards', async (req: any, res) => {
+    const route = "/api/clash/cards";
+    const userId = getUserId(req);
+
     try {
       const result = await getCards();
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch cards",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching cards:", error);
-      res.status(500).json({ error: "Failed to fetch cards" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_CARDS_FETCH_FAILED", message: "Failed to fetch cards" },
+      });
     }
   });
 
@@ -543,70 +1248,149 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/player/sync', isAuthenticated, async (req: any, res) => {
+    const route = "/api/player/sync";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      
-      const profile = await storage.getProfile(userId);
-      if (!profile?.clashTag) {
-        return res.status(400).json({ 
-          error: "No Clash Royale tag linked to your profile",
-          code: "NO_CLASH_TAG" 
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
-      
-      const playerResult = await getPlayerByTag(profile.clashTag);
-      if (playerResult.error) {
-        return res.status(playerResult.status).json({ error: playerResult.error });
+
+      const payload = parseRequestBody(playerSyncRequestSchema, req.body);
+      if (!payload.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid player sync payload",
+            details: payload.details,
+          },
+        });
       }
-      
-      const battlesResult = await getPlayerBattles(profile.clashTag);
-      if (battlesResult.error) {
-        return res.status(battlesResult.status).json({ error: battlesResult.error });
+
+      const profile = await storage.getProfile(userId);
+      const tagToSync = getCanonicalProfileTag(profile);
+
+      if (!tagToSync) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_CLASH_TAG",
+            message: "No Clash Royale tag linked to your profile",
+          },
+        });
       }
-      
+
+      const syncErrors: SyncErrorItem[] = [];
+      let syncStatus: "ok" | "partial" | "error" = "ok";
+      let battles: any[] = [];
+      let pushSessions: PushSession[] = [];
+      let stats = computeBattleStats([]);
+      let goals: any[] = [];
+      let lastSyncedAt = (await storage.getSyncState(userId))?.lastSyncedAt || null;
+
+      const playerResult = await getPlayerByTag(tagToSync);
+      if (playerResult.error || !playerResult.data) {
+        syncStatus = "error";
+        syncErrors.push({
+          source: "player",
+          code: isTemporaryProviderStatus(playerResult.status)
+            ? "PLAYER_TEMPORARY_UNAVAILABLE"
+            : "PLAYER_FETCH_FAILED",
+          message: playerResult.error || "Failed to fetch player data",
+          status: playerResult.status,
+        });
+
+        logApiContext(route, userId, "clash-royale", playerResult.status || 500, getResponseRequestId(res));
+
+        return res.json({
+          status: syncStatus,
+          partial: false,
+          syncedTag: tagToSync,
+          player: null,
+          battles,
+          pushSessions,
+          stats,
+          goals,
+          lastSyncedAt,
+          errors: syncErrors,
+        });
+      }
+
       const player = playerResult.data as any;
-      const battles = (battlesResult.data as any[]) || [];
-      
-      const pushSessions = computePushSessions(battles);
-      const stats = computeBattleStats(battles);
-      
-      const syncState = await storage.updateSyncState(userId);
-      
-      let goals = await storage.getGoals(userId);
-      
-      for (const goal of goals) {
-        if (goal.completed) continue;
-        
-        let shouldUpdate = false;
-        let newCurrentValue = goal.currentValue || 0;
-        let shouldComplete = false;
-        
-        if (goal.type === 'trophies') {
-          newCurrentValue = player.trophies;
-          shouldUpdate = newCurrentValue !== goal.currentValue;
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        } else if (goal.type === 'winrate') {
-          newCurrentValue = Math.round(stats.winRate);
-          shouldUpdate = newCurrentValue !== goal.currentValue;
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        } else if (goal.type === 'streak' && stats.streak.type === 'win') {
-          newCurrentValue = stats.streak.count;
-          shouldUpdate = newCurrentValue > (goal.currentValue || 0);
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        }
-        
-        if (shouldUpdate) {
-          await storage.updateGoal(goal.id, {
-            currentValue: newCurrentValue,
-            completed: shouldComplete,
-            completedAt: shouldComplete ? new Date() : undefined,
-          });
-        }
+
+      const battlesResult = await getPlayerBattles(tagToSync);
+      if (battlesResult.error) {
+        syncStatus = "partial";
+        syncErrors.push({
+          source: "battlelog",
+          code: isTemporaryProviderStatus(battlesResult.status)
+            ? "BATTLELOG_TEMPORARY_UNAVAILABLE"
+            : "BATTLELOG_FETCH_FAILED",
+          message: battlesResult.error,
+          status: battlesResult.status,
+        });
+      } else {
+        battles = (battlesResult.data as any[]) || [];
       }
-      
-      goals = await storage.getGoals(userId);
-      
+
+      pushSessions = computePushSessions(battles);
+      stats = computeBattleStats(battles);
+
+      // Canonical rule: lastSyncedAt is updated whenever player core payload is fetched successfully,
+      // even when battlelog fails/returns empty, because profile-level data is still fresh.
+      const syncState = await storage.updateSyncState(userId);
+      lastSyncedAt = syncState.lastSyncedAt || null;
+
+      try {
+        goals = await storage.getGoals(userId);
+
+        for (const goal of goals) {
+          const progress = computeGoalAutoProgress(goal, {
+            playerTrophies: player.trophies || 0,
+            winRate: stats.winRate || 0,
+            streak: stats.streak,
+          });
+
+          if (progress?.shouldUpdate) {
+            await storage.updateGoal(goal.id, {
+              currentValue: progress.currentValue,
+              completed: progress.completed,
+              completedAt: progress.completed ? new Date() : undefined,
+            });
+          }
+        }
+
+        goals = await storage.getGoals(userId);
+      } catch (goalError) {
+        console.warn("Goal sync failed during player sync:", goalError);
+        syncStatus = "partial";
+        syncErrors.push({
+          source: "goals",
+          code: "GOAL_SYNC_PARTIAL_FAILURE",
+          message: "Goals could not be fully synchronized",
+        });
+      }
+
+      const responseStatus = syncStatus;
+      logApiContext(route, userId, "clash-royale", 200, getResponseRequestId(res));
+
       res.json({
+        status: responseStatus,
+        partial: responseStatus !== "ok",
+        syncedTag: player.tag || tagToSync,
         player: {
           tag: player.tag,
           name: player.name,
@@ -623,50 +1407,99 @@ export async function registerRoutes(
         battles,
         pushSessions,
         stats,
-        lastSyncedAt: syncState.lastSyncedAt,
+        lastSyncedAt,
         goals,
+        errors: syncErrors,
       });
     } catch (error) {
       console.error("Error syncing player data:", error);
-      res.status(500).json({ error: "Failed to sync player data" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PLAYER_SYNC_FAILED", message: "Failed to sync player data" },
+      });
     }
   });
 
   app.get('/api/player/sync-state', isAuthenticated, async (req: any, res) => {
+    const route = "/api/player/sync-state";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const syncState = await storage.getSyncState(userId);
-      
+
       res.json({
         lastSyncedAt: syncState?.lastSyncedAt || null,
       });
     } catch (error) {
       console.error("Error fetching sync state:", error);
-      res.status(500).json({ error: "Failed to fetch sync state" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SYNC_STATE_FETCH_FAILED", message: "Failed to fetch sync state" },
+      });
     }
   });
 
   // ============================================================================
   // STRIPE BILLING ROUTES
   // ============================================================================
-  
+
   app.get('/api/stripe/config', async (req, res) => {
+    const route = "/api/stripe/config";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const publishableKey = await getStripePublishableKey();
       res.json({ publishableKey });
     } catch (error) {
       console.error("Error fetching Stripe config:", error);
-      res.status(500).json({ error: "Failed to fetch Stripe configuration" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_CONFIG_FETCH_FAILED", message: "Failed to fetch Stripe configuration" },
+      });
     }
   });
 
   app.get('/api/stripe/products', async (req, res) => {
+    const route = "/api/stripe/products";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`SELECT * FROM stripe.products WHERE active = true`
@@ -674,14 +1507,29 @@ export async function registerRoutes(
       res.json({ data: result.rows });
     } catch (error) {
       console.error("Error fetching products:", error);
-      res.status(500).json({ error: "Failed to fetch products" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRODUCTS_FETCH_FAILED", message: "Failed to fetch products" },
+      });
     }
   });
 
   app.get('/api/stripe/prices', async (req, res) => {
+    const route = "/api/stripe/prices";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`SELECT * FROM stripe.prices WHERE active = true`
@@ -689,14 +1537,29 @@ export async function registerRoutes(
       res.json({ data: result.rows });
     } catch (error) {
       console.error("Error fetching prices:", error);
-      res.status(500).json({ error: "Failed to fetch prices" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRICES_FETCH_FAILED", message: "Failed to fetch prices" },
+      });
     }
   });
 
   app.get('/api/stripe/products-with-prices', async (req, res) => {
+    const route = "/api/stripe/products-with-prices";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`
@@ -744,58 +1607,137 @@ export async function registerRoutes(
       res.json({ data: Array.from(productsMap.values()) });
     } catch (error) {
       console.error("Error fetching products with prices:", error);
-      res.status(500).json({ error: "Failed to fetch products" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRODUCTS_WITH_PRICES_FETCH_FAILED", message: "Failed to fetch products" },
+      });
     }
   });
 
   app.post('/api/stripe/checkout', isAuthenticated, async (req: any, res) => {
+    const route = "/api/stripe/checkout";
+    const userId = getUserId(req);
+
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
 
-      const userId = req.user.claims.sub;
-      const { priceId, currency } = req.body;
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
+      }
+
+      const { priceId } = req.body as { priceId?: string };
 
       if (!priceId) {
-        return res.status(400).json({ error: "Price ID is required" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "PRICE_ID_REQUIRED", message: "Price ID is required" },
+        });
+      }
+
+      if (priceId !== PRO_BRL_MONTHLY_PRICE_ID) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: {
+            code: "INVALID_PRICE_ID",
+            message: "Only PRO BRL monthly checkout is allowed",
+          },
+        });
       }
 
       const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "USER_NOT_FOUND", message: "User not found" },
+        });
       }
 
-      const customerId = await stripeService.getOrCreateCustomer(userId, user.email || '');
+      const customerId = await stripeService.getOrCreateCustomer(userId, user.email || "");
 
-      const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
-      const baseUrl = domains ? `https://${domains}` : (process.env.APP_BASE_URL || 'http://localhost:5000');
+      const domains = process.env.REPLIT_DOMAINS?.split(",")[0];
+      const baseUrl = domains ? `https://${domains}` : process.env.APP_BASE_URL || "http://localhost:5000";
       const session = await stripeService.createCheckoutSession(
         customerId,
         priceId,
         `${baseUrl}/billing?success=true`,
         `${baseUrl}/billing?canceled=true`,
-        userId
+        userId,
       );
 
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      res.status(500).json({ error: "Failed to create checkout session" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "CHECKOUT_SESSION_FAILED", message: "Failed to create checkout session" },
+      });
     }
   });
 
   app.post('/api/stripe/portal', isAuthenticated, async (req: any, res) => {
+    const route = "/api/stripe/portal";
+    const userId = getUserId(req);
+
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
 
-      const userId = req.user.claims.sub;
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
+      }
+
       const subscription = await storage.getSubscription(userId);
 
       if (!subscription?.stripeCustomerId) {
-        return res.status(400).json({ error: "No subscription found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "NO_SUBSCRIPTION", message: "No subscription found" },
+        });
       }
 
       const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
@@ -808,7 +1750,77 @@ export async function registerRoutes(
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating portal session:", error);
-      res.status(500).json({ error: "Failed to create customer portal session" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "PORTAL_SESSION_FAILED", message: "Failed to create customer portal session" },
+      });
+    }
+  });
+
+  app.get('/api/billing/invoices', isAuthenticated, async (req: any, res) => {
+    const route = "/api/billing/invoices";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const subscription = await storage.getSubscription(userId);
+      if (!subscription?.stripeCustomerId) {
+        return res.json([]);
+      }
+
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.json([]);
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const invoices = await stripe.invoices.list({
+        customer: subscription.stripeCustomerId,
+        limit: 20,
+      });
+
+      const response = invoices.data.map((invoice) => {
+        const firstLine = invoice.lines?.data?.[0];
+        const firstLinePeriod = firstLine?.period;
+        return {
+          id: invoice.id,
+          status: invoice.status,
+          amountPaid: invoice.amount_paid,
+          amountDue: invoice.amount_due,
+          currency: invoice.currency?.toUpperCase(),
+          createdAt: new Date(invoice.created * 1000).toISOString(),
+          periodStart: firstLinePeriod?.start
+            ? new Date(firstLinePeriod.start * 1000).toISOString()
+            : null,
+          periodEnd: firstLinePeriod?.end
+            ? new Date(firstLinePeriod.end * 1000).toISOString()
+            : null,
+          hostedInvoiceUrl: invoice.hosted_invoice_url,
+          invoicePdf: invoice.invoice_pdf,
+        };
+      });
+
+      return res.json(response);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "INVOICE_FETCH_FAILED", message: "Failed to fetch invoices" },
+      });
     }
   });
 
@@ -817,24 +1829,54 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: any, res) => {
+    const route = "/api/stripe/webhook";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
 
       const signature = req.headers['stripe-signature'];
       if (!signature) {
-        return res.status(400).json({ error: "Missing stripe-signature" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_SIGNATURE_MISSING", message: "Missing stripe-signature" },
+        });
       }
 
       if (!Buffer.isBuffer(req.body)) {
-        return res.status(400).json({ error: "Invalid webhook payload" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_WEBHOOK_PAYLOAD_INVALID", message: "Invalid webhook payload" },
+        });
       }
 
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       if (!webhookSecret) {
         console.error("STRIPE_WEBHOOK_SECRET is not configured");
-        return res.status(503).json({ error: "Stripe webhook secret not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: {
+            code: "STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED",
+            message: "Stripe webhook secret not configured",
+          },
+        });
       }
 
       const sig = Array.isArray(signature) ? signature[0] : signature;
@@ -846,7 +1888,13 @@ export async function registerRoutes(
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
       } catch (error) {
         console.error("Invalid Stripe webhook signature:", error);
-        return res.status(400).json({ error: "Invalid webhook signature" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_WEBHOOK_SIGNATURE_INVALID", message: "Invalid webhook signature" },
+        });
       }
 
       console.log(`Stripe webhook received: ${event.type}`);
@@ -861,21 +1909,30 @@ export async function registerRoutes(
               typeof session.subscription === "string"
                 ? session.subscription
                 : session.subscription.id;
+            let stripeSubscription: Stripe.Subscription | null = null;
+            try {
+              stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            } catch (subscriptionFetchError) {
+              console.warn("Failed to retrieve Stripe subscription on checkout completion:", subscriptionFetchError);
+            }
             
             if (subscription) {
               await storage.updateSubscription(subscription.id, {
                 stripeSubscriptionId,
                 plan: 'pro',
-                status: 'active',
+                status: stripeSubscription?.status === "active" ? "active" : "inactive",
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(stripeSubscription) ??
+                  subscription.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
               });
               console.log(`PRO activated for user: ${userId}`);
               
-              await storage.createNotification({
-                userId,
+              await createNotificationIfAllowed(userId, "billing", {
                 title: 'Bem-vindo ao PRO!',
                 description: 'Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!',
                 type: 'success',
-                read: false,
               });
             } else {
               await storage.createSubscription({
@@ -884,7 +1941,9 @@ export async function registerRoutes(
                   typeof session.customer === "string" ? session.customer : session.customer?.id,
                 stripeSubscriptionId,
                 plan: 'pro',
-                status: 'active',
+                status: stripeSubscription?.status === "active" ? "active" : "inactive",
+                currentPeriodEnd: getStripeSubscriptionPeriodEnd(stripeSubscription),
+                cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
               });
             }
           }
@@ -901,6 +1960,12 @@ export async function registerRoutes(
                             subscriptionData.status;
               await storage.updateSubscription(existing.id, {
                 status: status,
+                plan: status === "active" ? "pro" : existing.plan,
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(subscriptionData) ??
+                  existing.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
               });
               console.log(`Subscription ${subscriptionData.id} updated to: ${status}`);
             }
@@ -916,15 +1981,44 @@ export async function registerRoutes(
               await storage.updateSubscription(existing.id, {
                 plan: 'free',
                 status: 'canceled',
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(subscriptionData) ??
+                  existing.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
               
-              await storage.createNotification({
-                userId: existing.userId,
+              await createNotificationIfAllowed(existing.userId, "billing", {
                 title: 'Assinatura cancelada',
                 description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
                 type: 'warning',
-                read: false,
+              });
+            }
+          }
+          break;
+        }
+
+        case 'invoice.paid': {
+          const invoice = event.data.object as Stripe.Invoice & {
+            subscription?: string | Stripe.Subscription | null;
+          };
+          const subscriptionId =
+            typeof invoice?.subscription === "string"
+              ? invoice.subscription
+              : invoice?.subscription?.id;
+          const periodEndUnix = invoice.lines?.data?.[0]?.period?.end;
+
+          if (subscriptionId) {
+            const existing = await storage.getSubscriptionByStripeId(subscriptionId);
+            if (existing) {
+              await storage.updateSubscription(existing.id, {
+                plan: "pro",
+                status: "active",
+                currentPeriodEnd:
+                  typeof periodEndUnix === "number"
+                    ? new Date(periodEndUnix * 1000)
+                    : existing.currentPeriodEnd ?? null,
               });
             }
           }
@@ -948,12 +2042,10 @@ export async function registerRoutes(
               });
               console.log(`Subscription ${subscriptionId} marked as past_due due to payment failure`);
               
-              await storage.createNotification({
-                userId: existing.userId,
+              await createNotificationIfAllowed(existing.userId, "billing", {
                 title: 'Falha no pagamento',
                 description: 'O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento.',
                 type: 'error',
-                read: false,
               });
             }
           }
@@ -967,7 +2059,13 @@ export async function registerRoutes(
       res.json({ received: true });
     } catch (error) {
       console.error("Error processing webhook:", error);
-      res.status(500).json({ error: "Webhook processing failed" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_WEBHOOK_PROCESSING_FAILED", message: "Webhook processing failed" },
+      });
     }
   });
 
@@ -976,36 +2074,72 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/coach/chat', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/chat";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
       
       const isPro = await storage.isPro(userId);
       
       if (!isPro) {
         const messagesToday = await storage.countCoachMessagesToday(userId);
-        if (messagesToday >= FREE_DAILY_LIMIT) {
-          return res.status(403).json({ 
-            error: "Daily message limit reached. Upgrade to PRO for unlimited coaching.",
-            code: "FREE_COACH_DAILY_LIMIT_REACHED",
-            limit: FREE_DAILY_LIMIT,
-            used: messagesToday,
+        const limitState = evaluateFreeCoachLimit(messagesToday, FREE_DAILY_LIMIT);
+        if (limitState.reached) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 403,
+            error: {
+              code: "FREE_COACH_DAILY_LIMIT_REACHED",
+              message: "Daily message limit reached. Upgrade to PRO for unlimited coaching.",
+              details: {
+                limit: FREE_DAILY_LIMIT,
+                used: messagesToday,
+              },
+            },
           });
         }
       }
-      
-      const { messages, playerTag, contextType } = req.body as { 
-        messages: ChatMessage[]; 
-        playerTag?: string;
-        contextType?: string;
-      };
 
-      if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        return res.status(400).json({ error: "Messages array is required" });
+      const parsed = parseRequestBody(coachChatInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid coach chat payload",
+            details: parsed.details,
+          },
+        });
       }
+
+      const { messages, playerTag, contextType } = parsed.data;
 
       const lastUserMessage = messages.filter(m => m.role === 'user').pop();
       if (!lastUserMessage) {
-        return res.status(400).json({ error: "At least one user message is required" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_USER_MESSAGE",
+            message: "At least one user message is required",
+          },
+        });
       }
 
       const lossPatterns = [
@@ -1094,8 +2228,9 @@ export async function registerRoutes(
           }
         } else {
           const profile = await storage.getProfile(userId);
-          if (profile?.clashTag) {
-            const playerResult = await getPlayerByTag(profile.clashTag);
+          const profileTag = getCanonicalProfileTag(profile);
+          if (profileTag) {
+            const playerResult = await getPlayerByTag(profileTag);
             if (playerResult.data) {
               const player = playerResult.data as any;
               playerContext = {
@@ -1105,7 +2240,7 @@ export async function registerRoutes(
                 currentDeck: player.currentDeck?.map((c: any) => c.name),
               };
               
-              const battlesResult = await getPlayerBattles(profile.clashTag);
+              const battlesResult = await getPlayerBattles(profileTag);
               if (battlesResult.data) {
                 const battles = battlesResult.data as any[];
                 playerContext.recentBattles = battles.slice(0, 5);
@@ -1163,7 +2298,12 @@ export async function registerRoutes(
         console.warn("Failed to fetch player context, continuing without it:", contextError);
       }
 
-      const aiResponse = await generateCoachResponse(messages, playerContext);
+      const aiResponse = await generateCoachResponse(messages, playerContext, {
+        provider: "openai",
+        route,
+        userId,
+        requestId: getResponseRequestId(res),
+      });
       
       await storage.createCoachMessage({
         userId,
@@ -1179,7 +2319,9 @@ export async function registerRoutes(
         contextType: contextType || null,
       });
       
-      const remainingMessages = isPro ? null : FREE_DAILY_LIMIT - (await storage.countCoachMessagesToday(userId));
+      const remainingMessages = isPro
+        ? null
+        : evaluateFreeCoachLimit(await storage.countCoachMessagesToday(userId), FREE_DAILY_LIMIT).remaining;
       
       res.json({ 
         message: aiResponse,
@@ -1188,7 +2330,13 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Error in coach chat:", error);
-      res.status(500).json({ error: "Failed to generate coach response" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "openai",
+        status: 500,
+        error: { code: "COACH_CHAT_FAILED", message: "Failed to generate coach response" },
+      });
     }
   });
 
@@ -1197,63 +2345,99 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/coach/push-analysis', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/push-analysis";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      
-      const isPro = await storage.isPro(userId);
-      if (!isPro) {
-        return res.status(403).json({ 
-          error: "Análise de push é uma funcionalidade PRO. Atualize seu plano para ter acesso.",
-          code: "PRO_REQUIRED",
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
-      
+
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Análise de push é uma funcionalidade PRO. Atualize seu plano para ter acesso.",
+          },
+        });
+      }
+
       const { playerTag: providedTag } = req.body as { playerTag?: string };
-      
+
       let playerTag = providedTag;
       if (!playerTag) {
         const profile = await storage.getProfile(userId);
-        if (!profile?.clashTag) {
-          return res.status(400).json({ 
-            error: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
-            code: "NO_PLAYER_TAG",
+        const profileTag = getCanonicalProfileTag(profile);
+        if (!profileTag) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 400,
+            error: {
+              code: "NO_PLAYER_TAG",
+              message: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
+            },
           });
         }
-        playerTag = profile.clashTag;
+        playerTag = profileTag;
       }
-      
+
       const battlesResult = await getPlayerBattles(playerTag);
       if (!battlesResult.data) {
-        return res.status(404).json({ 
-          error: "Não foi possível buscar as batalhas do jogador.",
-          code: "BATTLES_FETCH_FAILED",
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: 404,
+          error: {
+            code: "BATTLES_FETCH_FAILED",
+            message: "Não foi possível buscar as batalhas do jogador.",
+          },
         });
       }
-      
+
       const battles = battlesResult.data as any[];
       const pushSessions = computePushSessions(battles);
-      
+
       if (pushSessions.length === 0) {
-        return res.status(400).json({ 
-          error: "Nenhuma sessão de push encontrada. Você precisa de pelo menos 2 batalhas com intervalos de até 30 minutos.",
-          code: "NO_PUSH_SESSION",
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_PUSH_SESSION",
+            message: "Nenhuma sessão de push encontrada. Você precisa de pelo menos 2 batalhas com intervalos de até 30 minutos.",
+          },
         });
       }
-      
+
       const latestPush = pushSessions[0];
-      
+
       const battleContexts: BattleContext[] = latestPush.battles.map((battle: any) => {
         const playerTeam = battle.team?.[0];
         const opponent = battle.opponent?.[0];
         const playerCrowns = playerTeam?.crowns || 0;
         const opponentCrowns = opponent?.crowns || 0;
-        
-        let result: 'win' | 'loss' | 'draw' = 'draw';
-        if (playerCrowns > opponentCrowns) result = 'win';
-        else if (playerCrowns < opponentCrowns) result = 'loss';
-        
+
+        let result: "win" | "loss" | "draw" = "draw";
+        if (playerCrowns > opponentCrowns) result = "win";
+        else if (playerCrowns < opponentCrowns) result = "loss";
+
         return {
-          gameMode: battle.gameMode?.name || battle.type || 'Ladder',
+          gameMode: getBattleModeName(battle),
           playerDeck: playerTeam?.cards?.map((c: any) => c.name) || [],
           opponentDeck: opponent?.cards?.map((c: any) => c.name) || [],
           playerCrowns,
@@ -1263,21 +2447,43 @@ export async function registerRoutes(
           result,
         };
       });
-      
+
       const durationMs = latestPush.endTime.getTime() - latestPush.startTime.getTime();
       const durationMinutes = Math.round(durationMs / 60000);
-      
+      const tiltLevel = computeTiltLevel(latestPush.battles);
+      const consecutiveLosses = computeConsecutiveLosses(latestPush.battles);
+      const avgTrophyChange =
+        latestPush.battles.length > 0
+          ? latestPush.netTrophies / latestPush.battles.length
+          : 0;
+      const avgElixirLeaked =
+        latestPush.battles.length > 0
+          ? latestPush.battles.reduce((acc, battle) => acc + (battle?.team?.[0]?.elixirLeaked || 0), 0) /
+            latestPush.battles.length
+          : 0;
+      const modeBreakdown = buildPushModeBreakdown(latestPush.battles);
+
       const pushSessionContext: PushSessionContext = {
         wins: latestPush.wins,
         losses: latestPush.losses,
         winRate: latestPush.winRate,
         netTrophies: latestPush.netTrophies,
         durationMinutes,
+        tiltLevel,
+        consecutiveLosses,
+        avgTrophyChange,
+        avgElixirLeaked,
+        modeBreakdown,
         battles: battleContexts,
       };
-      
-      const analysisResult = await generatePushAnalysis(pushSessionContext);
-      
+
+      const analysisResult = await generatePushAnalysis(pushSessionContext, {
+        provider: "openai",
+        route,
+        userId,
+        requestId: getResponseRequestId(res),
+      });
+
       const savedAnalysis = await storage.createPushAnalysis({
         userId,
         pushStartTime: latestPush.startTime,
@@ -1286,9 +2492,17 @@ export async function registerRoutes(
         wins: latestPush.wins,
         losses: latestPush.losses,
         netTrophies: latestPush.netTrophies,
-        resultJson: analysisResult,
+        resultJson: {
+          ...analysisResult,
+          tiltLevel,
+          consecutiveLosses,
+          avgTrophyChange,
+          avgElixirLeaked,
+          modeBreakdown,
+          durationMinutes,
+        },
       });
-      
+
       res.json({
         id: savedAnalysis.id,
         summary: analysisResult.summary,
@@ -1302,10 +2516,80 @@ export async function registerRoutes(
         battlesCount: latestPush.battles.length,
         pushStartTime: latestPush.startTime.toISOString(),
         pushEndTime: latestPush.endTime.toISOString(),
+        durationMinutes,
+        tiltLevel,
+        consecutiveLosses,
+        avgTrophyChange,
+        avgElixirLeaked,
       });
     } catch (error) {
       console.error("Error in push analysis:", error);
-      res.status(500).json({ error: "Falha ao gerar análise de push" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "openai",
+        status: 500,
+        error: { code: "PUSH_ANALYSIS_FAILED", message: "Falha ao gerar análise de push" },
+      });
+    }
+  });
+
+  app.get('/api/coach/push-analysis/latest', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/push-analysis/latest";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const analysis = await storage.getLatestPushAnalysis(userId);
+      if (!analysis) {
+        return res.json(null);
+      }
+
+      const analysisJson = (analysis.resultJson || {}) as Record<string, any>;
+      const summary = typeof analysisJson.summary === "string" ? analysisJson.summary : "Sem resumo";
+      const strengths = Array.isArray(analysisJson.strengths) ? analysisJson.strengths : [];
+      const mistakes = Array.isArray(analysisJson.mistakes) ? analysisJson.mistakes : [];
+      const recommendations = Array.isArray(analysisJson.recommendations) ? analysisJson.recommendations : [];
+
+      return res.json({
+        id: analysis.id,
+        summary,
+        strengths,
+        mistakes,
+        recommendations,
+        wins: analysis.wins,
+        losses: analysis.losses,
+        winRate: analysis.battlesCount > 0 ? (analysis.wins / analysis.battlesCount) * 100 : 0,
+        netTrophies: analysis.netTrophies,
+        battlesCount: analysis.battlesCount,
+        pushStartTime: analysis.pushStartTime?.toISOString?.() || null,
+        pushEndTime: analysis.pushEndTime?.toISOString?.() || null,
+        durationMinutes: analysisJson.durationMinutes ?? Math.round(
+          (new Date(analysis.pushEndTime).getTime() - new Date(analysis.pushStartTime).getTime()) / 60000,
+        ),
+        tiltLevel: analysisJson.tiltLevel ?? "none",
+        consecutiveLosses: analysisJson.consecutiveLosses ?? 0,
+        avgTrophyChange: analysisJson.avgTrophyChange ?? 0,
+        avgElixirLeaked: analysisJson.avgElixirLeaked ?? 0,
+      });
+    } catch (error) {
+      console.error("Error fetching latest push analysis:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PUSH_ANALYSIS_FETCH_FAILED", message: "Falha ao buscar análise de push" },
+      });
     }
   });
 
@@ -1389,8 +2673,9 @@ export async function registerRoutes(
       const profile = await storage.getProfile(userId);
       let playerContext;
       
-      if (profile?.clashTag) {
-        const playerResult = await getPlayerByTag(profile.clashTag);
+      const profileTag = getCanonicalProfileTag(profile);
+      if (profileTag) {
+        const playerResult = await getPlayerByTag(profileTag);
         if (playerResult.data) {
           const player = playerResult.data as any;
           playerContext = {
@@ -1401,7 +2686,12 @@ export async function registerRoutes(
         }
       }
       
-      const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext);
+      const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext, {
+        provider: "openai",
+        route: "/api/training/plan/generate",
+        userId,
+        requestId: getResponseRequestId(res),
+      });
       
       await storage.archiveOldPlans(userId);
       
@@ -1428,12 +2718,10 @@ export async function registerRoutes(
         )
       );
       
-      await storage.createNotification({
-        userId,
+      await createNotificationIfAllowed(userId, "training", {
         title: 'Novo plano de treinamento criado!',
         description: `"${generatedPlan.title}" está pronto com ${drills.length} exercícios para você praticar.`,
         type: 'success',
-        read: false,
       });
       
       res.json({
@@ -1447,19 +2735,58 @@ export async function registerRoutes(
   });
 
   app.patch('/api/training/drill/:drillId', isAuthenticated, async (req: any, res) => {
+    const route = "/api/training/drill/:drillId";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(trainingDrillUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid training drill update payload",
+            details: parsed.details,
+          },
+        });
+      }
+
       const { drillId } = req.params;
-      const { completedGames, status } = req.body as { completedGames?: number; status?: string };
+      const { completedGames, status } = parsed.data;
 
       const existingDrill = await storage.getTrainingDrill(drillId);
       if (!existingDrill) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
 
       const parentPlan = await storage.getTrainingPlan(existingDrill.planId);
       if (!parentPlan || parentPlan.userId !== userId) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
       
       const updateData: any = {};
@@ -1469,41 +2796,102 @@ export async function registerRoutes(
       const drill = await storage.updateTrainingDrill(drillId, updateData);
       
       if (!drill) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
       
       res.json(drill);
     } catch (error) {
       console.error("Error updating drill:", error);
-      res.status(500).json({ error: "Falha ao atualizar drill" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "DRILL_UPDATE_FAILED", message: "Falha ao atualizar drill" },
+      });
     }
   });
 
   app.patch('/api/training/plan/:planId', isAuthenticated, async (req: any, res) => {
+    const route = "/api/training/plan/:planId";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const { planId } = req.params;
-      const { status } = req.body as { status?: string };
-      
-      if (!status) {
-        return res.status(400).json({ error: "Status é obrigatório" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
+
+      const parsed = parseRequestBody(trainingPlanUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid training plan update payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const { planId } = req.params;
+      const { status } = parsed.data;
 
       const existingPlan = await storage.getTrainingPlan(planId);
       if (!existingPlan || existingPlan.userId !== userId) {
-        return res.status(404).json({ error: "Plano não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
+        });
       }
       
       const plan = await storage.updateTrainingPlan(planId, { status });
       
       if (!plan) {
-        return res.status(404).json({ error: "Plano não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
+        });
+      }
+
+      if (existingPlan.status !== "completed" && status === "completed") {
+        await createNotificationIfAllowed(userId, "training", {
+          title: "Plano concluído!",
+          description: `Você concluiu o plano "${existingPlan.title}". Parabéns pela consistência.`,
+          type: "success",
+        });
       }
       
       res.json(plan);
     } catch (error) {
       console.error("Error updating training plan:", error);
-      res.status(500).json({ error: "Falha ao atualizar plano de treinamento" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "TRAINING_PLAN_UPDATE_FAILED", message: "Falha ao atualizar plano de treinamento" },
+      });
     }
   });
 
@@ -1581,8 +2969,23 @@ export async function registerRoutes(
       if (clanResult.error) {
         return res.status(clanResult.status).json({ error: clanResult.error });
       }
-      
-      res.json(clanResult.data);
+
+      let members: any[] = [];
+      let membersError: string | null = null;
+      const membersResult = await getClanMembers(tag);
+      if (membersResult.error) {
+        membersError = membersResult.error;
+      } else {
+        const items = (membersResult.data as any)?.items;
+        members = Array.isArray(items) ? items : [];
+      }
+
+      res.json({
+        clan: clanResult.data,
+        members,
+        membersPartial: Boolean(membersError),
+        membersError,
+      });
     } catch (error) {
       console.error("Error fetching clan:", error);
       res.status(500).json({ error: "Failed to fetch clan data" });
@@ -1597,6 +3000,20 @@ export async function registerRoutes(
     try {
       const cachedDecks = await storage.getMetaDecks();
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const toDeckResponse = (decks: any[], staleReason: "fresh" | "stale" = "fresh") =>
+        decks.map((deck) => {
+          const avgTrophies = typeof deck.avgTrophies === "number" ? deck.avgTrophies : null;
+          const estimatedWinRate = avgTrophies === null
+            ? 50
+            : Math.max(45, Math.min(72, 45 + (avgTrophies - 6000) / 120));
+
+          return {
+            ...deck,
+            sampleSize: deck.usageCount ?? 0,
+            estimatedWinRate: Number(estimatedWinRate.toFixed(1)),
+            cacheStatus: staleReason,
+          };
+        });
       
       const needsRefresh = cachedDecks.length === 0 || 
         cachedDecks.every(d => new Date(d.lastUpdatedAt || 0) < oneHourAgo);
@@ -1644,17 +3061,21 @@ export async function registerRoutes(
             }
             
             const newDecks = await storage.getMetaDecks();
-            return res.json(newDecks);
+            return res.json(toDeckResponse(newDecks, "fresh"));
           }
         } catch (refreshError) {
           console.error("Error refreshing meta decks:", refreshError);
+          if (cachedDecks.length > 0) {
+            return res.json(toDeckResponse(cachedDecks, "stale"));
+          }
+          return res.json([]);
         }
       }
       
-      res.json(cachedDecks);
+      res.json(toDeckResponse(cachedDecks, "fresh"));
     } catch (error) {
       console.error("Error fetching meta decks:", error);
-      res.status(500).json({ error: "Failed to fetch meta decks" });
+      res.json([]);
     }
   });
 

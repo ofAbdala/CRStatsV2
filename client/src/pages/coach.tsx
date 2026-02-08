@@ -1,16 +1,21 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card } from "@/components/ui/card";
+import PageErrorState from "@/components/PageErrorState";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Sparkles, AlertCircle, Lock, Crown } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Send, Sparkles, AlertCircle, Crown, LineChart, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { ApiError, api } from "@/lib/api";
+import { PushAnalysisCard, PushAnalysisCardData } from "@/components/PushAnalysisCard";
 import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface Message {
   id: string;
@@ -19,13 +24,30 @@ interface Message {
   timestamp: string;
 }
 
+function getQuickPrompts(t: (key: string) => string) {
+  return [
+    t("pages.coach.quickPrompts.lastLoss"),
+    t("pages.coach.quickPrompts.reduceTilt"),
+    t("pages.coach.quickPrompts.deckAdjust"),
+  ];
+}
+
 export default function CoachPage() {
-  const { t } = useLocale();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { t, locale } = useLocale();
+  const quickPrompts = getQuickPrompts(t);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: t("pages.coach.welcome"),
+      timestamp: new Date().toISOString(),
+    },
+  ]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [requiresPro, setRequiresPro] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [retryContent, setRetryContent] = useState<string | null>(null);
+  const [remainingMessages, setRemainingMessages] = useState<number | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery({
@@ -40,215 +62,303 @@ export default function CoachPage() {
 
   const isPro = (subscription as any)?.plan === "pro" && (subscription as any)?.status === "active";
 
-  useEffect(() => {
-    setMessages([{
-      id: "welcome",
-      role: "assistant",
-      content: t('coach.welcome'),
-      timestamp: new Date().toISOString(),
-    }]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const latestAnalysisQuery = useQuery({
+    queryKey: ["latest-push-analysis"],
+    queryFn: () => api.coach.getLatestPushAnalysis(),
+    refetchOnWindowFocus: false,
+  });
+
+  const pushAnalysisMutation = useMutation({
+    mutationFn: () => api.coach.generatePushAnalysis(profile?.clashTag),
+    onSuccess: () => {
+      latestAnalysisQuery.refetch();
+      setErrorText(null);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        setErrorText(getApiErrorMessage(error, t));
+      } else {
+        setErrorText(t("pages.coach.pushAnalysisError"));
+      }
+    },
+  });
+
+  const chatMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const history = messages
+        .filter((message) => message.id !== "welcome")
+        .map((message) => ({ role: message.role, content: message.content }));
+      history.push({ role: "user", content });
+      return api.coach.chat(
+        history,
+        profile?.clashTag,
+        quickPrompts.includes(content) ? "quick_prompt" : "manual",
+      );
+    },
+    onSuccess: (response) => {
+      const assistantMessage: Message = {
+        id: `${Date.now()}-assistant`,
+        role: "assistant",
+        content: response.message,
+        timestamp: response.timestamp,
+      };
+      setMessages((previous) => [...previous, assistantMessage]);
+      setRemainingMessages(
+        typeof response.remainingMessages === "number" ? response.remainingMessages : null,
+      );
+      setErrorText(null);
+      setRetryContent(null);
+      setLimitReached(false);
+    },
+    onError: (error: unknown, content: string) => {
+      if (error instanceof ApiError && error.code === "FREE_COACH_DAILY_LIMIT_REACHED") {
+        setLimitReached(true);
+        setErrorText(null);
+        const details = error.details as { limit?: number; used?: number } | undefined;
+        if (typeof details?.limit === "number" && typeof details?.used === "number") {
+          setRemainingMessages(Math.max(0, details.limit - details.used));
+        }
+        setRetryContent(null);
+        return;
+      }
+
+      if (error instanceof ApiError && error.code === "COACH_CHAT_FAILED") {
+        setErrorText(t("pages.coach.providerTemporaryError"));
+      } else {
+        setErrorText(getApiErrorMessage(error, t));
+      }
+      setRetryContent(content);
+    },
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+  }, [messages, chatMutation.isPending]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isTyping) return;
+  const latestAnalysis = useMemo(() => {
+    return (latestAnalysisQuery.data || null) as PushAnalysisCardData | null;
+  }, [latestAnalysisQuery.data]);
+
+  const submitMessage = (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed || chatMutation.isPending || limitReached) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-user`,
       role: "user",
-      content: input,
+      content: trimmed,
       timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((previous) => [...previous, userMessage]);
     setInput("");
-    setIsTyping(true);
-    setError(null);
-    setRequiresPro(false);
-
-    try {
-      const chatMessages = messages
-        .filter((m) => m.id !== "welcome")
-        .map((m) => ({ role: m.role, content: m.content }));
-      chatMessages.push({ role: "user", content: input });
-
-      const response = await api.coach.chat(chatMessages, profile?.clashTag);
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: response.message,
-        timestamp: response.timestamp,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err: any) {
-      if (err.message?.includes("PRO") || err.message?.includes("402")) {
-        setRequiresPro(true);
-        setMessages((prev) => prev.filter(m => m.id !== userMessage.id));
-      } else {
-        setError(err.message || t('errors.generic'));
-      }
-    } finally {
-      setIsTyping(false);
-    }
+    chatMutation.mutate(trimmed);
   };
 
-  const handleSuggestion = (text: string) => {
-    setInput(text);
+  const handleSend = async (event: React.FormEvent) => {
+    event.preventDefault();
+    submitMessage(input);
   };
-
-  if (!isPro || requiresPro) {
-    return (
-      <DashboardLayout>
-        <div className="h-[calc(100vh-8rem)] flex flex-col items-center justify-center gap-6">
-          <div className="text-center space-y-4 max-w-md">
-            <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center">
-              <Lock className="w-10 h-10 text-yellow-500" />
-            </div>
-            <h1 className="text-3xl font-display font-bold text-foreground flex items-center justify-center gap-2">
-              <Sparkles className="w-6 h-6 text-primary" />
-              {t('coach.title')}
-            </h1>
-            <p className="text-muted-foreground">
-              {t('coach.proRequired')}
-            </p>
-            <div className="pt-4">
-              <Link href="/billing">
-                <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600" data-testid="button-upgrade-pro">
-                  <Crown className="w-4 h-4 mr-2" />
-                  {t('billing.subscribeMonthly')}
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2" data-testid="title-coach">
-            {t('coach.title')} <span className="text-xs font-normal px-2 py-1 rounded bg-primary/20 text-primary uppercase tracking-wide">Beta</span>
-          </h1>
-          <p className="text-muted-foreground">{t('coach.subtitle')}</p>
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-display font-bold flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-primary" />
+              {t("coach.title")}
+            </h1>
+            <p className="text-muted-foreground">{t("pages.coach.subtitle")}</p>
+          </div>
+          <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
+            {isPro ? t("pages.coach.planPro") : t("pages.coach.planFree")}
+          </Badge>
         </div>
 
-        <Card className="flex-1 flex flex-col border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-6 max-w-3xl mx-auto">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  data-testid={`message-${msg.role}-${msg.id}`}
-                  className={cn(
-                    "flex gap-4 animate-in fade-in slide-in-from-bottom-2",
-                    msg.role === "user" ? "flex-row-reverse" : "flex-row"
-                  )}
-                >
-                  <Avatar className={cn(
-                    "w-10 h-10 border",
-                    msg.role === "assistant" ? "bg-primary/10 border-primary/20" : "bg-secondary/10 border-secondary/20"
-                  )}>
-                    {msg.role === "assistant" ? (
-                      <div className="flex items-center justify-center w-full h-full text-primary">
-                        <Sparkles className="w-5 h-5" />
-                      </div>
-                    ) : (
-                      <AvatarFallback>U</AvatarFallback>
-                    )}
-                  </Avatar>
-                  
-                  <div className={cn(
-                    "rounded-2xl p-4 max-w-[80%]",
-                    msg.role === "user" 
-                      ? "bg-primary text-primary-foreground rounded-tr-none" 
-                      : "bg-muted rounded-tl-none"
-                  )}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    <span className="text-[10px] opacity-50 mt-2 block">
-                      {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {isTyping && (
-                <div className="flex gap-4" data-testid="typing-indicator">
-                  <Avatar className="w-10 h-10 bg-primary/10 border border-primary/20">
-                    <div className="flex items-center justify-center w-full h-full text-primary">
-                      <Sparkles className="w-5 h-5" />
-                    </div>
-                  </Avatar>
-                  <div className="bg-muted rounded-2xl rounded-tl-none p-4 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-200" />
-                  </div>
-                </div>
-              )}
-              {error && (
-                <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 p-3 rounded-lg" data-testid="error-message">
-                  <AlertCircle className="w-4 h-4" />
-                  {error}
-                </div>
-              )}
-              <div ref={scrollRef} />
-            </div>
-          </ScrollArea>
+        {!isPro && (
+          <Alert className="border-primary/40">
+            <Crown className="h-4 w-4 text-primary" />
+            <AlertDescription>
+              {t("pages.coach.freeLimitDescription")}
+              {remainingMessages !== null ? ` ${t("pages.coach.remainingToday", { count: remainingMessages })}` : ""}
+              {" "}
+              <Link href="/billing" className="underline">
+                {t("pages.coach.upgradeCta")}
+              </Link>
+            </AlertDescription>
+          </Alert>
+        )}
 
-          <div className="p-4 border-t border-border bg-card/80">
-            <form onSubmit={handleSend} className="max-w-3xl mx-auto relative flex gap-2" data-testid="chat-form">
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={t('coach.placeholder')}
-                className="h-12 pl-4 pr-12 bg-background/50 border-border shadow-inner"
-                data-testid="input-message"
-                disabled={isTyping}
-              />
-              <Button 
-                type="submit" 
-                size="icon" 
-                disabled={!input.trim() || isTyping}
-                data-testid="button-send"
-                className={cn(
-                  "absolute right-2 top-2 h-8 w-8 transition-all",
-                  input.trim() ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+        {limitReached && (
+          <Alert variant="destructive" data-testid="coach-limit-banner">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {t("pages.coach.limitReached")}{" "}
+              <Link href="/billing" className="underline">
+                {t("pages.coach.upgradeUnlimited")}
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {errorText && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="space-y-2">
+              <p>{errorText}</p>
+              {retryContent && !chatMutation.isPending && !limitReached ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => submitMessage(retryContent)}
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  {t("errorBoundary.retry")}
+                </Button>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2 border-border/50 bg-card/50 overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">{t("pages.coach.chatTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <ScrollArea className="h-[55vh] pr-3">
+                <div className="space-y-3">
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn("flex gap-3", message.role === "user" && "flex-row-reverse")}
+                    >
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback>{message.role === "assistant" ? "AI" : t("pages.coach.youShort")}</AvatarFallback>
+                      </Avatar>
+                      <div
+                        className={cn(
+                          "rounded-xl px-3 py-2 max-w-[80%] text-sm",
+                          message.role === "assistant" ? "bg-muted" : "bg-primary text-primary-foreground",
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        <p className="text-[10px] opacity-60 mt-1">
+                          {new Date(message.timestamp).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {chatMutation.isPending && (
+                    <div className="flex gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback>AI</AvatarFallback>
+                      </Avatar>
+                      <div className="rounded-xl px-3 py-2 bg-muted text-sm flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {t("coach.thinking")}
+                      </div>
+                    </div>
+                  )}
+                  <div ref={scrollRef} />
+                </div>
+              </ScrollArea>
+
+              <form onSubmit={handleSend} className="flex gap-2">
+                <Input
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder={t("pages.coach.inputPlaceholder")}
+                  disabled={chatMutation.isPending || limitReached}
+                />
+                <Button type="submit" size="icon" disabled={chatMutation.isPending || limitReached || !input.trim()}>
+                  <Send className="w-4 h-4" />
+                </Button>
+              </form>
+
+              <div className="flex flex-wrap gap-2">
+                {quickPrompts.map((prompt) => (
+                  <Button
+                    key={prompt}
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => submitMessage(prompt)}
+                    disabled={chatMutation.isPending || limitReached}
+                  >
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <LineChart className="w-4 h-4" />
+                  {t("pages.coach.pushAnalysisTitle")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {isPro ? (
+                  <Button
+                    onClick={() => pushAnalysisMutation.mutate()}
+                    disabled={pushAnalysisMutation.isPending}
+                    className="w-full"
+                  >
+                    {pushAnalysisMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        {t("pages.coach.generating")}
+                      </>
+                    ) : (
+                      t("pages.coach.generateAnalysis")
+                    )}
+                  </Button>
+                ) : (
+                  <Link href="/billing">
+                    <Button className="w-full" variant="outline">
+                      <Crown className="w-4 h-4 mr-2" />
+                      {t("pages.coach.upgradeCta")}
+                    </Button>
+                  </Link>
                 )}
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </form>
-            <div className="max-w-3xl mx-auto mt-2 flex justify-center gap-2 flex-wrap">
-              <SuggestionPill onClick={() => handleSuggestion("Como counterar Megacavaleiro?")} text="Como counterar Megacavaleiro?" />
-              <SuggestionPill onClick={() => handleSuggestion("Analise minha última derrota")} text="Analise minha última derrota" />
-              <SuggestionPill onClick={() => handleSuggestion("Melhor deck para Arena 17")} text="Melhor deck para Arena 17" />
-            </div>
+              </CardContent>
+            </Card>
+
+            {latestAnalysisQuery.isLoading ? (
+              <Card className="border-border/50 bg-card/50">
+                <CardContent className="py-6 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t("pages.coach.loadingLatestAnalysis")}
+                </CardContent>
+              </Card>
+            ) : latestAnalysisQuery.isError ? (
+              <PageErrorState
+                title={t("pages.coach.latestAnalysisErrorTitle")}
+                description={getApiErrorMessage(latestAnalysisQuery.error, t, "pages.coach.latestAnalysisErrorDescription")}
+                error={latestAnalysisQuery.error}
+                onRetry={() => latestAnalysisQuery.refetch()}
+              />
+            ) : latestAnalysis ? (
+              <PushAnalysisCard analysis={latestAnalysis} />
+            ) : (
+              <Card className="border-border/50 bg-card/50">
+                <CardContent className="py-6 text-sm text-muted-foreground">
+                  {t("pages.coach.noSavedAnalysis")}
+                </CardContent>
+              </Card>
+            )}
           </div>
-        </Card>
+        </div>
       </div>
     </DashboardLayout>
   );
-}
-
-function SuggestionPill({ text, onClick }: { text: string, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      data-testid={`suggestion-${text.substring(0, 10)}`}
-      className="text-xs px-3 py-1 rounded-full bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary/20 transition-colors"
-    >
-      {text}
-    </button>
-  )
 }
