@@ -7,10 +7,11 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getPlayerByTag, getPlayerBattles, getCards, getPlayerRankings, getClanRankings, getClanByTag, getClanMembers, getTopPlayersInLocation } from "./clashRoyaleApi";
 import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
-import { getStripePublishableKey, getStripeSecretKey } from "./stripeClient";
+import { getStripePublishableKey, getStripeSecretKey, getUncachableStripeClient } from "./stripeClient";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { PRICING } from "@shared/pricing";
 import {
   coachChatInputSchema,
   favoriteCreateInputSchema,
@@ -25,6 +26,7 @@ import {
 } from "@shared/schema";
 
 const FREE_DAILY_LIMIT = 5;
+const PRO_BRL_MONTHLY_PRICE_ID = PRICING.BRL.monthlyPriceId;
 
 type ApiProvider = "internal" | "replit-oidc" | "clash-royale" | "stripe" | "openai";
 
@@ -189,6 +191,51 @@ function computeTiltLevel(battles: any[]): 'high' | 'medium' | 'none' {
   }
   
   return 'none';
+}
+
+function computeConsecutiveLosses(battles: any[]): number {
+  let streak = 0;
+  for (const battle of battles) {
+    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
+    if (isVictory) {
+      break;
+    }
+    streak += 1;
+  }
+  return streak;
+}
+
+function getStripeSubscriptionPeriodEnd(subscription: Stripe.Subscription | null | undefined): Date | null {
+  const itemPeriodEnd = subscription?.items?.data?.[0]?.current_period_end;
+  if (typeof itemPeriodEnd === "number") {
+    return new Date(itemPeriodEnd * 1000);
+  }
+
+  return null;
+}
+
+function getBattleModeName(battle: any): string {
+  return battle?.gameMode?.name || battle?.type || "Ladder";
+}
+
+function buildPushModeBreakdown(battles: any[]) {
+  const byMode = new Map<string, { mode: string; matches: number; wins: number; losses: number; netTrophies: number }>();
+
+  for (const battle of battles) {
+    const mode = getBattleModeName(battle);
+    const isWin = (battle?.team?.[0]?.crowns || 0) > (battle?.opponent?.[0]?.crowns || 0);
+    const isLoss = (battle?.team?.[0]?.crowns || 0) < (battle?.opponent?.[0]?.crowns || 0);
+    const trophyChange = battle?.team?.[0]?.trophyChange || 0;
+
+    const current = byMode.get(mode) || { mode, matches: 0, wins: 0, losses: 0, netTrophies: 0 };
+    current.matches += 1;
+    if (isWin) current.wins += 1;
+    if (isLoss) current.losses += 1;
+    current.netTrophies += trophyChange;
+    byMode.set(mode, current);
+  }
+
+  return Array.from(byMode.values()).sort((a, b) => b.matches - a.matches);
 }
 
 interface PushSession {
@@ -1465,53 +1512,126 @@ export async function registerRoutes(
   });
 
   app.post('/api/stripe/checkout', isAuthenticated, async (req: any, res) => {
+    const route = "/api/stripe/checkout";
+    const userId = getUserId(req);
+
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
 
-      const userId = req.user.claims.sub;
-      const { priceId, currency } = req.body;
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
+      }
+
+      const { priceId } = req.body as { priceId?: string };
 
       if (!priceId) {
-        return res.status(400).json({ error: "Price ID is required" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "PRICE_ID_REQUIRED", message: "Price ID is required" },
+        });
+      }
+
+      if (priceId !== PRO_BRL_MONTHLY_PRICE_ID) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: {
+            code: "INVALID_PRICE_ID",
+            message: "Only PRO BRL monthly checkout is allowed",
+          },
+        });
       }
 
       const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "USER_NOT_FOUND", message: "User not found" },
+        });
       }
 
-      const customerId = await stripeService.getOrCreateCustomer(userId, user.email || '');
+      const customerId = await stripeService.getOrCreateCustomer(userId, user.email || "");
 
-      const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
-      const baseUrl = domains ? `https://${domains}` : (process.env.APP_BASE_URL || 'http://localhost:5000');
+      const domains = process.env.REPLIT_DOMAINS?.split(",")[0];
+      const baseUrl = domains ? `https://${domains}` : process.env.APP_BASE_URL || "http://localhost:5000";
       const session = await stripeService.createCheckoutSession(
         customerId,
         priceId,
         `${baseUrl}/billing?success=true`,
         `${baseUrl}/billing?canceled=true`,
-        userId
+        userId,
       );
 
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      res.status(500).json({ error: "Failed to create checkout session" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "CHECKOUT_SESSION_FAILED", message: "Failed to create checkout session" },
+      });
     }
   });
 
   app.post('/api/stripe/portal', isAuthenticated, async (req: any, res) => {
+    const route = "/api/stripe/portal";
+    const userId = getUserId(req);
+
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
 
-      const userId = req.user.claims.sub;
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
+      }
+
       const subscription = await storage.getSubscription(userId);
 
       if (!subscription?.stripeCustomerId) {
-        return res.status(400).json({ error: "No subscription found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "NO_SUBSCRIPTION", message: "No subscription found" },
+        });
       }
 
       const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
@@ -1524,7 +1644,77 @@ export async function registerRoutes(
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating portal session:", error);
-      res.status(500).json({ error: "Failed to create customer portal session" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "PORTAL_SESSION_FAILED", message: "Failed to create customer portal session" },
+      });
+    }
+  });
+
+  app.get('/api/billing/invoices', isAuthenticated, async (req: any, res) => {
+    const route = "/api/billing/invoices";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const subscription = await storage.getSubscription(userId);
+      if (!subscription?.stripeCustomerId) {
+        return res.json([]);
+      }
+
+      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+        return res.json([]);
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const invoices = await stripe.invoices.list({
+        customer: subscription.stripeCustomerId,
+        limit: 20,
+      });
+
+      const response = invoices.data.map((invoice) => {
+        const firstLine = invoice.lines?.data?.[0];
+        const firstLinePeriod = firstLine?.period;
+        return {
+          id: invoice.id,
+          status: invoice.status,
+          amountPaid: invoice.amount_paid,
+          amountDue: invoice.amount_due,
+          currency: invoice.currency?.toUpperCase(),
+          createdAt: new Date(invoice.created * 1000).toISOString(),
+          periodStart: firstLinePeriod?.start
+            ? new Date(firstLinePeriod.start * 1000).toISOString()
+            : null,
+          periodEnd: firstLinePeriod?.end
+            ? new Date(firstLinePeriod.end * 1000).toISOString()
+            : null,
+          hostedInvoiceUrl: invoice.hosted_invoice_url,
+          invoicePdf: invoice.invoice_pdf,
+        };
+      });
+
+      return res.json(response);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "INVOICE_FETCH_FAILED", message: "Failed to fetch invoices" },
+      });
     }
   });
 
@@ -1577,12 +1767,23 @@ export async function registerRoutes(
               typeof session.subscription === "string"
                 ? session.subscription
                 : session.subscription.id;
+            let stripeSubscription: Stripe.Subscription | null = null;
+            try {
+              stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            } catch (subscriptionFetchError) {
+              console.warn("Failed to retrieve Stripe subscription on checkout completion:", subscriptionFetchError);
+            }
             
             if (subscription) {
               await storage.updateSubscription(subscription.id, {
                 stripeSubscriptionId,
                 plan: 'pro',
-                status: 'active',
+                status: stripeSubscription?.status === "active" ? "active" : "inactive",
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(stripeSubscription) ??
+                  subscription.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
               });
               console.log(`PRO activated for user: ${userId}`);
               
@@ -1598,7 +1799,9 @@ export async function registerRoutes(
                   typeof session.customer === "string" ? session.customer : session.customer?.id,
                 stripeSubscriptionId,
                 plan: 'pro',
-                status: 'active',
+                status: stripeSubscription?.status === "active" ? "active" : "inactive",
+                currentPeriodEnd: getStripeSubscriptionPeriodEnd(stripeSubscription),
+                cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
               });
             }
           }
@@ -1615,6 +1818,12 @@ export async function registerRoutes(
                             subscriptionData.status;
               await storage.updateSubscription(existing.id, {
                 status: status,
+                plan: status === "active" ? "pro" : existing.plan,
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(subscriptionData) ??
+                  existing.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
               });
               console.log(`Subscription ${subscriptionData.id} updated to: ${status}`);
             }
@@ -1630,6 +1839,11 @@ export async function registerRoutes(
               await storage.updateSubscription(existing.id, {
                 plan: 'free',
                 status: 'canceled',
+                currentPeriodEnd:
+                  getStripeSubscriptionPeriodEnd(subscriptionData) ??
+                  existing.currentPeriodEnd ??
+                  null,
+                cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
               
@@ -1637,6 +1851,32 @@ export async function registerRoutes(
                 title: 'Assinatura cancelada',
                 description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
                 type: 'warning',
+              });
+            }
+          }
+          break;
+        }
+
+        case 'invoice.paid': {
+          const invoice = event.data.object as Stripe.Invoice & {
+            subscription?: string | Stripe.Subscription | null;
+          };
+          const subscriptionId =
+            typeof invoice?.subscription === "string"
+              ? invoice.subscription
+              : invoice?.subscription?.id;
+          const periodEndUnix = invoice.lines?.data?.[0]?.period?.end;
+
+          if (subscriptionId) {
+            const existing = await storage.getSubscriptionByStripeId(subscriptionId);
+            if (existing) {
+              await storage.updateSubscription(existing.id, {
+                plan: "pro",
+                status: "active",
+                currentPeriodEnd:
+                  typeof periodEndUnix === "number"
+                    ? new Date(periodEndUnix * 1000)
+                    : existing.currentPeriodEnd ?? null,
               });
             }
           }
@@ -1949,64 +2189,99 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/coach/push-analysis', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/push-analysis";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      
-      const isPro = await storage.isPro(userId);
-      if (!isPro) {
-        return res.status(403).json({ 
-          error: "Análise de push é uma funcionalidade PRO. Atualize seu plano para ter acesso.",
-          code: "PRO_REQUIRED",
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
-      
+
+      const isPro = await storage.isPro(userId);
+      if (!isPro) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Análise de push é uma funcionalidade PRO. Atualize seu plano para ter acesso.",
+          },
+        });
+      }
+
       const { playerTag: providedTag } = req.body as { playerTag?: string };
-      
+
       let playerTag = providedTag;
       if (!playerTag) {
         const profile = await storage.getProfile(userId);
         const profileTag = getCanonicalProfileTag(profile);
         if (!profileTag) {
-          return res.status(400).json({ 
-            error: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
-            code: "NO_PLAYER_TAG",
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 400,
+            error: {
+              code: "NO_PLAYER_TAG",
+              message: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
+            },
           });
         }
         playerTag = profileTag;
       }
-      
+
       const battlesResult = await getPlayerBattles(playerTag);
       if (!battlesResult.data) {
-        return res.status(404).json({ 
-          error: "Não foi possível buscar as batalhas do jogador.",
-          code: "BATTLES_FETCH_FAILED",
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: 404,
+          error: {
+            code: "BATTLES_FETCH_FAILED",
+            message: "Não foi possível buscar as batalhas do jogador.",
+          },
         });
       }
-      
+
       const battles = battlesResult.data as any[];
       const pushSessions = computePushSessions(battles);
-      
+
       if (pushSessions.length === 0) {
-        return res.status(400).json({ 
-          error: "Nenhuma sessão de push encontrada. Você precisa de pelo menos 2 batalhas com intervalos de até 30 minutos.",
-          code: "NO_PUSH_SESSION",
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_PUSH_SESSION",
+            message: "Nenhuma sessão de push encontrada. Você precisa de pelo menos 2 batalhas com intervalos de até 30 minutos.",
+          },
         });
       }
-      
+
       const latestPush = pushSessions[0];
-      
+
       const battleContexts: BattleContext[] = latestPush.battles.map((battle: any) => {
         const playerTeam = battle.team?.[0];
         const opponent = battle.opponent?.[0];
         const playerCrowns = playerTeam?.crowns || 0;
         const opponentCrowns = opponent?.crowns || 0;
-        
-        let result: 'win' | 'loss' | 'draw' = 'draw';
-        if (playerCrowns > opponentCrowns) result = 'win';
-        else if (playerCrowns < opponentCrowns) result = 'loss';
-        
+
+        let result: "win" | "loss" | "draw" = "draw";
+        if (playerCrowns > opponentCrowns) result = "win";
+        else if (playerCrowns < opponentCrowns) result = "loss";
+
         return {
-          gameMode: battle.gameMode?.name || battle.type || 'Ladder',
+          gameMode: getBattleModeName(battle),
           playerDeck: playerTeam?.cards?.map((c: any) => c.name) || [],
           opponentDeck: opponent?.cards?.map((c: any) => c.name) || [],
           playerCrowns,
@@ -2016,21 +2291,38 @@ export async function registerRoutes(
           result,
         };
       });
-      
+
       const durationMs = latestPush.endTime.getTime() - latestPush.startTime.getTime();
       const durationMinutes = Math.round(durationMs / 60000);
-      
+      const tiltLevel = computeTiltLevel(latestPush.battles);
+      const consecutiveLosses = computeConsecutiveLosses(latestPush.battles);
+      const avgTrophyChange =
+        latestPush.battles.length > 0
+          ? latestPush.netTrophies / latestPush.battles.length
+          : 0;
+      const avgElixirLeaked =
+        latestPush.battles.length > 0
+          ? latestPush.battles.reduce((acc, battle) => acc + (battle?.team?.[0]?.elixirLeaked || 0), 0) /
+            latestPush.battles.length
+          : 0;
+      const modeBreakdown = buildPushModeBreakdown(latestPush.battles);
+
       const pushSessionContext: PushSessionContext = {
         wins: latestPush.wins,
         losses: latestPush.losses,
         winRate: latestPush.winRate,
         netTrophies: latestPush.netTrophies,
         durationMinutes,
+        tiltLevel,
+        consecutiveLosses,
+        avgTrophyChange,
+        avgElixirLeaked,
+        modeBreakdown,
         battles: battleContexts,
       };
-      
+
       const analysisResult = await generatePushAnalysis(pushSessionContext);
-      
+
       const savedAnalysis = await storage.createPushAnalysis({
         userId,
         pushStartTime: latestPush.startTime,
@@ -2039,9 +2331,17 @@ export async function registerRoutes(
         wins: latestPush.wins,
         losses: latestPush.losses,
         netTrophies: latestPush.netTrophies,
-        resultJson: analysisResult,
+        resultJson: {
+          ...analysisResult,
+          tiltLevel,
+          consecutiveLosses,
+          avgTrophyChange,
+          avgElixirLeaked,
+          modeBreakdown,
+          durationMinutes,
+        },
       });
-      
+
       res.json({
         id: savedAnalysis.id,
         summary: analysisResult.summary,
@@ -2055,10 +2355,80 @@ export async function registerRoutes(
         battlesCount: latestPush.battles.length,
         pushStartTime: latestPush.startTime.toISOString(),
         pushEndTime: latestPush.endTime.toISOString(),
+        durationMinutes,
+        tiltLevel,
+        consecutiveLosses,
+        avgTrophyChange,
+        avgElixirLeaked,
       });
     } catch (error) {
       console.error("Error in push analysis:", error);
-      res.status(500).json({ error: "Falha ao gerar análise de push" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "openai",
+        status: 500,
+        error: { code: "PUSH_ANALYSIS_FAILED", message: "Falha ao gerar análise de push" },
+      });
+    }
+  });
+
+  app.get('/api/coach/push-analysis/latest', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/push-analysis/latest";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const analysis = await storage.getLatestPushAnalysis(userId);
+      if (!analysis) {
+        return res.json(null);
+      }
+
+      const analysisJson = (analysis.resultJson || {}) as Record<string, any>;
+      const summary = typeof analysisJson.summary === "string" ? analysisJson.summary : "Sem resumo";
+      const strengths = Array.isArray(analysisJson.strengths) ? analysisJson.strengths : [];
+      const mistakes = Array.isArray(analysisJson.mistakes) ? analysisJson.mistakes : [];
+      const recommendations = Array.isArray(analysisJson.recommendations) ? analysisJson.recommendations : [];
+
+      return res.json({
+        id: analysis.id,
+        summary,
+        strengths,
+        mistakes,
+        recommendations,
+        wins: analysis.wins,
+        losses: analysis.losses,
+        winRate: analysis.battlesCount > 0 ? (analysis.wins / analysis.battlesCount) * 100 : 0,
+        netTrophies: analysis.netTrophies,
+        battlesCount: analysis.battlesCount,
+        pushStartTime: analysis.pushStartTime?.toISOString?.() || null,
+        pushEndTime: analysis.pushEndTime?.toISOString?.() || null,
+        durationMinutes: analysisJson.durationMinutes ?? Math.round(
+          (new Date(analysis.pushEndTime).getTime() - new Date(analysis.pushStartTime).getTime()) / 60000,
+        ),
+        tiltLevel: analysisJson.tiltLevel ?? "none",
+        consecutiveLosses: analysisJson.consecutiveLosses ?? 0,
+        avgTrophyChange: analysisJson.avgTrophyChange ?? 0,
+        avgElixirLeaked: analysisJson.avgElixirLeaked ?? 0,
+      });
+    } catch (error) {
+      console.error("Error fetching latest push analysis:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PUSH_ANALYSIS_FETCH_FAILED", message: "Falha ao buscar análise de push" },
+      });
     }
   });
 
@@ -2337,6 +2707,14 @@ export async function registerRoutes(
           error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
         });
       }
+
+      if (existingPlan.status !== "completed" && status === "completed") {
+        await createNotificationIfAllowed(userId, "training", {
+          title: "Plano concluído!",
+          description: `Você concluiu o plano "${existingPlan.title}". Parabéns pela consistência.`,
+          type: "success",
+        });
+      }
       
       res.json(plan);
     } catch (error) {
@@ -2425,8 +2803,23 @@ export async function registerRoutes(
       if (clanResult.error) {
         return res.status(clanResult.status).json({ error: clanResult.error });
       }
-      
-      res.json(clanResult.data);
+
+      let members: any[] = [];
+      let membersError: string | null = null;
+      const membersResult = await getClanMembers(tag);
+      if (membersResult.error) {
+        membersError = membersResult.error;
+      } else {
+        const items = (membersResult.data as any)?.items;
+        members = Array.isArray(items) ? items : [];
+      }
+
+      res.json({
+        clan: clanResult.data,
+        members,
+        membersPartial: Boolean(membersError),
+        membersError,
+      });
     } catch (error) {
       console.error("Error fetching clan:", error);
       res.status(500).json({ error: "Failed to fetch clan data" });
@@ -2441,6 +2834,20 @@ export async function registerRoutes(
     try {
       const cachedDecks = await storage.getMetaDecks();
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const toDeckResponse = (decks: any[], staleReason: "fresh" | "stale" = "fresh") =>
+        decks.map((deck) => {
+          const avgTrophies = typeof deck.avgTrophies === "number" ? deck.avgTrophies : null;
+          const estimatedWinRate = avgTrophies === null
+            ? 50
+            : Math.max(45, Math.min(72, 45 + (avgTrophies - 6000) / 120));
+
+          return {
+            ...deck,
+            sampleSize: deck.usageCount ?? 0,
+            estimatedWinRate: Number(estimatedWinRate.toFixed(1)),
+            cacheStatus: staleReason,
+          };
+        });
       
       const needsRefresh = cachedDecks.length === 0 || 
         cachedDecks.every(d => new Date(d.lastUpdatedAt || 0) < oneHourAgo);
@@ -2488,17 +2895,21 @@ export async function registerRoutes(
             }
             
             const newDecks = await storage.getMetaDecks();
-            return res.json(newDecks);
+            return res.json(toDeckResponse(newDecks, "fresh"));
           }
         } catch (refreshError) {
           console.error("Error refreshing meta decks:", refreshError);
+          if (cachedDecks.length > 0) {
+            return res.json(toDeckResponse(cachedDecks, "stale"));
+          }
+          return res.json([]);
         }
       }
       
-      res.json(cachedDecks);
+      res.json(toDeckResponse(cachedDecks, "fresh"));
     } catch (error) {
       console.error("Error fetching meta decks:", error);
-      res.status(500).json({ error: "Failed to fetch meta decks" });
+      res.json([]);
     }
   });
 

@@ -2,9 +2,9 @@ import type { Locale, SupportedCurrency } from './i18n';
 
 export interface PricingPlan {
   monthlyPrice: number;
-  yearlyPrice: number;
   monthlyPriceId: string;
-  yearlyPriceId: string;
+  yearlyPrice?: number;
+  yearlyPriceId?: string;
   currency: SupportedCurrency;
   symbol: string;
   locale: string;
@@ -13,30 +13,10 @@ export interface PricingPlan {
 export const PRICING: Record<SupportedCurrency, PricingPlan> = {
   BRL: {
     monthlyPrice: 49.90,
-    yearlyPrice: 399.00,
     monthlyPriceId: 'price_1SdgN5CnrOGKyenCuyccxmyj',
-    yearlyPriceId: 'price_1SdgN5CnrOGKyenCIuDeQl5A',
     currency: 'BRL',
     symbol: 'R$',
     locale: 'pt-BR',
-  },
-  USD: {
-    monthlyPrice: 10.00,
-    yearlyPrice: 80.00,
-    monthlyPriceId: 'price_1SdwJRCnrOGKyenCp6kzFRYo',
-    yearlyPriceId: 'price_1SdwJSCnrOGKyenCSagffo1v',
-    currency: 'USD',
-    symbol: '$',
-    locale: 'en-US',
-  },
-  EUR: {
-    monthlyPrice: 9.00,
-    yearlyPrice: 72.00,
-    monthlyPriceId: 'price_1SdwJSCnrOGKyenCRrOmhorG',
-    yearlyPriceId: 'price_1SdwJSCnrOGKyenCCj30dZj5',
-    currency: 'EUR',
-    symbol: '€',
-    locale: 'de-DE',
   },
 };
 
@@ -60,20 +40,13 @@ export function formatPrice(amount: number, currency: SupportedCurrency): string
 }
 
 export function getYearlySavingsPercent(currency: SupportedCurrency): number {
-  const plan = PRICING[currency];
-  const monthlyTotal = plan.monthlyPrice * 12;
-  const savings = ((monthlyTotal - plan.yearlyPrice) / monthlyTotal) * 100;
-  return Math.round(savings);
+  void currency;
+  return 0;
 }
 
 export function getCurrencyFromLocale(locale: Locale): SupportedCurrency {
-  switch (locale) {
-    case 'pt-BR':
-      return 'BRL';
-    case 'en-US':
-    default:
-      return 'USD';
-  }
+  void locale;
+  return 'BRL';
 }
 
-export const SUPPORTED_CURRENCIES: SupportedCurrency[] = ['BRL', 'USD', 'EUR'];
+export const SUPPORTED_CURRENCIES: SupportedCurrency[] = ['BRL'];

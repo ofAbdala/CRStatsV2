@@ -33,6 +33,17 @@ export interface PushSessionContext {
   winRate: number;
   netTrophies: number;
   durationMinutes: number;
+  tiltLevel?: "high" | "medium" | "none";
+  consecutiveLosses?: number;
+  avgTrophyChange?: number;
+  avgElixirLeaked?: number;
+  modeBreakdown?: Array<{
+    mode: string;
+    matches: number;
+    wins: number;
+    losses: number;
+    netTrophies: number;
+  }>;
   battles: BattleContext[];
 }
 
@@ -81,11 +92,17 @@ function safeParseJson<T>(raw: string): T | null {
 
 function fallbackPushAnalysis(session: PushSessionContext): PushAnalysisResult {
   const positiveResult = session.netTrophies >= 0;
+  const tiltSentence =
+    session.tiltLevel === "high"
+      ? "Há sinais fortes de tilt na sessão."
+      : session.tiltLevel === "medium"
+        ? "Existem sinais moderados de tilt."
+        : "Tilt controlado durante a sessão.";
 
   return {
     summary: positiveResult
-      ? "Sessão estável com bom controle do ritmo."
-      : "Sessão com oscilação de performance e perda de consistência.",
+      ? `Sessão estável com bom controle do ritmo. ${tiltSentence}`
+      : `Sessão com oscilação de performance e perda de consistência. ${tiltSentence}`,
     strengths: [
       "Leitura de partida aceitável nos primeiros minutos.",
       "Capacidade de adaptação quando o matchup é favorável.",
@@ -169,7 +186,8 @@ export async function generatePushAnalysis(
   const systemPrompt = `Você é um analista de performance de Clash Royale.
 Retorne apenas JSON válido no formato:
 {"summary":"string","strengths":["..."],"mistakes":["..."],"recommendations":["..."]}
-Sem markdown.`;
+Sem markdown.
+Considere métricas agregadas como tilt, sequência de derrotas, variação média de troféus e vazamento médio de elixir.`;
 
   try {
     const result = await createCompletion(

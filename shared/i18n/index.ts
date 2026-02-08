@@ -2,7 +2,7 @@ import ptBR from './translations/pt-BR.json';
 import enUS from './translations/en-US.json';
 
 export type Locale = 'pt-BR' | 'en-US';
-export type SupportedCurrency = 'BRL' | 'USD' | 'EUR';
+export type SupportedCurrency = 'BRL';
 
 const translations: Record<Locale, typeof ptBR> = {
   'pt-BR': ptBR,
@@ -30,24 +30,12 @@ export function detectLocale(acceptLanguage?: string | null): Locale {
 }
 
 export function detectCurrency(locale: Locale): SupportedCurrency {
-  switch (locale) {
-    case 'pt-BR':
-      return 'BRL';
-    case 'en-US':
-    default:
-      return 'USD';
-  }
+  void locale;
+  return 'BRL';
 }
 
 export function getCurrencyFromTimezone(): SupportedCurrency {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz.startsWith('America/Sao_Paulo') || tz.includes('Brazil')) return 'BRL';
-    if (tz.startsWith('Europe/')) return 'EUR';
-    return 'USD';
-  } catch {
-    return 'USD';
-  }
+  return 'BRL';
 }
 
 type NestedKeyOf<T> = T extends object

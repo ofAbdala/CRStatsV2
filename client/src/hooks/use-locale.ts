@@ -23,24 +23,15 @@ export function useLocale() {
     return DEFAULT_LOCALE;
   });
 
-  const [currency, setCurrency] = useState<SupportedCurrency>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('currency');
-      if (stored && ['BRL', 'USD', 'EUR'].includes(stored)) {
-        return stored as SupportedCurrency;
-      }
-    }
-    return getCurrencyFromLocale(locale);
-  });
+  const [currency] = useState<SupportedCurrency>(() => getCurrencyFromLocale(locale));
+  const setCurrency = (_currency: SupportedCurrency) => {
+    // Billing is fixed to BRL in this release.
+  };
 
   useEffect(() => {
     localStorage.setItem('locale', locale);
     document.documentElement.lang = locale;
   }, [locale]);
-
-  useEffect(() => {
-    localStorage.setItem('currency', currency);
-  }, [currency]);
 
   const translations = useMemo(() => getTranslations(locale), [locale]);
   const pricing = useMemo(() => getPricing(currency), [currency]);
