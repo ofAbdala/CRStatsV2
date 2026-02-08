@@ -460,31 +460,43 @@
         "profileSaveErrorTitle": "Falha ao salvar perfil"
       }
     },
-    "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Visão consolidada da sua performance recente.",
-      "sync": "Sincronizar",
-      "noSync": "Sem sincronização",
-      "lastUpdate": "Última atualização: {time}",
-      "partialSync": "Parte dos dados não pôde ser atualizada nesta sincronização.",
-      "recentBattlesTitle": "Últimas batalhas",
-      "opponentFallback": "Oponente",
-      "goalsTitle": "Metas",
-      "manageGoals": "Gerenciar metas",
-      "favoritesTitle": "Favoritos",
-      "emptyBattles": "Sem batalhas recentes.",
-      "emptyGoals": "Nenhuma meta ativa.",
-      "emptyFavorites": "Nenhum favorito cadastrado.",
-      "stats": {
-        "trophies": "Troféus",
-        "winRate": "Win rate",
-        "wins": "Vitórias",
-        "losses": "Derrotas"
-      },
-      "tilt": {
-        "high": "Tilt alto",
-        "medium": "Tilt moderado",
-        "none": "Tilt controlado"
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Visão consolidada da sua performance recente.",
+    "syncNow": "Dados sincronizados agora",
+    "syncPartial": "Sincronização parcial",
+    "syncError": "Falha na sincronização",
+    "sync": "Sincronizar",
+    "noSync": "Sem sincronização",
+    "lastUpdate": "Última atualização: {time}",
+    "partialSync": "Parte dos dados não pôde ser atualizada nesta sincronização.",
+    "trophyProgressTitle": "Progresso de Troféus",
+    "currentDeckTitle": "Deck Atual",
+    "recentBattlesTitle": "Últimas batalhas",
+    "viewFullHistory": "Ver histórico completo",
+    "opponentFallback": "Oponente",
+    "goalsTitle": "Metas",
+    "manageGoals": "Gerenciar metas",
+    "favoritesTitle": "Favoritos",
+    "exploreCommunity": "Explorar Comunidade",
+    "emptyBattles": "Sem batalhas recentes.",
+    "emptyGoals": "Nenhuma meta ativa.",
+    "emptyFavorites": "Nenhum favorito cadastrado.",
+    "stats": {
+      "trophies": "Troféus",
+      "bestSeason": "Melhor Temporada",
+      "personalBest": "Recorde pessoal",
+      "arenaLabel": "Arena: {name}",
+      "winRate": "Win rate",
+      "lastBattles": "Últimas {count} batalhas",
+      "wins": "Vitórias",
+      "losses": "Derrotas",
+      "lossesLine": "{count} derrotas"
+    },
+    "tilt": {
+      "high": "Tilt alto",
+      "medium": "Tilt moderado",
+      "none": "Tilt controlado"
       }
     },
     "me": {
@@ -561,6 +573,28 @@
       "planFree": "Plano FREE",
       "proOnly": "Treinamento guiado completo é um recurso PRO.",
       "upgradeCta": "Fazer upgrade",
+      "teaser": {
+        "defenseTitle": "Posicionamento defensivo",
+        "defenseDescription": "Você tem tomado muito dano de Corredor. Pratique o posicionamento 4-3 do Canhão.",
+        "spellsTitle": "Timing de feitiços",
+        "spellsDescription": "Seus Zaps estão atrasados contra Barril de Goblins. Melhore seu tempo de reação.",
+        "elixirTitle": "Controle de elixir",
+        "elixirDescription": "Evite vazar elixir no início da partida. Mantenha o fluxo constante.",
+        "difficulty": {
+          "easy": "Fácil",
+          "medium": "Médio",
+          "hard": "Difícil"
+        },
+        "progressLabel": "Progresso",
+        "start": "Iniciar Treino",
+        "done": "Concluído"
+      },
+      "advancedTitle": "Treinos avançados",
+      "advancedUnlockedTitle": "Treinos avançados liberados",
+      "advancedUnlockedDescription": "Acesse cenários específicos, matchups e análises detalhadas para acelerar sua evolução.",
+      "advancedUnlockedCta": "Abrir Coach IA",
+      "advancedLockedTitle": "Desbloqueie o Potencial Máximo",
+      "advancedLockedDescription": "Assinantes PRO têm acesso a cenários específicos de matchups e análise de replay quadro a quadro.",
       "activePlanTitle": "Plano ativo",
       "status": {
         "active": "Ativo",
@@ -671,27 +705,40 @@
         "portalErrorTitle": "Falha ao abrir portal"
       }
     },
-    "decks": {
-      "title": "Decks e meta",
-      "subtitle": "Seus decks reais do sync + meta decks com cache previsível.",
-      "refreshSync": "Atualizar sync",
-      "tabs": {
-        "myDecks": "Meus decks",
-        "metaDecks": "Meta decks"
-      },
-      "loadingMyDecks": "Carregando decks do jogador...",
-      "emptyMyDecks": "Nenhum deck encontrado no histórico recente.",
-      "deckIndex": "Deck #{index}",
-      "mainDeckBadge": "Principal",
-      "matches": "{count} partidas",
-      "netTrophies": "{value} troféus",
-      "avgElixir": "{value} elixir",
-      "staleCache": "Exibindo cache antigo de meta decks por falha no refresh externo.",
-      "loadingMetaDecks": "Carregando meta decks...",
-      "metaErrorTitle": "Falha ao carregar meta decks",
-      "metaErrorDescription": "Não foi possível carregar os meta decks.",
-      "emptyMetaDecks": "Sem dados de meta no momento.",
-      "metaDeckFallback": "Deck meta",
+  "decks": {
+    "title": "Decks e meta",
+    "subtitle": "Seus decks reais do sync + meta decks com cache previsível.",
+    "refreshSync": "Atualizar sync",
+    "tabs": {
+      "myDecks": "Meus decks",
+      "metaDecks": "Meta decks"
+    },
+    "actions": {
+      "copyLink": "Copiar link",
+      "viewDetails": "Ver detalhes"
+    },
+    "toast": {
+      "copiedTitle": "Copiado!",
+      "copiedLink": "Link do deck copiado para a área de transferência.",
+      "copiedList": "Lista de cartas copiada para a área de transferência.",
+      "copyErrorTitle": "Falha ao copiar",
+      "detailsTitle": "Detalhes",
+      "detailsDescription": "Em breve."
+    },
+    "loadingMyDecks": "Carregando decks do jogador...",
+    "emptyMyDecks": "Nenhum deck encontrado no histórico recente.",
+    "deckIndex": "Deck #{index}",
+    "mainDeckBadge": "Principal",
+    "matches": "{count} partidas",
+    "netTrophies": "{value} troféus",
+    "avgElixir": "{value} elixir",
+    "staleCache": "Exibindo cache antigo de meta decks por falha no refresh externo.",
+    "staleBadge": "cache antigo",
+    "loadingMetaDecks": "Carregando meta decks...",
+    "metaErrorTitle": "Falha ao carregar meta decks",
+    "metaErrorDescription": "Não foi possível carregar os meta decks.",
+    "emptyMetaDecks": "Sem dados de meta no momento.",
+    "metaDeckFallback": "Deck meta",
       "estimatedWr": "{value}% WR estimado",
       "sampleSize": "sample {value}",
       "usageCount": "uso {value}",

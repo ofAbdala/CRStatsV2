@@ -460,31 +460,43 @@
         "profileSaveErrorTitle": "Failed to save profile"
       }
     },
-    "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Consolidated view of your recent performance.",
-      "sync": "Sync",
-      "noSync": "No sync yet",
-      "lastUpdate": "Last update: {time}",
-      "partialSync": "Some data could not be refreshed in this sync.",
-      "recentBattlesTitle": "Recent battles",
-      "opponentFallback": "Opponent",
-      "goalsTitle": "Goals",
-      "manageGoals": "Manage goals",
-      "favoritesTitle": "Favorites",
-      "emptyBattles": "No recent battles.",
-      "emptyGoals": "No active goals.",
-      "emptyFavorites": "No favorite players yet.",
-      "stats": {
-        "trophies": "Trophies",
-        "winRate": "Win rate",
-        "wins": "Wins",
-        "losses": "Losses"
-      },
-      "tilt": {
-        "high": "High tilt",
-        "medium": "Moderate tilt",
-        "none": "Controlled tilt"
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Consolidated view of your recent performance.",
+    "syncNow": "Synced just now",
+    "syncPartial": "Partial sync",
+    "syncError": "Sync failed",
+    "sync": "Sync",
+    "noSync": "No sync yet",
+    "lastUpdate": "Last update: {time}",
+    "partialSync": "Some data could not be refreshed in this sync.",
+    "trophyProgressTitle": "Trophy progress",
+    "currentDeckTitle": "Current deck",
+    "recentBattlesTitle": "Recent battles",
+    "viewFullHistory": "View full history",
+    "opponentFallback": "Opponent",
+    "goalsTitle": "Goals",
+    "manageGoals": "Manage goals",
+    "favoritesTitle": "Favorites",
+    "exploreCommunity": "Explore community",
+    "emptyBattles": "No recent battles.",
+    "emptyGoals": "No active goals.",
+    "emptyFavorites": "No favorite players yet.",
+    "stats": {
+      "trophies": "Trophies",
+      "bestSeason": "Best season",
+      "personalBest": "Personal best",
+      "arenaLabel": "Arena: {name}",
+      "winRate": "Win rate",
+      "lastBattles": "Last {count} battles",
+      "wins": "Wins",
+      "losses": "Losses",
+      "lossesLine": "{count} losses"
+    },
+    "tilt": {
+      "high": "High tilt",
+      "medium": "Moderate tilt",
+      "none": "Controlled tilt"
       }
     },
     "me": {
@@ -561,6 +573,28 @@
       "planFree": "FREE plan",
       "proOnly": "Full guided training is a PRO feature.",
       "upgradeCta": "Upgrade",
+      "teaser": {
+        "defenseTitle": "Defensive positioning",
+        "defenseDescription": "You've been taking too much Hog Rider damage. Practice Cannon 4-3 placement.",
+        "spellsTitle": "Spell timing",
+        "spellsDescription": "Your Zaps are late against Goblin Barrel. Improve your reaction timing.",
+        "elixirTitle": "Elixir control",
+        "elixirDescription": "Avoid leaking elixir at the start of the match. Keep a steady flow.",
+        "difficulty": {
+          "easy": "Easy",
+          "medium": "Medium",
+          "hard": "Hard"
+        },
+        "progressLabel": "Progress",
+        "start": "Start training",
+        "done": "Done"
+      },
+      "advancedTitle": "Advanced training",
+      "advancedUnlockedTitle": "Advanced training unlocked",
+      "advancedUnlockedDescription": "Access specific scenarios, matchups, and deeper analysis to improve faster.",
+      "advancedUnlockedCta": "Open AI Coach",
+      "advancedLockedTitle": "Unlock maximum potential",
+      "advancedLockedDescription": "PRO subscribers get access to matchup scenarios and frame-by-frame replay analysis.",
       "activePlanTitle": "Active plan",
       "status": {
         "active": "Active",
@@ -671,25 +705,38 @@
         "portalErrorTitle": "Failed to open portal"
       }
     },
-    "decks": {
-      "title": "Decks & meta",
-      "subtitle": "Your real sync decks + meta decks with predictable caching.",
-      "refreshSync": "Refresh sync",
-      "tabs": {
-        "myDecks": "My decks",
-        "metaDecks": "Meta decks"
-      },
-      "loadingMyDecks": "Loading player decks...",
-      "emptyMyDecks": "No decks found in recent history.",
-      "deckIndex": "Deck #{index}",
-      "mainDeckBadge": "Main",
+  "decks": {
+    "title": "Decks & meta",
+    "subtitle": "Your real sync decks + meta decks with predictable caching.",
+    "refreshSync": "Refresh sync",
+    "tabs": {
+      "myDecks": "My decks",
+      "metaDecks": "Meta decks"
+    },
+    "actions": {
+      "copyLink": "Copy link",
+      "viewDetails": "View details"
+    },
+    "toast": {
+      "copiedTitle": "Copied!",
+      "copiedLink": "Deck link copied to clipboard.",
+      "copiedList": "Card list copied to clipboard.",
+      "copyErrorTitle": "Failed to copy",
+      "detailsTitle": "Details",
+      "detailsDescription": "Coming soon."
+    },
+    "loadingMyDecks": "Loading player decks...",
+    "emptyMyDecks": "No decks found in recent history.",
+    "deckIndex": "Deck #{index}",
+    "mainDeckBadge": "Main",
       "matches": "{count} matches",
       "netTrophies": "{value} trophies",
-      "avgElixir": "{value} elixir",
-      "staleCache": "Showing stale meta cache because external refresh failed.",
-      "loadingMetaDecks": "Loading meta decks...",
-      "metaErrorTitle": "Failed to load meta decks",
-      "metaErrorDescription": "Could not load meta decks.",
+    "avgElixir": "{value} elixir",
+    "staleCache": "Showing stale meta cache because external refresh failed.",
+    "staleBadge": "stale cache",
+    "loadingMetaDecks": "Loading meta decks...",
+    "metaErrorTitle": "Failed to load meta decks",
+    "metaErrorDescription": "Could not load meta decks.",
       "emptyMetaDecks": "No meta data available right now.",
       "metaDeckFallback": "Meta deck",
       "estimatedWr": "{value}% estimated WR",
