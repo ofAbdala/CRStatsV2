@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { LocaleProvider, useLocale } from "@/hooks/use-locale";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import NotFoundPage from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import OnboardingPage from "@/pages/onboarding";
@@ -104,6 +105,7 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router />
+            <SpeedInsights />
           </TooltipProvider>
         </LocaleProvider>
       </QueryClientProvider>
