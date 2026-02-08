@@ -2,14 +2,12 @@
 import express, { type Express, type Response } from "express";
 import { type Server } from "http";
 import Stripe from "stripe";
-import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { getUserStorage, serviceStorage, type IStorage } from "./storage";
+import { requireAuth } from "./supabaseAuth";
 import { getPlayerByTag, getPlayerBattles, getCards, getPlayerRankings, getClanRankings, getClanByTag, getClanMembers, getTopPlayersInLocation } from "./clashRoyaleApi";
 import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getStripeSecretKey, getUncachableStripeClient } from "./stripeClient";
-import { db } from "./db";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { PRICING } from "@shared/pricing";
 import {
@@ -37,7 +35,7 @@ import {
 const FREE_DAILY_LIMIT = 5;
 const PRO_BRL_MONTHLY_PRICE_ID = PRICING.BRL.monthlyPriceId;
 
-type ApiProvider = "internal" | "replit-oidc" | "clash-royale" | "stripe" | "openai";
+type ApiProvider = "internal" | "supabase-auth" | "clash-royale" | "stripe" | "openai";
 
 interface ApiErrorPayload {
   code: string;
@@ -54,7 +52,7 @@ interface SyncErrorItem {
 }
 
 function getUserId(req: any): string | null {
-  return req?.user?.claims?.sub ?? null;
+  return req?.auth?.userId ?? null;
 }
 
 function logApiContext(
@@ -147,7 +145,7 @@ function getClashErrorCode(status: number) {
 
 type NotificationCategory = "training" | "billing" | "system";
 
-async function isNotificationAllowed(userId: string, category: NotificationCategory) {
+async function isNotificationAllowed(storage: IStorage, userId: string, category: NotificationCategory) {
   const prefs = await storage.getNotificationPreferences(userId);
   if (prefs) {
     return prefs[category];
@@ -168,6 +166,7 @@ async function isNotificationAllowed(userId: string, category: NotificationCateg
 }
 
 async function createNotificationIfAllowed(
+  storage: IStorage,
   userId: string,
   category: NotificationCategory,
   payload: {
@@ -176,7 +175,7 @@ async function createNotificationIfAllowed(
     type: string;
   },
 ) {
-  if (!(await isNotificationAllowed(userId, category))) {
+  if (!(await isNotificationAllowed(storage, userId, category))) {
     return null;
   }
 
@@ -308,14 +307,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup authentication middleware
-  await setupAuth(app);
-
   // ============================================================================
   // AUTH ROUTES
   // ============================================================================
   
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', requireAuth, async (req: any, res) => {
     const route = "/api/auth/user";
     const userId = getUserId(req);
 
@@ -324,13 +320,22 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
-      const user = await storage.getUser(userId);
+      const storage = getUserStorage(req.auth!);
+      let user = await storage.getUser(userId);
+
+      // Normally created by the Supabase `auth.users` trigger, but keep a server-side fallback
+      // to avoid blocking the first request if the trigger isn't installed yet.
+      if (!user) {
+        const email = typeof req.auth?.claims?.email === "string" ? req.auth.claims.email : undefined;
+        await serviceStorage.upsertUser({ id: userId, email });
+        user = await storage.getUser(userId);
+      }
       
       if (!user) {
         return sendApiError(res, {
@@ -371,7 +376,7 @@ export async function registerRoutes(
   // PROFILE ROUTES
   // ============================================================================
   
-  app.get('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.get('/api/profile', requireAuth, async (req: any, res) => {
     const route = "/api/profile";
     const userId = getUserId(req);
 
@@ -380,12 +385,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       await storage.bootstrapUserData(userId);
       const profile = await storage.getProfile(userId);
 
@@ -412,7 +418,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.post('/api/profile', requireAuth, async (req: any, res) => {
     const route = "/api/profile";
     const userId = getUserId(req);
 
@@ -421,12 +427,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(profileCreateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -462,7 +469,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/profile', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/profile', requireAuth, async (req: any, res) => {
     const route = "/api/profile";
     const userId = getUserId(req);
 
@@ -471,12 +478,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(profileUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -515,19 +523,35 @@ export async function registerRoutes(
   // SUBSCRIPTION ROUTES
   // ============================================================================
   
-  app.get('/api/subscription', isAuthenticated, async (req: any, res) => {
+  app.get('/api/subscription', requireAuth, async (req: any, res) => {
+    const route = "/api/subscription";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const subscription = await storage.getSubscription(userId);
-      
-      if (!subscription) {
-        return res.json({ plan: 'free', status: 'inactive' });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
 
-      res.json(subscription);
+      const storage = getUserStorage(req.auth!);
+      await storage.bootstrapUserData(userId);
+      const subscription = await storage.getSubscription(userId);
+
+      return res.json(subscription || { plan: "free", status: "inactive" });
     } catch (error) {
       console.error("Error fetching subscription:", error);
-      res.status(500).json({ message: "Failed to fetch subscription" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SUBSCRIPTION_FETCH_FAILED", message: "Failed to fetch subscription" },
+      });
     }
   });
 
@@ -535,18 +559,7 @@ export async function registerRoutes(
   // GOALS ROUTES
   // ============================================================================
   
-  app.get('/api/goals', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const goals = await storage.getGoals(userId);
-      res.json(goals);
-    } catch (error) {
-      console.error("Error fetching goals:", error);
-      res.status(500).json({ message: "Failed to fetch goals" });
-    }
-  });
-
-  app.post('/api/goals', isAuthenticated, async (req: any, res) => {
+  app.get('/api/goals', requireAuth, async (req: any, res) => {
     const route = "/api/goals";
     const userId = getUserId(req);
 
@@ -555,12 +568,43 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
+      const goals = await storage.getGoals(userId);
+      return res.json(goals);
+    } catch (error) {
+      console.error("Error fetching goals:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOALS_FETCH_FAILED", message: "Failed to fetch goals" },
+      });
+    }
+  });
+
+  app.post('/api/goals', requireAuth, async (req: any, res) => {
+    const route = "/api/goals";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(goalCreateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -590,7 +634,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/goals/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/goals/:id', requireAuth, async (req: any, res) => {
     const route = "/api/goals/:id";
     const userId = getUserId(req);
 
@@ -599,12 +643,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(goalUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -657,20 +702,45 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/goals/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/goals/:id', requireAuth, async (req: any, res) => {
+    const route = "/api/goals/:id";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const { id } = req.params;
       const existingGoal = await storage.getGoal(id);
       if (!existingGoal || existingGoal.userId !== userId) {
-        return res.status(404).json({ message: "Goal not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "GOAL_NOT_FOUND", message: "Goal not found" },
+        });
       }
 
       await storage.deleteGoal(id);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error) {
       console.error("Error deleting goal:", error);
-      res.status(500).json({ message: "Failed to delete goal" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOAL_DELETE_FAILED", message: "Failed to delete goal" },
+      });
     }
   });
 
@@ -678,18 +748,7 @@ export async function registerRoutes(
   // FAVORITE PLAYERS ROUTES
   // ============================================================================
   
-  app.get('/api/favorites', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const favorites = await storage.getFavoritePlayers(userId);
-      res.json(favorites);
-    } catch (error) {
-      console.error("Error fetching favorites:", error);
-      res.status(500).json({ message: "Failed to fetch favorites" });
-    }
-  });
-
-  app.post('/api/favorites', isAuthenticated, async (req: any, res) => {
+  app.get('/api/favorites', requireAuth, async (req: any, res) => {
     const route = "/api/favorites";
     const userId = getUserId(req);
 
@@ -698,12 +757,43 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
+      const favorites = await storage.getFavoritePlayers(userId);
+      return res.json(favorites);
+    } catch (error) {
+      console.error("Error fetching favorites:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "FAVORITES_FETCH_FAILED", message: "Failed to fetch favorites" },
+      });
+    }
+  });
+
+  app.post('/api/favorites', requireAuth, async (req: any, res) => {
+    const route = "/api/favorites";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(favoriteCreateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -747,20 +837,45 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/favorites/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/favorites/:id', requireAuth, async (req: any, res) => {
+    const route = "/api/favorites/:id";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const { id } = req.params;
       const existingFavorite = await storage.getFavoritePlayer(id);
       if (!existingFavorite || existingFavorite.userId !== userId) {
-        return res.status(404).json({ message: "Favorite not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "FAVORITE_NOT_FOUND", message: "Favorite not found" },
+        });
       }
 
       await storage.deleteFavoritePlayer(id);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error) {
       console.error("Error deleting favorite:", error);
-      res.status(500).json({ message: "Failed to delete favorite" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "FAVORITE_DELETE_FAILED", message: "Failed to delete favorite" },
+      });
     }
   });
 
@@ -768,7 +883,7 @@ export async function registerRoutes(
   // NOTIFICATIONS ROUTES
   // ============================================================================
   
-  app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+  app.get('/api/notifications', requireAuth, async (req: any, res) => {
     const route = "/api/notifications";
     const userId = getUserId(req);
 
@@ -777,12 +892,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const notifications = await storage.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -797,7 +913,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+  app.post('/api/notifications/:id/read', requireAuth, async (req: any, res) => {
     const route = "/api/notifications/:id/read";
     const userId = getUserId(req);
 
@@ -806,12 +922,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const { id } = req.params;
       const notification = await storage.getNotification(id);
       if (!notification || notification.userId !== userId) {
@@ -838,7 +955,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/notifications/read-all', isAuthenticated, async (req: any, res) => {
+  app.post('/api/notifications/read-all', requireAuth, async (req: any, res) => {
     const route = "/api/notifications/read-all";
     const userId = getUserId(req);
 
@@ -847,12 +964,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       await storage.markAllNotificationsAsRead(userId);
       res.json({ success: true });
     } catch (error) {
@@ -867,7 +985,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/notifications', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/notifications', requireAuth, async (req: any, res) => {
     const route = "/api/notifications";
     const userId = getUserId(req);
 
@@ -876,12 +994,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       await storage.deleteNotificationsByUser(userId);
       return res.json({ success: true });
     } catch (error) {
@@ -900,7 +1019,7 @@ export async function registerRoutes(
   // USER SETTINGS ROUTES
   // ============================================================================
   
-  app.get('/api/settings', isAuthenticated, async (req: any, res) => {
+  app.get('/api/settings', requireAuth, async (req: any, res) => {
     const route = "/api/settings";
     const userId = getUserId(req);
 
@@ -909,12 +1028,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       await storage.bootstrapUserData(userId);
       const settings = await storage.getUserSettings(userId);
       const prefs = await storage.getNotificationPreferences(userId);
@@ -949,7 +1069,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/settings', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/settings', requireAuth, async (req: any, res) => {
     const route = "/api/settings";
     const userId = getUserId(req);
 
@@ -958,12 +1078,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(settingsUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -1040,7 +1161,7 @@ export async function registerRoutes(
   // NOTIFICATION PREFERENCES ROUTES
   // ============================================================================
 
-  app.get('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+  app.get('/api/notification-preferences', requireAuth, async (req: any, res) => {
     const route = "/api/notification-preferences";
     const userId = getUserId(req);
 
@@ -1049,12 +1170,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       await storage.bootstrapUserData(userId);
       const prefs = await storage.getNotificationPreferences(userId);
       const settings = await storage.getUserSettings(userId);
@@ -1079,7 +1201,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/notification-preferences', requireAuth, async (req: any, res) => {
     const route = "/api/notification-preferences";
     const userId = getUserId(req);
 
@@ -1088,12 +1210,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(notificationPreferencesUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -1247,7 +1370,7 @@ export async function registerRoutes(
   // PLAYER SYNC ROUTES
   // ============================================================================
   
-  app.post('/api/player/sync', isAuthenticated, async (req: any, res) => {
+  app.post('/api/player/sync', requireAuth, async (req: any, res) => {
     const route = "/api/player/sync";
     const userId = getUserId(req);
 
@@ -1256,12 +1379,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const payload = parseRequestBody(playerSyncRequestSchema, req.body);
       if (!payload.ok) {
         return sendApiError(res, {
@@ -1423,7 +1547,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/player/sync-state', isAuthenticated, async (req: any, res) => {
+  app.get('/api/player/sync-state', requireAuth, async (req: any, res) => {
     const route = "/api/player/sync-state";
     const userId = getUserId(req);
 
@@ -1432,12 +1556,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const syncState = await storage.getSyncState(userId);
 
       res.json({
@@ -1464,7 +1589,7 @@ export async function registerRoutes(
     const userId = getUserId(req);
 
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_PUBLISHABLE_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1492,7 +1617,7 @@ export async function registerRoutes(
     const userId = getUserId(req);
 
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1501,10 +1626,9 @@ export async function registerRoutes(
           error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
         });
       }
-      const result = await db.execute(
-        sql`SELECT * FROM stripe.products WHERE active = true`
-      );
-      res.json({ data: result.rows });
+      const stripe = await getUncachableStripeClient();
+      const result = await stripe.products.list({ active: true, limit: 100 });
+      res.json({ data: result.data });
     } catch (error) {
       console.error("Error fetching products:", error);
       return sendApiError(res, {
@@ -1522,7 +1646,7 @@ export async function registerRoutes(
     const userId = getUserId(req);
 
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1531,10 +1655,9 @@ export async function registerRoutes(
           error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
         });
       }
-      const result = await db.execute(
-        sql`SELECT * FROM stripe.prices WHERE active = true`
-      );
-      res.json({ data: result.rows });
+      const stripe = await getUncachableStripeClient();
+      const result = await stripe.prices.list({ active: true, limit: 100 });
+      res.json({ data: result.data });
     } catch (error) {
       console.error("Error fetching prices:", error);
       return sendApiError(res, {
@@ -1552,7 +1675,7 @@ export async function registerRoutes(
     const userId = getUserId(req);
 
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1561,50 +1684,44 @@ export async function registerRoutes(
           error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
         });
       }
-      const result = await db.execute(
-        sql`
-          SELECT 
-            p.id as product_id,
-            p.name as product_name,
-            p.description as product_description,
-            p.active as product_active,
-            p.metadata as product_metadata,
-            pr.id as price_id,
-            pr.unit_amount,
-            pr.currency,
-            pr.recurring,
-            pr.active as price_active
-          FROM stripe.products p
-          LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
-          WHERE p.active = true
-          ORDER BY p.id, pr.unit_amount
-        `
-      );
+      const stripe = await getUncachableStripeClient();
+      const [products, prices] = await Promise.all([
+        stripe.products.list({ active: true, limit: 100 }),
+        stripe.prices.list({ active: true, limit: 100 }),
+      ]);
 
-      const productsMap = new Map();
-      for (const row of result.rows as any[]) {
-        if (!productsMap.has(row.product_id)) {
-          productsMap.set(row.product_id, {
-            id: row.product_id,
-            name: row.product_name,
-            description: row.product_description,
-            active: row.product_active,
-            metadata: row.product_metadata,
-            prices: []
-          });
-        }
-        if (row.price_id) {
-          productsMap.get(row.product_id).prices.push({
-            id: row.price_id,
-            unit_amount: row.unit_amount,
-            currency: row.currency,
-            recurring: row.recurring,
-            active: row.price_active,
-          });
-        }
+      const pricesByProduct = new Map<string, Stripe.Price[]>();
+      for (const price of prices.data) {
+        const productId = typeof price.product === "string" ? price.product : price.product?.id;
+        if (!productId) continue;
+        const current = pricesByProduct.get(productId) || [];
+        current.push(price);
+        pricesByProduct.set(productId, current);
       }
 
-      res.json({ data: Array.from(productsMap.values()) });
+      const data = products.data.map((product) => {
+        const productPrices = (pricesByProduct.get(product.id) || [])
+          .slice()
+          .sort((a, b) => (a.unit_amount || 0) - (b.unit_amount || 0))
+          .map((price) => ({
+            id: price.id,
+            unit_amount: price.unit_amount,
+            currency: price.currency,
+            recurring: price.recurring,
+            active: price.active,
+          }));
+
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          active: product.active,
+          metadata: product.metadata,
+          prices: productPrices,
+        };
+      });
+
+      res.json({ data });
     } catch (error) {
       console.error("Error fetching products with prices:", error);
       return sendApiError(res, {
@@ -1617,7 +1734,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/stripe/checkout', isAuthenticated, async (req: any, res) => {
+  app.post('/api/stripe/checkout', requireAuth, async (req: any, res) => {
     const route = "/api/stripe/checkout";
     const userId = getUserId(req);
 
@@ -1626,13 +1743,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1642,6 +1759,7 @@ export async function registerRoutes(
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const { priceId } = req.body as { priceId?: string };
 
       if (!priceId) {
@@ -1680,8 +1798,7 @@ export async function registerRoutes(
 
       const customerId = await stripeService.getOrCreateCustomer(userId, user.email || "");
 
-      const domains = process.env.REPLIT_DOMAINS?.split(",")[0];
-      const baseUrl = domains ? `https://${domains}` : process.env.APP_BASE_URL || "http://localhost:5000";
+      const baseUrl = process.env.APP_BASE_URL || "http://localhost:5000";
       const session = await stripeService.createCheckoutSession(
         customerId,
         priceId,
@@ -1703,7 +1820,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/stripe/portal', isAuthenticated, async (req: any, res) => {
+  app.post('/api/stripe/portal', requireAuth, async (req: any, res) => {
     const route = "/api/stripe/portal";
     const userId = getUserId(req);
 
@@ -1712,13 +1829,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1728,6 +1845,7 @@ export async function registerRoutes(
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const subscription = await storage.getSubscription(userId);
 
       if (!subscription?.stripeCustomerId) {
@@ -1740,8 +1858,7 @@ export async function registerRoutes(
         });
       }
 
-      const domains = process.env.REPLIT_DOMAINS?.split(',')[0];
-      const baseUrl = domains ? `https://${domains}` : (process.env.APP_BASE_URL || 'http://localhost:5000');
+      const baseUrl = process.env.APP_BASE_URL || "http://localhost:5000";
       const session = await stripeService.createCustomerPortalSession(
         subscription.stripeCustomerId,
         `${baseUrl}/billing`
@@ -1760,7 +1877,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/billing/invoices', isAuthenticated, async (req: any, res) => {
+  app.get('/api/billing/invoices', requireAuth, async (req: any, res) => {
     const route = "/api/billing/invoices";
     const userId = getUserId(req);
 
@@ -1769,19 +1886,26 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const subscription = await storage.getSubscription(userId);
       if (!subscription?.stripeCustomerId) {
         return res.json([]);
       }
 
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.json([]);
+      if (!process.env.STRIPE_SECRET_KEY) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
 
       const stripe = await getUncachableStripeClient();
@@ -1831,9 +1955,10 @@ export async function registerRoutes(
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: any, res) => {
     const route = "/api/stripe/webhook";
     const userId = getUserId(req);
+    const storage = serviceStorage;
 
     try {
-      if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
+      if (!process.env.STRIPE_SECRET_KEY) {
         return sendApiError(res, {
           route,
           userId,
@@ -1929,7 +2054,7 @@ export async function registerRoutes(
               });
               console.log(`PRO activated for user: ${userId}`);
               
-              await createNotificationIfAllowed(userId, "billing", {
+              await createNotificationIfAllowed(storage, userId, "billing", {
                 title: 'Bem-vindo ao PRO!',
                 description: 'Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!',
                 type: 'success',
@@ -1989,7 +2114,7 @@ export async function registerRoutes(
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
               
-              await createNotificationIfAllowed(existing.userId, "billing", {
+              await createNotificationIfAllowed(storage, existing.userId, "billing", {
                 title: 'Assinatura cancelada',
                 description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
                 type: 'warning',
@@ -2042,7 +2167,7 @@ export async function registerRoutes(
               });
               console.log(`Subscription ${subscriptionId} marked as past_due due to payment failure`);
               
-              await createNotificationIfAllowed(existing.userId, "billing", {
+              await createNotificationIfAllowed(storage, existing.userId, "billing", {
                 title: 'Falha no pagamento',
                 description: 'O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento.',
                 type: 'error',
@@ -2073,7 +2198,7 @@ export async function registerRoutes(
   // AI COACH ROUTES
   // ============================================================================
   
-  app.post('/api/coach/chat', isAuthenticated, async (req: any, res) => {
+  app.post('/api/coach/chat', requireAuth, async (req: any, res) => {
     const route = "/api/coach/chat";
     const userId = getUserId(req);
 
@@ -2082,11 +2207,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
+
+      const storage = getUserStorage(req.auth!);
       
       const isPro = await storage.isPro(userId);
       
@@ -2344,7 +2471,7 @@ export async function registerRoutes(
   // PUSH ANALYSIS ROUTE (PRO-only)
   // ============================================================================
   
-  app.post('/api/coach/push-analysis', isAuthenticated, async (req: any, res) => {
+  app.post('/api/coach/push-analysis', requireAuth, async (req: any, res) => {
     const route = "/api/coach/push-analysis";
     const userId = getUserId(req);
 
@@ -2353,12 +2480,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const isPro = await storage.isPro(userId);
       if (!isPro) {
         return sendApiError(res, {
@@ -2534,7 +2662,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/coach/push-analysis/latest', isAuthenticated, async (req: any, res) => {
+  app.get('/api/coach/push-analysis/latest', requireAuth, async (req: any, res) => {
     const route = "/api/coach/push-analysis/latest";
     const userId = getUserId(req);
 
@@ -2543,12 +2671,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const analysis = await storage.getLatestPushAnalysis(userId);
       if (!analysis) {
         return res.json(null);
@@ -2597,55 +2726,112 @@ export async function registerRoutes(
   // TRAINING CENTER ROUTES
   // ============================================================================
 
-  app.get('/api/training/plan', isAuthenticated, async (req: any, res) => {
+  app.get('/api/training/plan', requireAuth, async (req: any, res) => {
+    const route = "/api/training/plan";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const plan = await storage.getActivePlan(userId);
-      
+
       if (!plan) {
         return res.json(null);
       }
-      
+
       const drills = await storage.getDrillsByPlan(plan.id);
-      
-      res.json({
+
+      return res.json({
         ...plan,
         drills,
       });
     } catch (error) {
       console.error("Error fetching training plan:", error);
-      res.status(500).json({ error: "Falha ao buscar plano de treinamento" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "TRAINING_PLAN_FETCH_FAILED", message: "Falha ao buscar plano de treinamento" },
+      });
     }
   });
 
-  app.get('/api/training/plans', isAuthenticated, async (req: any, res) => {
+  app.get('/api/training/plans', requireAuth, async (req: any, res) => {
+    const route = "/api/training/plans";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const plans = await storage.getTrainingPlans(userId);
-      
+
       const plansWithDrills = await Promise.all(
         plans.map(async (plan) => ({
           ...plan,
           drills: await storage.getDrillsByPlan(plan.id),
-        }))
+        })),
       );
-      
-      res.json(plansWithDrills);
+
+      return res.json(plansWithDrills);
     } catch (error) {
       console.error("Error fetching training plans:", error);
-      res.status(500).json({ error: "Falha ao buscar planos de treinamento" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "TRAINING_PLANS_FETCH_FAILED", message: "Falha ao buscar planos de treinamento" },
+      });
     }
   });
 
-  app.post('/api/training/plan/generate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/training/plan/generate', requireAuth, async (req: any, res) => {
+    const route = "/api/training/plan/generate";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
+
       const isPro = await storage.isPro(userId);
       if (!isPro) {
-        return res.status(403).json({ 
-          error: "Geração de planos de treinamento é uma funcionalidade PRO.",
-          code: "PRO_REQUIRED",
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 403,
+          error: {
+            code: "PRO_REQUIRED",
+            message: "Geração de planos de treinamento é uma funcionalidade PRO.",
+          },
         });
       }
       
@@ -2718,23 +2904,29 @@ export async function registerRoutes(
         )
       );
       
-      await createNotificationIfAllowed(userId, "training", {
+      await createNotificationIfAllowed(storage, userId, "training", {
         title: 'Novo plano de treinamento criado!',
         description: `"${generatedPlan.title}" está pronto com ${drills.length} exercícios para você praticar.`,
         type: 'success',
       });
       
-      res.json({
+      return res.json({
         ...plan,
         drills,
       });
     } catch (error) {
       console.error("Error generating training plan:", error);
-      res.status(500).json({ error: "Falha ao gerar plano de treinamento" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "TRAINING_PLAN_GENERATE_FAILED", message: "Falha ao gerar plano de treinamento" },
+      });
     }
   });
 
-  app.patch('/api/training/drill/:drillId', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/training/drill/:drillId', requireAuth, async (req: any, res) => {
     const route = "/api/training/drill/:drillId";
     const userId = getUserId(req);
 
@@ -2743,12 +2935,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(trainingDrillUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -2818,7 +3011,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch('/api/training/plan/:planId', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/training/plan/:planId', requireAuth, async (req: any, res) => {
     const route = "/api/training/plan/:planId";
     const userId = getUserId(req);
 
@@ -2827,12 +3020,13 @@ export async function registerRoutes(
         return sendApiError(res, {
           route,
           userId,
-          provider: "replit-oidc",
+          provider: "supabase-auth",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
 
+      const storage = getUserStorage(req.auth!);
       const parsed = parseRequestBody(trainingPlanUpdateInputSchema, req.body);
       if (!parsed.ok) {
         return sendApiError(res, {
@@ -2875,7 +3069,7 @@ export async function registerRoutes(
       }
 
       if (existingPlan.status !== "completed" && status === "completed") {
-        await createNotificationIfAllowed(userId, "training", {
+        await createNotificationIfAllowed(storage, userId, "training", {
           title: "Plano concluído!",
           description: `Você concluiu o plano "${existingPlan.title}". Parabéns pela consistência.`,
           type: "success",
@@ -2996,8 +3190,22 @@ export async function registerRoutes(
   // META DECKS ROUTES
   // ============================================================================
 
-  app.get('/api/meta/decks', async (req, res) => {
+  app.get('/api/meta/decks', requireAuth, async (req: any, res) => {
+    const route = "/api/meta/decks";
+    const userId = getUserId(req);
+
     try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
       const cachedDecks = await storage.getMetaDecks();
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const toDeckResponse = (decks: any[], staleReason: "fresh" | "stale" = "fresh") =>
@@ -3048,10 +3256,10 @@ export async function registerRoutes(
               .sort((a, b) => b[1].count - a[1].count)
               .slice(0, 20);
             
-            await storage.clearMetaDecks();
+            await serviceStorage.clearMetaDecks();
             
             for (const [deckHash, data] of sortedDecks) {
-              await storage.createMetaDeck({
+              await serviceStorage.createMetaDeck({
                 deckHash,
                 cards: data.cards,
                 usageCount: data.count,
@@ -3075,7 +3283,13 @@ export async function registerRoutes(
       res.json(toDeckResponse(cachedDecks, "fresh"));
     } catch (error) {
       console.error("Error fetching meta decks:", error);
-      res.json([]);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "META_DECKS_FETCH_FAILED", message: "Failed to fetch meta decks" },
+      });
     }
   });
 

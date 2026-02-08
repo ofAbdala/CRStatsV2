@@ -24,6 +24,7 @@ import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocale } from "@/hooks/use-locale";
 
@@ -248,7 +249,12 @@ export default function SettingsPage() {
                   variant="destructive"
                   size="sm"
                   onClick={() => {
-                    window.location.href = "/api/auth/logout";
+                    getSupabaseClient()
+                      .auth.signOut()
+                      .catch(() => undefined)
+                      .finally(() => {
+                        window.location.href = "/";
+                      });
                   }}
                 >
                   <LogOut className="w-4 h-4 mr-2" />

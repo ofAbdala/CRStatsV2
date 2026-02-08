@@ -1,6 +1,5 @@
-// From Stripe connection integration
-import { storage } from './storage';
-import { getUncachableStripeClient } from './stripeClient';
+import { serviceStorage } from "./storage";
+import { getUncachableStripeClient } from "./stripeClient";
 
 export class StripeService {
   async createCustomer(email: string, userId: string) {
@@ -39,7 +38,7 @@ export class StripeService {
   }
 
   async getOrCreateCustomer(userId: string, email: string) {
-    const subscription = await storage.getSubscription(userId);
+    const subscription = await serviceStorage.getSubscription(userId);
     
     if (subscription?.stripeCustomerId) {
       return subscription.stripeCustomerId;
@@ -48,13 +47,13 @@ export class StripeService {
     const customer = await this.createCustomer(email, userId);
 
     if (subscription) {
-      await storage.updateSubscription(subscription.id, {
+      await serviceStorage.updateSubscription(subscription.id, {
         stripeCustomerId: customer.id,
       });
       return customer.id;
     }
 
-    await storage.createSubscription({
+    await serviceStorage.createSubscription({
       userId,
       stripeCustomerId: customer.id,
       plan: "free",

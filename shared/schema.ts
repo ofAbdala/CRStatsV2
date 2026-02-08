@@ -13,21 +13,13 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ============================================================================
-// SESSION & AUTH TABLES (Required by Replit Auth - DO NOT DROP)
+// AUTH TABLES
 // ============================================================================
 
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
-
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Supabase Auth owns the source of truth for the user id (auth.users.id).
+  // Store it as a uuid-string to keep the rest of the app schema unchanged.
+  id: varchar("id").primaryKey(),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -66,18 +58,22 @@ export type Profile = typeof profiles.$inferSelect;
 // SUBSCRIPTIONS TABLE
 // ============================================================================
 
-export const subscriptions = pgTable("subscriptions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  stripeCustomerId: varchar("stripe_customer_id"),
-  stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
-  plan: varchar("plan").notNull().default("free"),
-  status: varchar("status").notNull().default("inactive"),
-  currentPeriodEnd: timestamp("current_period_end"),
-  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    stripeCustomerId: varchar("stripe_customer_id"),
+    stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
+    plan: varchar("plan").notNull().default("free"),
+    status: varchar("status").notNull().default("inactive"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("IDX_subscriptions_user_id").on(table.userId)],
+);
 
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   id: true,
@@ -91,19 +87,23 @@ export type Subscription = typeof subscriptions.$inferSelect;
 // GOALS TABLE
 // ============================================================================
 
-export const goals = pgTable("goals", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  type: varchar("type").notNull(),
-  targetValue: integer("target_value").notNull(),
-  currentValue: integer("current_value").default(0),
-  completed: boolean("completed").default(false),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export const goals = pgTable(
+  "goals",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    type: varchar("type").notNull(),
+    targetValue: integer("target_value").notNull(),
+    currentValue: integer("current_value").default(0),
+    completed: boolean("completed").default(false),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("IDX_goals_user_id").on(table.userId)],
+);
 
 export const insertGoalSchema = createInsertSchema(goals).omit({
   id: true,
@@ -117,15 +117,19 @@ export type Goal = typeof goals.$inferSelect;
 // FAVORITE PLAYERS TABLE
 // ============================================================================
 
-export const favoritePlayers = pgTable("favorite_players", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  playerTag: varchar("player_tag").notNull(),
-  name: varchar("name").notNull(),
-  trophies: integer("trophies"),
-  clan: varchar("clan"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const favoritePlayers = pgTable(
+  "favorite_players",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    playerTag: varchar("player_tag").notNull(),
+    name: varchar("name").notNull(),
+    trophies: integer("trophies"),
+    clan: varchar("clan"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("IDX_favorite_players_user_id").on(table.userId)],
+);
 
 export const insertFavoritePlayerSchema = createInsertSchema(favoritePlayers).omit({
   id: true,
@@ -138,15 +142,19 @@ export type FavoritePlayer = typeof favoritePlayers.$inferSelect;
 // NOTIFICATIONS TABLE
 // ============================================================================
 
-export const notifications = pgTable("notifications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  type: varchar("type").notNull(),
-  read: boolean("read").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    type: varchar("type").notNull(),
+    read: boolean("read").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("IDX_notifications_user_id").on(table.userId)],
+);
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
@@ -220,14 +228,18 @@ export type PlayerSyncState = typeof playerSyncState.$inferSelect;
 // COACH MESSAGES TABLE
 // ============================================================================
 
-export const coachMessages = pgTable("coach_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  role: varchar("role").notNull(),
-  content: text("content").notNull(),
-  contextType: varchar("context_type"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const coachMessages = pgTable(
+  "coach_messages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: varchar("role").notNull(),
+    content: text("content").notNull(),
+    contextType: varchar("context_type"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("IDX_coach_messages_user_id").on(table.userId)],
+);
 
 export const insertCoachMessageSchema = createInsertSchema(coachMessages).omit({
   id: true,
@@ -240,18 +252,22 @@ export type CoachMessage = typeof coachMessages.$inferSelect;
 // PUSH ANALYSES TABLE
 // ============================================================================
 
-export const pushAnalyses = pgTable("push_analyses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  pushStartTime: timestamp("push_start_time").notNull(),
-  pushEndTime: timestamp("push_end_time").notNull(),
-  battlesCount: integer("battles_count").notNull(),
-  wins: integer("wins").notNull(),
-  losses: integer("losses").notNull(),
-  netTrophies: integer("net_trophies").notNull(),
-  resultJson: jsonb("result_json").notNull().$type<Record<string, unknown>>(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const pushAnalyses = pgTable(
+  "push_analyses",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    pushStartTime: timestamp("push_start_time").notNull(),
+    pushEndTime: timestamp("push_end_time").notNull(),
+    battlesCount: integer("battles_count").notNull(),
+    wins: integer("wins").notNull(),
+    losses: integer("losses").notNull(),
+    netTrophies: integer("net_trophies").notNull(),
+    resultJson: jsonb("result_json").notNull().$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("IDX_push_analyses_user_id").on(table.userId)],
+);
 
 export const insertPushAnalysisSchema = createInsertSchema(pushAnalyses).omit({
   id: true,
@@ -264,16 +280,20 @@ export type PushAnalysis = typeof pushAnalyses.$inferSelect;
 // TRAINING PLANS TABLE
 // ============================================================================
 
-export const trainingPlans = pgTable("training_plans", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: varchar("title").notNull(),
-  source: varchar("source").notNull().default("manual"),
-  status: varchar("status").notNull().default("active"),
-  pushAnalysisId: varchar("push_analysis_id").references(() => pushAnalyses.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export const trainingPlans = pgTable(
+  "training_plans",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: varchar("title").notNull(),
+    source: varchar("source").notNull().default("manual"),
+    status: varchar("status").notNull().default("active"),
+    pushAnalysisId: varchar("push_analysis_id").references(() => pushAnalyses.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("IDX_training_plans_user_id").on(table.userId)],
+);
 
 export const insertTrainingPlanSchema = createInsertSchema(trainingPlans).omit({
   id: true,
@@ -287,19 +307,23 @@ export type TrainingPlan = typeof trainingPlans.$inferSelect;
 // TRAINING DRILLS TABLE
 // ============================================================================
 
-export const trainingDrills = pgTable("training_drills", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  planId: varchar("plan_id").notNull().references(() => trainingPlans.id, { onDelete: "cascade" }),
-  focusArea: varchar("focus_area").notNull(),
-  description: text("description").notNull(),
-  targetGames: integer("target_games").notNull(),
-  completedGames: integer("completed_games").notNull().default(0),
-  mode: varchar("mode").notNull(),
-  priority: integer("priority").notNull().default(1),
-  status: varchar("status").notNull().default("pending"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export const trainingDrills = pgTable(
+  "training_drills",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    planId: varchar("plan_id").notNull().references(() => trainingPlans.id, { onDelete: "cascade" }),
+    focusArea: varchar("focus_area").notNull(),
+    description: text("description").notNull(),
+    targetGames: integer("target_games").notNull(),
+    completedGames: integer("completed_games").notNull().default(0),
+    mode: varchar("mode").notNull(),
+    priority: integer("priority").notNull().default(1),
+    status: varchar("status").notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("IDX_training_drills_plan_id").on(table.planId)],
+);
 
 export const insertTrainingDrillSchema = createInsertSchema(trainingDrills).omit({
   id: true,

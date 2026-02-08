@@ -4,7 +4,6 @@ import path from "path";
 
 export function serveStatic(app: Express) {
   const candidatePaths = [
-    path.resolve(__dirname, "public"),
     path.resolve(process.cwd(), "dist", "public"),
     path.resolve(process.cwd(), "public"),
   ];

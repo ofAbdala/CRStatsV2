@@ -42,6 +42,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
+import type { SupabaseAuthContext } from "./supabaseAuth";
 
 interface BootstrapResult {
   profile: Profile;
@@ -188,29 +189,147 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private readonly auth?: SupabaseAuthContext;
+
+  constructor(options?: { auth?: SupabaseAuthContext }) {
+    this.auth = options?.auth;
+  }
+
+  private async runAsUser<T>(fn: (conn: any) => Promise<T>): Promise<T> {
+    const auth = this.auth;
+
+    if (!auth) {
+      return fn(db);
+    }
+
+    const claims = auth.claims ?? { sub: auth.userId, role: "authenticated" };
+    const claimsJson = JSON.stringify(claims);
+
+    // RLS context is only guaranteed for statements executed within this transaction.
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('request.jwt.claims', ${claimsJson}, true)`);
+      // Supabase `auth.uid()` and related helpers commonly read these per-claim GUCs.
+      await tx.execute(sql`select set_config('request.jwt.claim.sub', ${auth.userId}, true)`);
+      await tx.execute(sql`select set_config('request.jwt.claim.role', ${auth.role ?? "authenticated"}, true)`);
+      await tx.execute(sql`set local role authenticated`);
+      return fn(tx);
+    });
+  }
+
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return this.runAsUser(async (conn) => {
+      const [user] = await conn.select().from(users).where(eq(users.id, id));
+      return user;
+    });
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [user] = await conn
+        .insert(users)
+        .values(userData)
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            ...userData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return user;
+      return user;
+    });
   }
 
   async bootstrapUserData(userId: string): Promise<BootstrapResult> {
-    return db.transaction(async (tx) => {
+    if (!this.auth) {
+      return db.transaction(async (tx) => {
+        const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+        const fallbackDisplayName =
+          [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+          user?.email?.split("@")[0] ||
+          "Player";
+
+        await tx
+          .insert(profiles)
+          .values({
+            userId,
+            displayName: fallbackDisplayName,
+            region: "BR",
+            language: "pt",
+            role: "user",
+          })
+          .onConflictDoNothing();
+
+        await tx
+          .insert(userSettings)
+          .values({
+            userId,
+            theme: "dark",
+            preferredLanguage: "pt",
+            defaultLandingPage: "dashboard",
+            showAdvancedStats: false,
+            notificationsEnabled: true,
+            notificationsTraining: true,
+            notificationsBilling: true,
+            notificationsSystem: true,
+          })
+          .onConflictDoNothing();
+
+        const [existingSubscription] = await tx
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.userId, userId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+
+        if (!existingSubscription) {
+          await tx.insert(subscriptions).values({
+            userId,
+            plan: "free",
+            status: "inactive",
+            cancelAtPeriodEnd: false,
+          });
+        }
+
+        await tx
+          .insert(notificationPreferences)
+          .values({
+            userId,
+            training: true,
+            billing: true,
+            system: true,
+          })
+          .onConflictDoNothing();
+
+        const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+        const [settings] = await tx.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+        const [subscription] = await tx
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.userId, userId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+        const [prefs] = await tx
+          .select()
+          .from(notificationPreferences)
+          .where(eq(notificationPreferences.userId, userId))
+          .limit(1);
+
+        if (!profile || !settings || !subscription || !prefs) {
+          throw new Error("Failed to bootstrap canonical user data");
+        }
+
+        return {
+          profile,
+          settings,
+          subscription,
+          notificationPreferences: prefs,
+        };
+      });
+    }
+
+    return this.runAsUser(async (tx) => {
       const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
       const fallbackDisplayName =
         [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -297,96 +416,116 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProfile(userId: string): Promise<Profile | undefined> {
-    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId));
-    return profile;
+    return this.runAsUser(async (conn) => {
+      const [profile] = await conn.select().from(profiles).where(eq(profiles.userId, userId));
+      return profile;
+    });
   }
 
   async createProfile(profileData: InsertProfile): Promise<Profile> {
-    const canonicalData = buildCanonicalProfileData(profileData);
+    return this.runAsUser(async (conn) => {
+      const canonicalData = buildCanonicalProfileData(profileData);
 
-    const [profile] = await db
-      .insert(profiles)
-      .values(canonicalData as InsertProfile)
-      .onConflictDoUpdate({
-        target: profiles.userId,
-        set: {
-          ...canonicalData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+      const [profile] = await conn
+        .insert(profiles)
+        .values(canonicalData as InsertProfile)
+        .onConflictDoUpdate({
+          target: profiles.userId,
+          set: {
+            ...canonicalData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return profile;
+      return profile;
+    });
   }
 
   async updateProfile(userId: string, profileData: Partial<InsertProfile>): Promise<Profile | undefined> {
-    const canonicalData = buildCanonicalProfileData(profileData);
+    return this.runAsUser(async (conn) => {
+      const canonicalData = buildCanonicalProfileData(profileData);
 
-    const [profile] = await db
-      .insert(profiles)
-      .values({ userId, ...canonicalData })
-      .onConflictDoUpdate({
-        target: profiles.userId,
-        set: {
-          ...canonicalData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+      const [profile] = await conn
+        .insert(profiles)
+        .values({ userId, ...canonicalData })
+        .onConflictDoUpdate({
+          target: profiles.userId,
+          set: {
+            ...canonicalData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return profile;
+      return profile;
+    });
   }
 
   async getSubscription(userId: string): Promise<Subscription | undefined> {
-    const [subscription] = await db
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.userId, userId))
-      .orderBy(desc(subscriptions.createdAt))
-      .limit(1);
+    return this.runAsUser(async (conn) => {
+      const [subscription] = await conn
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.userId, userId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
 
-    return subscription;
+      return subscription;
+    });
   }
 
   async createSubscription(subscriptionData: InsertSubscription): Promise<Subscription> {
-    const existing = await this.getSubscription(subscriptionData.userId);
-    if (existing) {
-      const [updated] = await db
-        .update(subscriptions)
-        .set({
-          ...subscriptionData,
-          updatedAt: new Date(),
-        })
-        .where(eq(subscriptions.id, existing.id))
-        .returning();
+    return this.runAsUser(async (conn) => {
+      const [existing] = await conn
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.userId, subscriptionData.userId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
 
-      return updated;
-    }
+      if (existing) {
+        const [updated] = await conn
+          .update(subscriptions)
+          .set({
+            ...subscriptionData,
+            updatedAt: new Date(),
+          })
+          .where(eq(subscriptions.id, existing.id))
+          .returning();
 
-    const [created] = await db.insert(subscriptions).values(subscriptionData).returning();
-    return created;
+        return updated;
+      }
+
+      const [created] = await conn.insert(subscriptions).values(subscriptionData).returning();
+      return created;
+    });
   }
 
   async updateSubscription(
     id: string,
     subscriptionData: Partial<InsertSubscription>,
   ): Promise<Subscription | undefined> {
-    const [subscription] = await db
-      .update(subscriptions)
-      .set({ ...subscriptionData, updatedAt: new Date() })
-      .where(eq(subscriptions.id, id))
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [subscription] = await conn
+        .update(subscriptions)
+        .set({ ...subscriptionData, updatedAt: new Date() })
+        .where(eq(subscriptions.id, id))
+        .returning();
 
-    return subscription;
+      return subscription;
+    });
   }
 
   async getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined> {
-    const [subscription] = await db
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
+    return this.runAsUser(async (conn) => {
+      const [subscription] = await conn
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
 
-    return subscription;
+      return subscription;
+    });
   }
 
   async isPro(userId: string): Promise<boolean> {
@@ -395,350 +534,426 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGoals(userId: string): Promise<Goal[]> {
-    return db.select().from(goals).where(eq(goals.userId, userId)).orderBy(desc(goals.createdAt));
+    return this.runAsUser((conn) =>
+      conn.select().from(goals).where(eq(goals.userId, userId)).orderBy(desc(goals.createdAt)),
+    );
   }
 
   async getGoal(id: string): Promise<Goal | undefined> {
-    const [goal] = await db.select().from(goals).where(eq(goals.id, id));
-    return goal;
+    return this.runAsUser(async (conn) => {
+      const [goal] = await conn.select().from(goals).where(eq(goals.id, id));
+      return goal;
+    });
   }
 
   async createGoal(goalData: InsertGoal): Promise<Goal> {
-    const [goal] = await db.insert(goals).values(goalData).returning();
-    return goal;
+    return this.runAsUser(async (conn) => {
+      const [goal] = await conn.insert(goals).values(goalData).returning();
+      return goal;
+    });
   }
 
   async updateGoal(id: string, goalData: Partial<InsertGoal>): Promise<Goal | undefined> {
-    const [goal] = await db
-      .update(goals)
-      .set({ ...goalData, updatedAt: new Date() })
-      .where(eq(goals.id, id))
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [goal] = await conn
+        .update(goals)
+        .set({ ...goalData, updatedAt: new Date() })
+        .where(eq(goals.id, id))
+        .returning();
 
-    return goal;
+      return goal;
+    });
   }
 
   async deleteGoal(id: string): Promise<void> {
-    await db.delete(goals).where(eq(goals.id, id));
+    await this.runAsUser((conn) => conn.delete(goals).where(eq(goals.id, id)));
   }
 
   async getFavoritePlayers(userId: string): Promise<FavoritePlayer[]> {
-    return db
-      .select()
-      .from(favoritePlayers)
-      .where(eq(favoritePlayers.userId, userId))
-      .orderBy(desc(favoritePlayers.createdAt));
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(favoritePlayers)
+        .where(eq(favoritePlayers.userId, userId))
+        .orderBy(desc(favoritePlayers.createdAt)),
+    );
   }
 
   async getFavoritePlayer(id: string): Promise<FavoritePlayer | undefined> {
-    const [player] = await db.select().from(favoritePlayers).where(eq(favoritePlayers.id, id));
-    return player;
+    return this.runAsUser(async (conn) => {
+      const [player] = await conn.select().from(favoritePlayers).where(eq(favoritePlayers.id, id));
+      return player;
+    });
   }
 
   async createFavoritePlayer(playerData: InsertFavoritePlayer): Promise<FavoritePlayer> {
-    const payload = {
-      ...playerData,
-      playerTag: normalizePlayerTag(playerData.playerTag) ?? playerData.playerTag,
-    };
+    return this.runAsUser(async (conn) => {
+      const payload = {
+        ...playerData,
+        playerTag: normalizePlayerTag(playerData.playerTag) ?? playerData.playerTag,
+      };
 
-    const [player] = await db.insert(favoritePlayers).values(payload).returning();
-    return player;
+      const [player] = await conn.insert(favoritePlayers).values(payload).returning();
+      return player;
+    });
   }
 
   async deleteFavoritePlayer(id: string): Promise<void> {
-    await db.delete(favoritePlayers).where(eq(favoritePlayers.id, id));
+    await this.runAsUser((conn) => conn.delete(favoritePlayers).where(eq(favoritePlayers.id, id)));
   }
 
   async getNotifications(userId: string): Promise<Notification[]> {
-    return db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt));
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt)),
+    );
   }
 
   async getNotification(id: string): Promise<Notification | undefined> {
-    const [notification] = await db.select().from(notifications).where(eq(notifications.id, id));
-    return notification;
+    return this.runAsUser(async (conn) => {
+      const [notification] = await conn.select().from(notifications).where(eq(notifications.id, id));
+      return notification;
+    });
   }
 
   async createNotification(notificationData: InsertNotification): Promise<Notification> {
-    const [notification] = await db.insert(notifications).values(notificationData).returning();
-    return notification;
+    return this.runAsUser(async (conn) => {
+      const [notification] = await conn.insert(notifications).values(notificationData).returning();
+      return notification;
+    });
   }
 
   async markNotificationAsRead(id: string): Promise<void> {
-    await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+    await this.runAsUser((conn) =>
+      conn.update(notifications).set({ read: true }).where(eq(notifications.id, id)),
+    );
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
-    await db.update(notifications).set({ read: true }).where(eq(notifications.userId, userId));
+    await this.runAsUser((conn) =>
+      conn.update(notifications).set({ read: true }).where(eq(notifications.userId, userId)),
+    );
   }
 
   async deleteNotification(id: string): Promise<void> {
-    await db.delete(notifications).where(eq(notifications.id, id));
+    await this.runAsUser((conn) => conn.delete(notifications).where(eq(notifications.id, id)));
   }
 
   async deleteNotificationsByUser(userId: string): Promise<void> {
-    await db.delete(notifications).where(eq(notifications.userId, userId));
+    await this.runAsUser((conn) => conn.delete(notifications).where(eq(notifications.userId, userId)));
   }
 
   async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
-    const [prefs] = await db
-      .select()
-      .from(notificationPreferences)
-      .where(eq(notificationPreferences.userId, userId));
+    return this.runAsUser(async (conn) => {
+      const [prefs] = await conn
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId));
 
-    return prefs;
+      return prefs;
+    });
   }
 
   async upsertNotificationPreferences(
     userId: string,
     preferencesData: Partial<InsertNotificationPreferences>,
   ): Promise<NotificationPreferences> {
-    const [prefs] = await db
-      .insert(notificationPreferences)
-      .values({
-        userId,
-        training: preferencesData.training ?? true,
-        billing: preferencesData.billing ?? true,
-        system: preferencesData.system ?? true,
-      })
-      .onConflictDoUpdate({
-        target: notificationPreferences.userId,
-        set: {
-          ...preferencesData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [prefs] = await conn
+        .insert(notificationPreferences)
+        .values({
+          userId,
+          training: preferencesData.training ?? true,
+          billing: preferencesData.billing ?? true,
+          system: preferencesData.system ?? true,
+        })
+        .onConflictDoUpdate({
+          target: notificationPreferences.userId,
+          set: {
+            ...preferencesData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return prefs;
+      return prefs;
+    });
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {
-    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
-    return settings;
+    return this.runAsUser(async (conn) => {
+      const [settings] = await conn.select().from(userSettings).where(eq(userSettings.userId, userId));
+      return settings;
+    });
   }
 
   async createUserSettings(settingsData: InsertUserSettings): Promise<UserSettings> {
-    const [settings] = await db
-      .insert(userSettings)
-      .values(settingsData)
-      .onConflictDoUpdate({
-        target: userSettings.userId,
-        set: {
-          ...settingsData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [settings] = await conn
+        .insert(userSettings)
+        .values(settingsData)
+        .onConflictDoUpdate({
+          target: userSettings.userId,
+          set: {
+            ...settingsData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return settings;
+      return settings;
+    });
   }
 
   async updateUserSettings(
     userId: string,
     settingsData: Partial<InsertUserSettings>,
   ): Promise<UserSettings | undefined> {
-    const [settings] = await db
-      .insert(userSettings)
-      .values({ userId, ...settingsData })
-      .onConflictDoUpdate({
-        target: userSettings.userId,
-        set: {
-          ...settingsData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [settings] = await conn
+        .insert(userSettings)
+        .values({ userId, ...settingsData })
+        .onConflictDoUpdate({
+          target: userSettings.userId,
+          set: {
+            ...settingsData,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return settings;
+      return settings;
+    });
   }
 
   async getSyncState(userId: string): Promise<PlayerSyncState | undefined> {
-    const [state] = await db.select().from(playerSyncState).where(eq(playerSyncState.userId, userId));
-    return state;
+    return this.runAsUser(async (conn) => {
+      const [state] = await conn.select().from(playerSyncState).where(eq(playerSyncState.userId, userId));
+      return state;
+    });
   }
 
   async updateSyncState(userId: string): Promise<PlayerSyncState> {
-    const [state] = await db
-      .insert(playerSyncState)
-      .values({ userId, lastSyncedAt: new Date(), updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: playerSyncState.userId,
-        set: { lastSyncedAt: new Date(), updatedAt: new Date() },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [state] = await conn
+        .insert(playerSyncState)
+        .values({ userId, lastSyncedAt: new Date(), updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: playerSyncState.userId,
+          set: { lastSyncedAt: new Date(), updatedAt: new Date() },
+        })
+        .returning();
 
-    return state;
+      return state;
+    });
   }
 
   async getCoachMessages(userId: string, limit = 50): Promise<CoachMessage[]> {
-    return db
-      .select()
-      .from(coachMessages)
-      .where(eq(coachMessages.userId, userId))
-      .orderBy(desc(coachMessages.createdAt))
-      .limit(limit);
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(coachMessages)
+        .where(eq(coachMessages.userId, userId))
+        .orderBy(desc(coachMessages.createdAt))
+        .limit(limit),
+    );
   }
 
   async createCoachMessage(messageData: InsertCoachMessage): Promise<CoachMessage> {
-    const [message] = await db.insert(coachMessages).values(messageData).returning();
-    return message;
+    return this.runAsUser(async (conn) => {
+      const [message] = await conn.insert(coachMessages).values(messageData).returning();
+      return message;
+    });
   }
 
   async countCoachMessagesToday(userId: string): Promise<number> {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    return this.runAsUser(async (conn) => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(coachMessages)
-      .where(
-        and(
-          eq(coachMessages.userId, userId),
-          eq(coachMessages.role, "user"),
-          gte(coachMessages.createdAt, todayStart),
-        ),
-      );
+      const result = await conn
+        .select({ count: sql<number>`count(*)::int` })
+        .from(coachMessages)
+        .where(
+          and(
+            eq(coachMessages.userId, userId),
+            eq(coachMessages.role, "user"),
+            gte(coachMessages.createdAt, todayStart),
+          ),
+        );
 
-    return result[0]?.count || 0;
+      return result[0]?.count || 0;
+    });
   }
 
   async getPushAnalysis(id: string): Promise<PushAnalysis | undefined> {
-    const [analysis] = await db.select().from(pushAnalyses).where(eq(pushAnalyses.id, id));
-    return analysis;
+    return this.runAsUser(async (conn) => {
+      const [analysis] = await conn.select().from(pushAnalyses).where(eq(pushAnalyses.id, id));
+      return analysis;
+    });
   }
 
   async getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined> {
-    const [analysis] = await db
-      .select()
-      .from(pushAnalyses)
-      .where(eq(pushAnalyses.userId, userId))
-      .orderBy(desc(pushAnalyses.createdAt))
-      .limit(1);
+    return this.runAsUser(async (conn) => {
+      const [analysis] = await conn
+        .select()
+        .from(pushAnalyses)
+        .where(eq(pushAnalyses.userId, userId))
+        .orderBy(desc(pushAnalyses.createdAt))
+        .limit(1);
 
-    return analysis;
+      return analysis;
+    });
   }
 
   async getPushAnalyses(userId: string, limit = 10): Promise<PushAnalysis[]> {
-    return db
-      .select()
-      .from(pushAnalyses)
-      .where(eq(pushAnalyses.userId, userId))
-      .orderBy(desc(pushAnalyses.createdAt))
-      .limit(limit);
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(pushAnalyses)
+        .where(eq(pushAnalyses.userId, userId))
+        .orderBy(desc(pushAnalyses.createdAt))
+        .limit(limit),
+    );
   }
 
   async createPushAnalysis(analysisData: InsertPushAnalysis): Promise<PushAnalysis> {
-    const [analysis] = await db.insert(pushAnalyses).values(analysisData).returning();
-    return analysis;
+    return this.runAsUser(async (conn) => {
+      const [analysis] = await conn.insert(pushAnalyses).values(analysisData).returning();
+      return analysis;
+    });
   }
 
   async countPushAnalysesToday(userId: string): Promise<number> {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    return this.runAsUser(async (conn) => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(pushAnalyses)
-      .where(and(eq(pushAnalyses.userId, userId), gte(pushAnalyses.createdAt, todayStart)));
+      const result = await conn
+        .select({ count: sql<number>`count(*)::int` })
+        .from(pushAnalyses)
+        .where(and(eq(pushAnalyses.userId, userId), gte(pushAnalyses.createdAt, todayStart)));
 
-    return result[0]?.count || 0;
+      return result[0]?.count || 0;
+    });
   }
 
   async getActivePlan(userId: string): Promise<TrainingPlan | undefined> {
-    const [plan] = await db
-      .select()
-      .from(trainingPlans)
-      .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active")))
-      .orderBy(desc(trainingPlans.createdAt))
-      .limit(1);
+    return this.runAsUser(async (conn) => {
+      const [plan] = await conn
+        .select()
+        .from(trainingPlans)
+        .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active")))
+        .orderBy(desc(trainingPlans.createdAt))
+        .limit(1);
 
-    return plan;
+      return plan;
+    });
   }
 
   async getTrainingPlan(id: string): Promise<TrainingPlan | undefined> {
-    const [plan] = await db.select().from(trainingPlans).where(eq(trainingPlans.id, id));
-    return plan;
+    return this.runAsUser(async (conn) => {
+      const [plan] = await conn.select().from(trainingPlans).where(eq(trainingPlans.id, id));
+      return plan;
+    });
   }
 
   async getTrainingPlans(userId: string): Promise<TrainingPlan[]> {
-    return db
-      .select()
-      .from(trainingPlans)
-      .where(eq(trainingPlans.userId, userId))
-      .orderBy(desc(trainingPlans.createdAt));
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(trainingPlans)
+        .where(eq(trainingPlans.userId, userId))
+        .orderBy(desc(trainingPlans.createdAt)),
+    );
   }
 
   async createTrainingPlan(planData: InsertTrainingPlan): Promise<TrainingPlan> {
-    const [plan] = await db.insert(trainingPlans).values(planData).returning();
-    return plan;
+    return this.runAsUser(async (conn) => {
+      const [plan] = await conn.insert(trainingPlans).values(planData).returning();
+      return plan;
+    });
   }
 
   async updateTrainingPlan(
     id: string,
     planData: Partial<InsertTrainingPlan>,
   ): Promise<TrainingPlan | undefined> {
-    const [plan] = await db
-      .update(trainingPlans)
-      .set({ ...planData, updatedAt: new Date() })
-      .where(eq(trainingPlans.id, id))
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [plan] = await conn
+        .update(trainingPlans)
+        .set({ ...planData, updatedAt: new Date() })
+        .where(eq(trainingPlans.id, id))
+        .returning();
 
-    return plan;
+      return plan;
+    });
   }
 
   async archiveOldPlans(userId: string): Promise<void> {
-    await db
-      .update(trainingPlans)
-      .set({ status: "archived", updatedAt: new Date() })
-      .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active")));
+    await this.runAsUser((conn) =>
+      conn
+        .update(trainingPlans)
+        .set({ status: "archived", updatedAt: new Date() })
+        .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active"))),
+    );
   }
 
   async getTrainingDrill(id: string): Promise<TrainingDrill | undefined> {
-    const [drill] = await db.select().from(trainingDrills).where(eq(trainingDrills.id, id));
-    return drill;
+    return this.runAsUser(async (conn) => {
+      const [drill] = await conn.select().from(trainingDrills).where(eq(trainingDrills.id, id));
+      return drill;
+    });
   }
 
   async getDrillsByPlan(planId: string): Promise<TrainingDrill[]> {
-    return db
-      .select()
-      .from(trainingDrills)
-      .where(eq(trainingDrills.planId, planId))
-      .orderBy(desc(trainingDrills.priority));
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(trainingDrills)
+        .where(eq(trainingDrills.planId, planId))
+        .orderBy(desc(trainingDrills.priority)),
+    );
   }
 
   async createTrainingDrill(drillData: InsertTrainingDrill): Promise<TrainingDrill> {
-    const [drill] = await db.insert(trainingDrills).values(drillData).returning();
-    return drill;
+    return this.runAsUser(async (conn) => {
+      const [drill] = await conn.insert(trainingDrills).values(drillData).returning();
+      return drill;
+    });
   }
 
   async updateTrainingDrill(
     id: string,
     drillData: Partial<InsertTrainingDrill>,
   ): Promise<TrainingDrill | undefined> {
-    const [drill] = await db
-      .update(trainingDrills)
-      .set({ ...drillData, updatedAt: new Date() })
-      .where(eq(trainingDrills.id, id))
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [drill] = await conn
+        .update(trainingDrills)
+        .set({ ...drillData, updatedAt: new Date() })
+        .where(eq(trainingDrills.id, id))
+        .returning();
 
-    return drill;
+      return drill;
+    });
   }
 
   async countActiveDrills(planId: string): Promise<number> {
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(trainingDrills)
-      .where(and(eq(trainingDrills.planId, planId), sql`${trainingDrills.status} != 'completed'`));
+    return this.runAsUser(async (conn) => {
+      const result = await conn
+        .select({ count: sql<number>`count(*)::int` })
+        .from(trainingDrills)
+        .where(and(eq(trainingDrills.planId, planId), sql`${trainingDrills.status} != 'completed'`));
 
-    return result[0]?.count || 0;
+      return result[0]?.count || 0;
+    });
   }
 
   async getMetaDecks(): Promise<MetaDeckCache[]> {
-    return db.select().from(metaDecksCache).orderBy(desc(metaDecksCache.usageCount));
+    return this.runAsUser((conn) => conn.select().from(metaDecksCache).orderBy(desc(metaDecksCache.usageCount)));
   }
 
   async createMetaDeck(deckData: Partial<MetaDeckWriteInput>): Promise<MetaDeckCache> {
@@ -756,27 +971,33 @@ export class DatabaseStorage implements IStorage {
       lastUpdatedAt: deckData.lastUpdatedAt ?? new Date(),
     };
 
-    const [deck] = await db
-      .insert(metaDecksCache)
-      .values(normalizedPayload)
-      .onConflictDoUpdate({
-        target: metaDecksCache.deckHash,
-        set: {
-          cards: normalizedCards,
-          usageCount: deckData.usageCount ?? 0,
-          avgTrophies: deckData.avgTrophies ?? null,
-          archetype: deckData.archetype ?? null,
-          lastUpdatedAt: new Date(),
-        },
-      })
-      .returning();
+    return this.runAsUser(async (conn) => {
+      const [deck] = await conn
+        .insert(metaDecksCache)
+        .values(normalizedPayload)
+        .onConflictDoUpdate({
+          target: metaDecksCache.deckHash,
+          set: {
+            cards: normalizedCards,
+            usageCount: deckData.usageCount ?? 0,
+            avgTrophies: deckData.avgTrophies ?? null,
+            archetype: deckData.archetype ?? null,
+            lastUpdatedAt: new Date(),
+          },
+        })
+        .returning();
 
-    return deck;
+      return deck;
+    });
   }
 
   async clearMetaDecks(): Promise<void> {
-    await db.delete(metaDecksCache);
+    await this.runAsUser((conn) => conn.delete(metaDecksCache));
   }
 }
 
-export const storage = new DatabaseStorage();
+export const serviceStorage = new DatabaseStorage();
+
+export function getUserStorage(auth: SupabaseAuthContext) {
+  return new DatabaseStorage({ auth });
+}

@@ -26,12 +26,12 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <a href="/api/login">
+            <Link href="/auth">
               <Button variant="ghost" className="hidden md:flex">{t("nav.login")}</Button>
-            </a>
-            <a href="/api/login">
+            </Link>
+            <Link href="/auth?signup=true">
               <Button className="font-bold">{t("landing.hero.cta")}</Button>
-            </a>
+            </Link>
           </div>
         </div>
       </header>

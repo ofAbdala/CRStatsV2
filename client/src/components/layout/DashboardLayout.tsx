@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -156,7 +157,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
           size="sm"
           onClick={() => {
-            window.location.href = "/api/logout";
+            getSupabaseClient()
+              .auth.signOut()
+              .catch(() => undefined)
+              .finally(() => {
+                window.location.href = "/";
+              });
           }}
         >
           <LogOut className="w-4 h-4 mr-2" />

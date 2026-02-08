@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Swords, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export default function AuthPage() {
   const [location, setLocation] = useLocation();
@@ -13,21 +14,67 @@ export default function AuthPage() {
   const isSignup = searchParams.get("signup") === "true";
   
   const [isLoading, setIsLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const { toast } = useToast();
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        setLocation("/dashboard");
+      }
+    });
+  }, [setLocation]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      toast({
-        title: isSignup ? "Conta criada com sucesso!" : "Login realizado!",
-        description: "Redirecionando...",
-      });
+
+    try {
+      const supabase = getSupabaseClient();
+
+      if (isSignup) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: name ? { full_name: name } : undefined,
+          },
+        });
+
+        if (error) throw error;
+
+        if (!data.session) {
+          // If email confirmation is enabled, Supabase won't return a session.
+          toast({
+            title: "Conta criada!",
+            description: "Verifique seu email para confirmar o cadastro e depois faça login.",
+          });
+          setLocation("/auth");
+          return;
+        }
+
+        toast({ title: "Conta criada com sucesso!", description: "Redirecionando..." });
+        setLocation("/onboarding");
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+
+      toast({ title: "Login realizado!", description: "Redirecionando..." });
       setLocation("/onboarding");
-    }, 1500);
+    } catch (err: any) {
+      toast({
+        title: "Falha na autenticacao",
+        description: err?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -60,16 +107,38 @@ export default function AuthPage() {
               {isSignup && (
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome</Label>
-                  <Input id="name" placeholder="Seu nome" required className="bg-background/50" />
+                  <Input
+                    id="name"
+                    placeholder="Seu nome"
+                    required
+                    className="bg-background/50"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="seu@email.com" required className="bg-background/50" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  required
+                  className="bg-background/50"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
-                <Input id="password" type="password" required className="bg-background/50" />
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  className="bg-background/50"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
               </div>
               
               <Button type="submit" className="w-full font-bold h-11" disabled={isLoading}>

@@ -1,5 +1,8 @@
 // API client utilities for CRStats
 
+import { getSupabaseAccessToken } from "@/lib/supabaseClient";
+import type { Profile, Subscription, User, UserSettings } from "@shared/schema";
+
 const API_BASE = "/api";
 
 type ApiErrorDetail = { path?: string; message?: string; code?: string } | unknown;
@@ -102,10 +105,13 @@ async function parseErrorPayload(response: Response): Promise<ApiErrorResponse> 
 }
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const accessToken = await getSupabaseAccessToken().catch(() => null);
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options?.headers,
     },
     credentials: "include",
@@ -130,7 +136,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 export const api = {
   auth: {
-    getUser: () => fetchAPI("/auth/user"),
+    getUser: () =>
+      fetchAPI<User & { profile?: Profile | null; subscription?: Subscription | null; settings?: UserSettings | null }>(
+        "/auth/user",
+      ),
   },
 
   profile: {

@@ -1,5 +1,5 @@
-import { type ComponentType } from "react";
-import { Route, Switch } from "wouter";
+import { type ComponentType, useEffect } from "react";
+import { Route, Switch, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import { LocaleProvider, useLocale } from "@/hooks/use-locale";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFoundPage from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
+import AuthPage from "@/pages/auth";
 import OnboardingPage from "@/pages/onboarding";
 import DashboardPage from "@/pages/dashboard";
 import CoachPage from "@/pages/coach";
@@ -40,6 +41,16 @@ const TrainingWithBoundary = withLocalBoundary(TrainingPage, "training");
 const BillingWithBoundary = withLocalBoundary(BillingPage, "billing");
 const NotificationsWithBoundary = withLocalBoundary(NotificationsPage, "notifications");
 
+function RedirectToAuth() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation("/auth");
+  }, [setLocation]);
+
+  return null;
+}
+
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const { t } = useLocale();
@@ -59,6 +70,7 @@ function Router() {
     <Switch>
       <Route path="/" component={isAuthenticated ? DashboardWithBoundary : LandingPage} />
       <Route path="/p/:tag" component={PublicProfilePage} />
+      <Route path="/auth" component={AuthPage} />
 
       {isAuthenticated ? (
         <>
@@ -76,21 +88,19 @@ function Router() {
         </>
       ) : (
         <>
-          <Route path="/dashboard">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/coach">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/training">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/decks">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/community">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/settings">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/profile">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/onboarding">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/billing">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/me">{() => { window.location.href = "/api/login"; return null; }}</Route>
-          <Route path="/notifications">{() => { window.location.href = "/api/login"; return null; }}</Route>
+          <Route path="/dashboard" component={RedirectToAuth} />
+          <Route path="/coach" component={RedirectToAuth} />
+          <Route path="/training" component={RedirectToAuth} />
+          <Route path="/decks" component={RedirectToAuth} />
+          <Route path="/community" component={RedirectToAuth} />
+          <Route path="/settings" component={RedirectToAuth} />
+          <Route path="/profile" component={RedirectToAuth} />
+          <Route path="/onboarding" component={RedirectToAuth} />
+          <Route path="/billing" component={RedirectToAuth} />
+          <Route path="/me" component={RedirectToAuth} />
+          <Route path="/notifications" component={RedirectToAuth} />
         </>
       )}
-
-      <Route path="/auth">{() => { window.location.href = "/api/login"; return null; }}</Route>
       <Route component={NotFoundPage} />
     </Switch>
   );

@@ -3,68 +3,10 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { randomUUID } from "crypto";
-import { runMigrations } from "stripe-replit-sync";
-import { getStripeSync } from "./stripeClient";
-import { WebhookHandlers } from "./webhookHandlers";
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
-  }
-}
-
-let stripeInitPromise: Promise<void> | null = null;
-
-async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    console.warn("DATABASE_URL not set, skipping Stripe initialization");
-    return;
-  }
-
-  if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-    console.warn("Stripe connector not available, skipping Stripe initialization");
-    return;
-  }
-
-  try {
-    console.log("Initializing Stripe schema...");
-    await runMigrations({
-      databaseUrl,
-    });
-    console.log("Stripe schema ready");
-
-    const stripeSync = await getStripeSync();
-
-    console.log("Setting up managed webhook...");
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
-    const { webhook, uuid } = await stripeSync.findOrCreateManagedWebhook(
-      `${webhookBaseUrl}/api/stripe/webhook`,
-      {
-        enabled_events: ["*"],
-        description: "Managed webhook for Stripe sync",
-      },
-    );
-    console.log(`Webhook configured: ${webhook.url} (UUID: ${uuid})`);
-
-    console.log("Syncing Stripe data...");
-    stripeSync
-      .syncBackfill()
-      .then(() => {
-        console.log("Stripe data synced");
-      })
-      .catch((err: any) => {
-        console.error("Error syncing Stripe data:", err);
-      });
-  } catch (error) {
-    console.error("Failed to initialize Stripe:", error);
-  }
-}
-
-function ensureStripeInit() {
-  if (!stripeInitPromise) {
-    stripeInitPromise = initStripe();
   }
 }
 
@@ -84,8 +26,6 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
   const httpServer = createServer(app);
   const enableViteInDevelopment = options?.enableViteInDevelopment ?? true;
 
-  ensureStripeInit();
-
   app.use((req, res, next) => {
     const headerValue = req.headers["x-request-id"];
     const requestId =
@@ -99,64 +39,6 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
     res.setHeader("x-request-id", requestId);
     next();
   });
-
-  app.post(
-    "/api/stripe/webhook/:uuid",
-    express.raw({ type: "application/json" }),
-    async (req, res) => {
-      const requestId = (req as any).requestId;
-      const signature = req.headers["stripe-signature"];
-
-      if (!signature) {
-        return res.status(400).json({
-          code: "STRIPE_SIGNATURE_MISSING",
-          message: "Missing stripe-signature",
-          requestId,
-        });
-      }
-
-      try {
-        const sig = Array.isArray(signature) ? signature[0] : signature;
-
-        if (!Buffer.isBuffer(req.body)) {
-          console.error(
-            JSON.stringify({
-              provider: "stripe",
-              route: "/api/stripe/webhook/:uuid",
-              code: "STRIPE_WEBHOOK_PAYLOAD_INVALID",
-              message: "req.body is not a Buffer",
-              requestId,
-            }),
-          );
-          return res.status(400).json({
-            code: "STRIPE_WEBHOOK_PAYLOAD_INVALID",
-            message: "Invalid webhook payload",
-            requestId,
-          });
-        }
-
-        const { uuid } = req.params;
-        await WebhookHandlers.processWebhook(req.body as Buffer, sig, uuid);
-
-        return res.status(200).json({ received: true, requestId });
-      } catch (error: any) {
-        console.error(
-          JSON.stringify({
-            provider: "stripe",
-            route: "/api/stripe/webhook/:uuid",
-            code: "STRIPE_WEBHOOK_PROCESSING_FAILED",
-            message: error?.message || "Webhook processing error",
-            requestId,
-          }),
-        );
-        return res.status(400).json({
-          code: "STRIPE_WEBHOOK_PROCESSING_FAILED",
-          message: "Webhook processing error",
-          requestId,
-        });
-      }
-    },
-  );
 
   app.use(
     express.json({
@@ -216,7 +98,7 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
     console.error(
       JSON.stringify({
         route: req.path,
-        userId: (req as any)?.user?.claims?.sub ?? "anonymous",
+        userId: (req as any)?.auth?.userId ?? "anonymous",
         provider: "internal",
         status,
         code,
