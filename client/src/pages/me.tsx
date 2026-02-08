@@ -56,6 +56,7 @@ import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
+import { buildTrophyChartData } from "@/lib/analytics/trophyChart";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -264,9 +265,10 @@ export default function MePage() {
   });
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
-  const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
+  const subscriptionPlan = typeof (subscription as any)?.plan === "string" ? ((subscription as any).plan as string).toLowerCase() : "";
+  const isPro = subscriptionPlan === "pro" && (subscription as any)?.status === "active";
   const isLoading = profileLoading || playerLoading;
   const battles = (battlesData as any) || [];
   const player = playerData as any;
@@ -432,19 +434,19 @@ export default function MePage() {
   }, [stats.streak]);
 
   const chartData = React.useMemo(() => {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (6 - i));
-      const baseTrophies = player?.trophies || 5000;
-      const variation = Math.floor(Math.random() * 100) - 50;
-      return {
-        date: days[date.getDay()],
-        trophies: Math.max(0, baseTrophies + variation * (i - 3)),
-      };
+    const points = buildTrophyChartData({
+      battles,
+      currentTrophies: player?.trophies,
+      locale,
+      days: 7,
     });
-  }, [player?.trophies]);
+
+    return points.map((point) => ({
+      date: point.label,
+      trophies: point.trophies,
+      dayKey: point.dayKey,
+    }));
+  }, [battles, locale, player?.trophies]);
 
   const deckUsage = React.useMemo(() => {
     if (!battles.length) return [];
@@ -479,6 +481,69 @@ export default function MePage() {
         winRate: deck.total > 0 ? Math.round((deck.wins / deck.total) * 100) : 0,
       }));
   }, [battles]);
+
+  function formatSigned(value: number) {
+    if (!Number.isFinite(value)) return "N/A";
+    if (value > 0) return `+${Math.round(value)}`;
+    return `${Math.round(value)}`;
+  }
+
+  const trophyPrediction = React.useMemo(() => {
+    const now = new Date();
+    const since = new Date(now);
+    since.setDate(since.getDate() - 7);
+
+    let sum = 0;
+    let sample = 0;
+
+    for (const battle of Array.isArray(battles) ? battles : []) {
+      const battleTimeValue = battle?.battleTime;
+      if (typeof battleTimeValue !== "string") continue;
+
+      const battleTime = parseBattleTime(battleTimeValue);
+      if (Number.isNaN(battleTime.getTime())) continue;
+      if (battleTime < since) continue;
+
+      const trophyChange = battle?.team?.[0]?.trophyChange;
+      if (typeof trophyChange !== "number") continue;
+      if (!Number.isFinite(trophyChange)) continue;
+
+      sum += trophyChange;
+      sample += 1;
+    }
+
+    return {
+      net: sample >= 3 ? sum : null,
+      sample,
+    };
+  }, [battles]);
+
+  const idealDeckWinRate = React.useMemo(() => {
+    const candidates = (deckUsage as any[]).filter((deck) => typeof deck?.total === "number" && deck.total >= 5);
+    if (candidates.length === 0) return null;
+    const best = candidates.reduce((acc, deck) => (deck.winRate > acc.winRate ? deck : acc), candidates[0]);
+    return typeof best?.winRate === "number" ? best.winRate : null;
+  }, [deckUsage]);
+
+  const matchupDeckCount = React.useMemo(() => {
+    const sample = (Array.isArray(filteredBattles) && filteredBattles.length ? filteredBattles : battles).slice(0, 50);
+    const keys = new Set<string>();
+
+    for (const battle of sample) {
+      const cards = battle?.opponent?.[0]?.cards;
+      if (!Array.isArray(cards) || cards.length === 0) continue;
+
+      const ids = cards
+        .map((c: any) => c?.id)
+        .filter((id: any) => typeof id === "number" && Number.isFinite(id))
+        .sort((a: number, b: number) => a - b);
+
+      if (ids.length === 0) continue;
+      keys.add(ids.join("-"));
+    }
+
+    return keys.size > 0 ? keys.size : null;
+  }, [battles, filteredBattles]);
 
   const archetypeAnalysis = React.useMemo(() => {
     if (!battles.length) {
@@ -1793,7 +1858,6 @@ export default function MePage() {
               </Card>
             </div>
 
-            {/* PRO Feature Placeholder */}
             <Card 
               className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden"
               data-testid="pro-locked-section"
@@ -1817,18 +1881,24 @@ export default function MePage() {
                   )}>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
                       <h4 className="font-medium mb-2">Predição de Troféus</h4>
-                      <p className="text-2xl font-bold text-primary">+150</p>
+                      <p className="text-2xl font-bold text-primary">
+                        {trophyPrediction.net === null ? "N/A" : formatSigned(trophyPrediction.net)}
+                      </p>
                       <p className="text-xs text-muted-foreground">próxima semana</p>
                     </div>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
                       <h4 className="font-medium mb-2">Deck Ideal</h4>
-                      <p className="text-2xl font-bold text-green-500">85%</p>
-                      <p className="text-xs text-muted-foreground">winrate estimado</p>
+                      <p className="text-2xl font-bold text-green-500">
+                        {idealDeckWinRate === null ? "N/A" : `${idealDeckWinRate}%`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">winrate recente</p>
                     </div>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
                       <h4 className="font-medium mb-2">Matchup Analysis</h4>
-                      <p className="text-2xl font-bold text-yellow-500">12</p>
-                      <p className="text-xs text-muted-foreground">decks analisados</p>
+                      <p className="text-2xl font-bold text-yellow-500">
+                        {matchupDeckCount === null ? "N/A" : matchupDeckCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground">decks detectados</p>
                     </div>
                   </div>
                   {!isPro && (
