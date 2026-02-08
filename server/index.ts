@@ -143,11 +143,27 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    const code = err.code || (status >= 500 ? "INTERNAL_SERVER_ERROR" : "REQUEST_ERROR");
 
-    res.status(status).json({ message });
+    res.status(status).json({
+      code,
+      message,
+      details: err.details,
+    });
+
+    console.error(
+      JSON.stringify({
+        route: req.path,
+        userId: (req as any)?.user?.claims?.sub ?? "anonymous",
+        provider: "internal",
+        status,
+        code,
+        message,
+      }),
+    );
     console.error("Unhandled application error:", err);
   });
 
@@ -170,7 +186,7 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
+      reusePort: false,
     },
     () => {
       log(`serving on port ${port}`);

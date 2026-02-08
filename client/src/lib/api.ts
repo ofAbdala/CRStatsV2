@@ -2,6 +2,30 @@
 
 const API_BASE = '/api';
 
+interface ApiErrorResponse {
+  code?: string;
+  message?: string;
+  error?: string;
+  details?: Array<{ path?: string; message?: string }> | unknown;
+}
+
+function formatApiError(status: number, payload: ApiErrorResponse): string {
+  const baseMessage = payload.message || payload.error || `HTTP ${status}`;
+
+  if (Array.isArray(payload.details) && payload.details.length > 0) {
+    const details = payload.details
+      .map((item: any) => {
+        const path = item?.path ? `${item.path}: ` : "";
+        return `${path}${item?.message || "Invalid field"}`;
+      })
+      .join("; ");
+
+    return payload.code ? `[${payload.code}] ${baseMessage} - ${details}` : `${baseMessage} - ${details}`;
+  }
+
+  return payload.code ? `[${payload.code}] ${baseMessage}` : baseMessage;
+}
+
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -13,8 +37,11 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || error.error || `HTTP ${response.status}`);
+    const errorPayload = await response
+      .json()
+      .catch(() => ({ message: 'Request failed' } as ApiErrorResponse));
+
+    throw new Error(formatApiError(response.status, errorPayload));
   }
 
   return response.json();
@@ -57,6 +84,13 @@ export const api = {
   notifications: {
     list: () => fetchAPI('/notifications'),
     markRead: (id: string) => fetchAPI(`/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: () => fetchAPI('/notifications/read-all', { method: 'POST' }),
+  },
+
+  // Notification preferences endpoints
+  notificationPreferences: {
+    get: () => fetchAPI('/notification-preferences'),
+    update: (data: any) => fetchAPI('/notification-preferences', { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
   // Settings endpoints
@@ -70,6 +104,12 @@ export const api = {
     getPlayer: (tag: string) => fetchAPI(`/clash/player/${encodeURIComponent(tag)}`),
     getBattles: (tag: string) => fetchAPI(`/clash/player/${encodeURIComponent(tag)}/battles`),
     getCards: () => fetchAPI('/clash/cards'),
+  },
+
+  // Player sync endpoints
+  player: {
+    sync: () => fetchAPI('/player/sync', { method: 'POST' }),
+    getSyncState: () => fetchAPI('/player/sync-state'),
   },
 
   // AI Coach endpoints

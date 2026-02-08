@@ -46,12 +46,19 @@ export class StripeService {
     }
 
     const customer = await this.createCustomer(email, userId);
-    
+
+    if (subscription) {
+      await storage.updateSubscription(subscription.id, {
+        stripeCustomerId: customer.id,
+      });
+      return customer.id;
+    }
+
     await storage.createSubscription({
       userId,
       stripeCustomerId: customer.id,
-      plan: 'free',
-      status: 'inactive',
+      plan: "free",
+      status: "inactive",
     });
 
     return customer.id;

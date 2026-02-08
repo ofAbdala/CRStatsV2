@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Moon, Bell, Monitor, Loader2, Check, Hash, Search } from "lucide-react";
+import { LogOut, Moon, Bell, Monitor, Loader2, Check, Hash, Search, CreditCard } from "lucide-react";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
+import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { useMutation } from "@tanstack/react-query";
@@ -18,24 +19,43 @@ import { useToast } from "@/hooks/use-toast";
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { data: profile, isLoading: profileLoading } = useProfile();
+  const { data: settingsData, isLoading: settingsLoading } = useSettings();
   const { user } = useAuth();
   const updateProfile = useUpdateProfile();
+  const updateSettings = useUpdateSettings();
   const { toast } = useToast();
 
   const [displayName, setDisplayName] = useState("");
   const [clashTag, setClashTag] = useState("");
   const [isSearchingTag, setIsSearchingTag] = useState(false);
   const [tagValidated, setTagValidated] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [notifySystem, setNotifySystem] = useState(true);
+  const [notifyTraining, setNotifyTraining] = useState(true);
+  const [notifyBilling, setNotifyBilling] = useState(true);
 
   useEffect(() => {
     if (profile) {
       setDisplayName((profile as any).displayName || "");
-      setClashTag((profile as any).clashTag?.replace("#", "") || "");
-      if ((profile as any).clashTag) {
+      const defaultTag = (profile as any).defaultPlayerTag || (profile as any).clashTag;
+      setClashTag(defaultTag?.replace("#", "") || "");
+      if (defaultTag) {
         setTagValidated(true);
       }
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (!settingsData) return;
+
+    const settings = settingsData as any;
+    const notificationPreferences = settings.notificationPreferences || {};
+
+    setDarkMode((settings.theme || "dark") === "dark");
+    setNotifySystem(notificationPreferences.system ?? settings.notificationsSystem ?? true);
+    setNotifyTraining(notificationPreferences.training ?? settings.notificationsTraining ?? true);
+    setNotifyBilling(notificationPreferences.billing ?? settings.notificationsBilling ?? true);
+  }, [settingsData]);
 
   const validateTagMutation = useMutation({
     mutationFn: async (tag: string) => {
@@ -82,7 +102,23 @@ export default function SettingsPage() {
     updateProfile.mutate({
       displayName: displayName || undefined,
       clashTag: normalizedTag,
+      defaultPlayerTag: normalizedTag,
     });
+  };
+
+  const handleSavePreferences = () => {
+    updateSettings.mutate({
+      theme: darkMode ? "dark" : "light",
+      notificationsEnabled: notifySystem || notifyTraining || notifyBilling,
+      notificationsSystem: notifySystem,
+      notificationsTraining: notifyTraining,
+      notificationsBilling: notifyBilling,
+      notificationPreferences: {
+        system: notifySystem,
+        training: notifyTraining,
+        billing: notifyBilling,
+      },
+    } as any);
   };
 
   const handleLogout = () => {
@@ -261,7 +297,11 @@ export default function SettingsPage() {
                     <Moon className="w-4 h-4" />
                     <span className="font-medium">Modo Escuro</span>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={darkMode}
+                    onCheckedChange={(checked) => setDarkMode(checked)}
+                    disabled={settingsLoading || updateSettings.isPending}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -277,16 +317,45 @@ export default function SettingsPage() {
                     <Bell className="w-4 h-4" />
                     <span className="font-medium">Alertas de Meta</span>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={notifySystem}
+                    onCheckedChange={(checked) => setNotifySystem(checked)}
+                    disabled={settingsLoading || updateSettings.isPending}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Monitor className="w-4 h-4" />
                     <span className="font-medium">Lembretes de Treino</span>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={notifyTraining}
+                    onCheckedChange={(checked) => setNotifyTraining(checked)}
+                    disabled={settingsLoading || updateSettings.isPending}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="font-medium">Atualizações de Billing</span>
+                  </div>
+                  <Switch
+                    checked={notifyBilling}
+                    onCheckedChange={(checked) => setNotifyBilling(checked)}
+                    disabled={settingsLoading || updateSettings.isPending}
+                  />
                 </div>
               </CardContent>
+              <CardFooter className="border-t border-border/50 pt-6">
+                <Button
+                  onClick={handleSavePreferences}
+                  disabled={settingsLoading || updateSettings.isPending}
+                  data-testid="button-save-preferences"
+                >
+                  {updateSettings.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Salvar Preferências
+                </Button>
+              </CardFooter>
             </Card>
           </TabsContent>
         </Tabs>

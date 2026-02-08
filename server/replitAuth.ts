@@ -55,13 +55,15 @@ function updateUserSession(
 async function upsertUser(
   claims: any,
 ) {
-  await storage.upsertUser({
+  const user = await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });
+
+  await storage.bootstrapUserData(user.id);
 }
 
 export async function setupAuth(app: Express) {
@@ -138,7 +140,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -148,7 +150,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 
   const refreshToken = user.refresh_token;
   if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
     return;
   }
 
@@ -158,7 +160,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     updateUserSession(user, tokenResponse);
     return next();
   } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
     return;
   }
 };

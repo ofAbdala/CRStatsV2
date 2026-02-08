@@ -1,5 +1,5 @@
 // From javascript_log_in_with_replit blueprint
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import { type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
@@ -10,8 +10,147 @@ import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getStripeSecretKey } from "./stripeClient";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
+import {
+  coachChatInputSchema,
+  favoriteCreateInputSchema,
+  goalCreateInputSchema,
+  goalUpdateInputSchema,
+  notificationPreferencesUpdateInputSchema,
+  profileCreateInputSchema,
+  profileUpdateInputSchema,
+  settingsUpdateInputSchema,
+  trainingDrillUpdateInputSchema,
+  trainingPlanUpdateInputSchema,
+} from "@shared/schema";
 
 const FREE_DAILY_LIMIT = 5;
+
+type ApiProvider = "internal" | "replit-oidc" | "clash-royale" | "stripe" | "openai";
+
+interface ApiErrorPayload {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+interface SyncErrorItem {
+  source: "profile" | "player" | "battlelog" | "goals";
+  code: string;
+  message: string;
+  status?: number;
+}
+
+function getUserId(req: any): string | null {
+  return req?.user?.claims?.sub ?? null;
+}
+
+function logApiContext(route: string, userId: string | null, provider: ApiProvider, status: number) {
+  console.info(
+    JSON.stringify({
+      route,
+      userId: userId ?? "anonymous",
+      provider,
+      status,
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
+function sendApiError(
+  res: Response,
+  {
+    route,
+    userId,
+    provider,
+    status,
+    error,
+  }: {
+    route: string;
+    userId: string | null;
+    provider: ApiProvider;
+    status: number;
+    error: ApiErrorPayload;
+  },
+) {
+  logApiContext(route, userId, provider, status);
+  return res.status(status).json(error);
+}
+
+function parseRequestBody<T>(schema: z.ZodType<T>, payload: unknown) {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      details: parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+        code: issue.code,
+      })),
+    };
+  }
+
+  return { ok: true as const, data: parsed.data };
+}
+
+function normalizeTag(tag: string | null | undefined): string | null | undefined {
+  if (tag === undefined) return undefined;
+  if (tag === null) return null;
+  const withoutHash = tag.trim().replace(/^#/, "").toUpperCase();
+  return withoutHash ? `#${withoutHash}` : null;
+}
+
+function getCanonicalProfileTag(profile: { defaultPlayerTag?: string | null; clashTag?: string | null } | null | undefined) {
+  return profile?.defaultPlayerTag || profile?.clashTag || null;
+}
+
+function isTemporaryProviderStatus(status: number) {
+  return status === 429 || status >= 500;
+}
+
+type NotificationCategory = "training" | "billing" | "system";
+
+async function isNotificationAllowed(userId: string, category: NotificationCategory) {
+  const prefs = await storage.getNotificationPreferences(userId);
+  if (prefs) {
+    return prefs[category];
+  }
+
+  const settings = await storage.getUserSettings(userId);
+  if (!settings) {
+    return true;
+  }
+
+  if (settings.notificationsEnabled === false) {
+    return false;
+  }
+
+  if (category === "training") return settings.notificationsTraining ?? true;
+  if (category === "billing") return settings.notificationsBilling ?? true;
+  return settings.notificationsSystem ?? true;
+}
+
+async function createNotificationIfAllowed(
+  userId: string,
+  category: NotificationCategory,
+  payload: {
+    title: string;
+    description?: string | null;
+    type: string;
+  },
+) {
+  if (!(await isNotificationAllowed(userId, category))) {
+    return null;
+  }
+
+  return storage.createNotification({
+    userId,
+    title: payload.title,
+    description: payload.description ?? null,
+    type: payload.type,
+    read: false,
+  });
+}
 
 function computeTiltLevel(battles: any[]): 'high' | 'medium' | 'none' {
   if (!battles || battles.length === 0) return 'none';
@@ -228,13 +367,33 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    const route = "/api/auth/user";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const user = await storage.getUser(userId);
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "USER_NOT_FOUND", message: "User not found" },
+        });
       }
+
+      await storage.bootstrapUserData(userId);
 
       // Get associated data
       const profile = await storage.getProfile(userId);
@@ -248,8 +407,14 @@ export async function registerRoutes(
         settings,
       });
     } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      console.error("Error fetching auth user:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "AUTH_USER_FETCH_FAILED", message: "Failed to fetch user" },
+      });
     }
   });
 
@@ -258,35 +423,142 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
       const profile = await storage.getProfile(userId);
-      res.json(profile);
+
+      if (!profile) {
+        return res.json(null);
+      }
+
+      const canonicalTag = getCanonicalProfileTag(profile);
+
+      res.json({
+        ...profile,
+        defaultPlayerTag: canonicalTag,
+        clashTag: profile.clashTag ?? canonicalTag,
+      });
     } catch (error) {
       console.error("Error fetching profile:", error);
-      res.status(500).json({ message: "Failed to fetch profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_FETCH_FAILED", message: "Failed to fetch profile" },
+      });
     }
   });
 
   app.post('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const profile = await storage.createProfile({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(profileCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid profile payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const profile = await storage.createProfile({
+        userId,
+        ...parsed.data,
+        clashTag: normalizeTag(parsed.data.clashTag as string | null | undefined),
+        defaultPlayerTag: normalizeTag(parsed.data.defaultPlayerTag as string | null | undefined),
+      });
+
       res.json(profile);
     } catch (error) {
       console.error("Error creating profile:", error);
-      res.status(500).json({ message: "Failed to create profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_CREATE_FAILED", message: "Failed to create profile" },
+      });
     }
   });
 
   app.patch('/api/profile', isAuthenticated, async (req: any, res) => {
+    const route = "/api/profile";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const profile = await storage.updateProfile(userId, req.body);
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(profileUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid profile payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const profile = await storage.updateProfile(userId, {
+        ...parsed.data,
+        clashTag: normalizeTag(parsed.data.clashTag as string | null | undefined),
+        defaultPlayerTag: normalizeTag(parsed.data.defaultPlayerTag as string | null | undefined),
+      });
+
       res.json(profile);
     } catch (error) {
       console.error("Error updating profile:", error);
-      res.status(500).json({ message: "Failed to update profile" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PROFILE_UPDATE_FAILED", message: "Failed to update profile" },
+      });
     }
   });
 
@@ -326,35 +598,113 @@ export async function registerRoutes(
   });
 
   app.post('/api/goals', isAuthenticated, async (req: any, res) => {
+    const route = "/api/goals";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const goal = await storage.createGoal({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(goalCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid goal payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const goal = await storage.createGoal({ userId, ...parsed.data });
       res.json(goal);
     } catch (error) {
       console.error("Error creating goal:", error);
-      res.status(500).json({ message: "Failed to create goal" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOAL_CREATE_FAILED", message: "Failed to create goal" },
+      });
     }
   });
 
   app.patch('/api/goals/:id', isAuthenticated, async (req: any, res) => {
+    const route = "/api/goals/:id";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(goalUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid goal payload",
+            details: parsed.details,
+          },
+        });
+      }
+
       const { id } = req.params;
       const existingGoal = await storage.getGoal(id);
       if (!existingGoal || existingGoal.userId !== userId) {
-        return res.status(404).json({ message: "Goal not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "GOAL_NOT_FOUND", message: "Goal not found" },
+        });
       }
 
-      const goal = await storage.updateGoal(id, req.body);
+      const goal = await storage.updateGoal(id, parsed.data);
 
       if (!goal) {
-        return res.status(404).json({ message: "Goal not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "GOAL_NOT_FOUND", message: "Goal not found" },
+        });
       }
 
       res.json(goal);
     } catch (error) {
       console.error("Error updating goal:", error);
-      res.status(500).json({ message: "Failed to update goal" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "GOAL_UPDATE_FAILED", message: "Failed to update goal" },
+      });
     }
   });
 
@@ -391,13 +741,60 @@ export async function registerRoutes(
   });
 
   app.post('/api/favorites', isAuthenticated, async (req: any, res) => {
+    const route = "/api/favorites";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const favorite = await storage.createFavoritePlayer({ userId, ...req.body });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(favoriteCreateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid favorite payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const favorite = await storage.createFavoritePlayer({
+        userId,
+        playerTag: normalizeTag(parsed.data.playerTag) || parsed.data.playerTag,
+        name: parsed.data.name,
+        trophies: parsed.data.trophies,
+        clan: parsed.data.clan,
+      });
+
+      if (parsed.data.setAsDefault) {
+        await storage.updateProfile(userId, {
+          defaultPlayerTag: favorite.playerTag,
+          clashTag: favorite.playerTag,
+        });
+      }
+
       res.json(favorite);
     } catch (error) {
       console.error("Error creating favorite:", error);
-      res.status(500).json({ message: "Failed to create favorite" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "FAVORITE_CREATE_FAILED", message: "Failed to create favorite" },
+      });
     }
   });
 
@@ -466,24 +863,240 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/settings', isAuthenticated, async (req: any, res) => {
+    const route = "/api/settings";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
       const settings = await storage.getUserSettings(userId);
-      res.json(settings);
+      const prefs = await storage.getNotificationPreferences(userId);
+
+      if (!settings) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "SETTINGS_NOT_FOUND", message: "Settings not found" },
+        });
+      }
+
+      res.json({
+        ...settings,
+        notificationPreferences: {
+          training: prefs?.training ?? settings.notificationsTraining ?? true,
+          billing: prefs?.billing ?? settings.notificationsBilling ?? true,
+          system: prefs?.system ?? settings.notificationsSystem ?? true,
+        },
+      });
     } catch (error) {
       console.error("Error fetching settings:", error);
-      res.status(500).json({ message: "Failed to fetch settings" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SETTINGS_FETCH_FAILED", message: "Failed to fetch settings" },
+      });
     }
   });
 
   app.patch('/api/settings', isAuthenticated, async (req: any, res) => {
+    const route = "/api/settings";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const settings = await storage.updateUserSettings(userId, req.body);
-      res.json(settings);
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(settingsUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid settings payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const categoryPayload = {
+        training: parsed.data.notificationPreferences?.training ?? parsed.data.notificationsTraining,
+        billing: parsed.data.notificationPreferences?.billing ?? parsed.data.notificationsBilling,
+        system: parsed.data.notificationPreferences?.system ?? parsed.data.notificationsSystem,
+      };
+
+      const settingsPayload = {
+        theme: parsed.data.theme,
+        preferredLanguage: parsed.data.preferredLanguage,
+        defaultLandingPage: parsed.data.defaultLandingPage,
+        showAdvancedStats: parsed.data.showAdvancedStats,
+        notificationsEnabled: parsed.data.notificationsEnabled,
+        notificationsTraining: categoryPayload.training,
+        notificationsBilling: categoryPayload.billing,
+        notificationsSystem: categoryPayload.system,
+      };
+
+      let settings = await storage.updateUserSettings(userId, settingsPayload);
+
+      const hasCategoryOverride =
+        categoryPayload.training !== undefined ||
+        categoryPayload.billing !== undefined ||
+        categoryPayload.system !== undefined;
+
+      let prefs = await storage.getNotificationPreferences(userId);
+      if (hasCategoryOverride) {
+        prefs = await storage.upsertNotificationPreferences(userId, categoryPayload);
+
+        if (parsed.data.notificationsEnabled === undefined) {
+          settings = await storage.updateUserSettings(userId, {
+            notificationsEnabled: prefs.training || prefs.billing || prefs.system,
+          });
+        }
+      }
+
+      prefs = prefs || (await storage.getNotificationPreferences(userId));
+
+      res.json({
+        ...settings,
+        notificationPreferences: {
+          training: prefs?.training ?? settings?.notificationsTraining ?? true,
+          billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
+          system: prefs?.system ?? settings?.notificationsSystem ?? true,
+        },
+      });
     } catch (error) {
       console.error("Error updating settings:", error);
-      res.status(500).json({ message: "Failed to update settings" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SETTINGS_UPDATE_FAILED", message: "Failed to update settings" },
+      });
+    }
+  });
+
+  // ============================================================================
+  // NOTIFICATION PREFERENCES ROUTES
+  // ============================================================================
+
+  app.get('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notification-preferences";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.bootstrapUserData(userId);
+      const prefs = await storage.getNotificationPreferences(userId);
+      const settings = await storage.getUserSettings(userId);
+
+      res.json({
+        training: prefs?.training ?? settings?.notificationsTraining ?? true,
+        billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
+        system: prefs?.system ?? settings?.notificationsSystem ?? true,
+      });
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: {
+          code: "NOTIFICATION_PREFERENCES_FETCH_FAILED",
+          message: "Failed to fetch notification preferences",
+        },
+      });
+    }
+  });
+
+  app.patch('/api/notification-preferences', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notification-preferences";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(notificationPreferencesUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid notification preferences payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const updatedPrefs = await storage.upsertNotificationPreferences(userId, parsed.data);
+
+      await storage.updateUserSettings(userId, {
+        notificationsTraining: updatedPrefs.training,
+        notificationsBilling: updatedPrefs.billing,
+        notificationsSystem: updatedPrefs.system,
+        notificationsEnabled: updatedPrefs.training || updatedPrefs.billing || updatedPrefs.system,
+      });
+
+      res.json({
+        training: updatedPrefs.training,
+        billing: updatedPrefs.billing,
+        system: updatedPrefs.system,
+      });
+    } catch (error) {
+      console.error("Error updating notification preferences:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: {
+          code: "NOTIFICATION_PREFERENCES_UPDATE_FAILED",
+          message: "Failed to update notification preferences",
+        },
+      });
     }
   });
 
@@ -543,70 +1156,148 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/player/sync', isAuthenticated, async (req: any, res) => {
+    const route = "/api/player/sync";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      
-      const profile = await storage.getProfile(userId);
-      if (!profile?.clashTag) {
-        return res.status(400).json({ 
-          error: "No Clash Royale tag linked to your profile",
-          code: "NO_CLASH_TAG" 
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
         });
       }
-      
-      const playerResult = await getPlayerByTag(profile.clashTag);
-      if (playerResult.error) {
-        return res.status(playerResult.status).json({ error: playerResult.error });
+
+      const profile = await storage.getProfile(userId);
+      const tagToSync = getCanonicalProfileTag(profile);
+
+      if (!tagToSync) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_CLASH_TAG",
+            message: "No Clash Royale tag linked to your profile",
+          },
+        });
       }
-      
-      const battlesResult = await getPlayerBattles(profile.clashTag);
-      if (battlesResult.error) {
-        return res.status(battlesResult.status).json({ error: battlesResult.error });
+
+      const syncErrors: SyncErrorItem[] = [];
+      let syncStatus: "ok" | "partial" | "error" = "ok";
+      let battles: any[] = [];
+      let pushSessions: PushSession[] = [];
+      let stats = computeBattleStats([]);
+      let goals: any[] = [];
+      let lastSyncedAt = (await storage.getSyncState(userId))?.lastSyncedAt || null;
+
+      const playerResult = await getPlayerByTag(tagToSync);
+      if (playerResult.error || !playerResult.data) {
+        syncStatus = "error";
+        syncErrors.push({
+          source: "player",
+          code: isTemporaryProviderStatus(playerResult.status)
+            ? "PLAYER_TEMPORARY_UNAVAILABLE"
+            : "PLAYER_FETCH_FAILED",
+          message: playerResult.error || "Failed to fetch player data",
+          status: playerResult.status,
+        });
+
+        logApiContext(route, userId, "clash-royale", playerResult.status || 500);
+
+        return res.json({
+          status: syncStatus,
+          partial: false,
+          syncedTag: tagToSync,
+          player: null,
+          battles,
+          pushSessions,
+          stats,
+          goals,
+          lastSyncedAt,
+          errors: syncErrors,
+        });
       }
-      
+
       const player = playerResult.data as any;
-      const battles = (battlesResult.data as any[]) || [];
-      
-      const pushSessions = computePushSessions(battles);
-      const stats = computeBattleStats(battles);
-      
-      const syncState = await storage.updateSyncState(userId);
-      
-      let goals = await storage.getGoals(userId);
-      
-      for (const goal of goals) {
-        if (goal.completed) continue;
-        
-        let shouldUpdate = false;
-        let newCurrentValue = goal.currentValue || 0;
-        let shouldComplete = false;
-        
-        if (goal.type === 'trophies') {
-          newCurrentValue = player.trophies;
-          shouldUpdate = newCurrentValue !== goal.currentValue;
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        } else if (goal.type === 'winrate') {
-          newCurrentValue = Math.round(stats.winRate);
-          shouldUpdate = newCurrentValue !== goal.currentValue;
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        } else if (goal.type === 'streak' && stats.streak.type === 'win') {
-          newCurrentValue = stats.streak.count;
-          shouldUpdate = newCurrentValue > (goal.currentValue || 0);
-          shouldComplete = newCurrentValue >= goal.targetValue;
-        }
-        
-        if (shouldUpdate) {
-          await storage.updateGoal(goal.id, {
-            currentValue: newCurrentValue,
-            completed: shouldComplete,
-            completedAt: shouldComplete ? new Date() : undefined,
-          });
-        }
+
+      const battlesResult = await getPlayerBattles(tagToSync);
+      if (battlesResult.error) {
+        syncStatus = "partial";
+        syncErrors.push({
+          source: "battlelog",
+          code: isTemporaryProviderStatus(battlesResult.status)
+            ? "BATTLELOG_TEMPORARY_UNAVAILABLE"
+            : "BATTLELOG_FETCH_FAILED",
+          message: battlesResult.error,
+          status: battlesResult.status,
+        });
+      } else {
+        battles = (battlesResult.data as any[]) || [];
       }
-      
-      goals = await storage.getGoals(userId);
-      
+
+      pushSessions = computePushSessions(battles);
+      stats = computeBattleStats(battles);
+
+      // Canonical rule: lastSyncedAt is updated whenever player core payload is fetched successfully,
+      // even when battlelog fails/returns empty, because profile-level data is still fresh.
+      const syncState = await storage.updateSyncState(userId);
+      lastSyncedAt = syncState.lastSyncedAt || null;
+
+      try {
+        goals = await storage.getGoals(userId);
+
+        for (const goal of goals) {
+          if (goal.completed) continue;
+
+          let shouldUpdate = false;
+          let newCurrentValue = goal.currentValue || 0;
+          let shouldComplete = false;
+
+          if (goal.type === 'trophies') {
+            newCurrentValue = player.trophies;
+            shouldUpdate = newCurrentValue !== goal.currentValue;
+            shouldComplete = newCurrentValue >= goal.targetValue;
+          } else if (goal.type === 'winrate') {
+            newCurrentValue = Math.round(stats.winRate);
+            shouldUpdate = newCurrentValue !== goal.currentValue;
+            shouldComplete = newCurrentValue >= goal.targetValue;
+          } else if (goal.type === 'streak' && stats.streak.type === 'win') {
+            newCurrentValue = stats.streak.count;
+            shouldUpdate = newCurrentValue > (goal.currentValue || 0);
+            shouldComplete = newCurrentValue >= goal.targetValue;
+          }
+
+          if (shouldUpdate) {
+            await storage.updateGoal(goal.id, {
+              currentValue: newCurrentValue,
+              completed: shouldComplete,
+              completedAt: shouldComplete ? new Date() : undefined,
+            });
+          }
+        }
+
+        goals = await storage.getGoals(userId);
+      } catch (goalError) {
+        console.warn("Goal sync failed during player sync:", goalError);
+        syncStatus = "partial";
+        syncErrors.push({
+          source: "goals",
+          code: "GOAL_SYNC_PARTIAL_FAILURE",
+          message: "Goals could not be fully synchronized",
+        });
+      }
+
+      const responseStatus = syncStatus;
+      logApiContext(route, userId, "clash-royale", 200);
+
       res.json({
+        status: responseStatus,
+        partial: responseStatus !== "ok",
+        syncedTag: player.tag || tagToSync,
         player: {
           tag: player.tag,
           name: player.name,
@@ -623,33 +1314,58 @@ export async function registerRoutes(
         battles,
         pushSessions,
         stats,
-        lastSyncedAt: syncState.lastSyncedAt,
+        lastSyncedAt,
         goals,
+        errors: syncErrors,
       });
     } catch (error) {
       console.error("Error syncing player data:", error);
-      res.status(500).json({ error: "Failed to sync player data" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "PLAYER_SYNC_FAILED", message: "Failed to sync player data" },
+      });
     }
   });
 
   app.get('/api/player/sync-state', isAuthenticated, async (req: any, res) => {
+    const route = "/api/player/sync-state";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const syncState = await storage.getSyncState(userId);
-      
+
       res.json({
         lastSyncedAt: syncState?.lastSyncedAt || null,
       });
     } catch (error) {
       console.error("Error fetching sync state:", error);
-      res.status(500).json({ error: "Failed to fetch sync state" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "SYNC_STATE_FETCH_FAILED", message: "Failed to fetch sync state" },
+      });
     }
   });
 
   // ============================================================================
   // STRIPE BILLING ROUTES
   // ============================================================================
-  
+
   app.get('/api/stripe/config', async (req, res) => {
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
@@ -870,12 +1586,10 @@ export async function registerRoutes(
               });
               console.log(`PRO activated for user: ${userId}`);
               
-              await storage.createNotification({
-                userId,
+              await createNotificationIfAllowed(userId, "billing", {
                 title: 'Bem-vindo ao PRO!',
                 description: 'Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!',
                 type: 'success',
-                read: false,
               });
             } else {
               await storage.createSubscription({
@@ -919,12 +1633,10 @@ export async function registerRoutes(
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
               
-              await storage.createNotification({
-                userId: existing.userId,
+              await createNotificationIfAllowed(existing.userId, "billing", {
                 title: 'Assinatura cancelada',
                 description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
                 type: 'warning',
-                read: false,
               });
             }
           }
@@ -948,12 +1660,10 @@ export async function registerRoutes(
               });
               console.log(`Subscription ${subscriptionId} marked as past_due due to payment failure`);
               
-              await storage.createNotification({
-                userId: existing.userId,
+              await createNotificationIfAllowed(existing.userId, "billing", {
                 title: 'Falha no pagamento',
                 description: 'O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento.',
                 type: 'error',
-                read: false,
               });
             }
           }
@@ -976,36 +1686,71 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/coach/chat', isAuthenticated, async (req: any, res) => {
+    const route = "/api/coach/chat";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
       
       const isPro = await storage.isPro(userId);
       
       if (!isPro) {
         const messagesToday = await storage.countCoachMessagesToday(userId);
         if (messagesToday >= FREE_DAILY_LIMIT) {
-          return res.status(403).json({ 
-            error: "Daily message limit reached. Upgrade to PRO for unlimited coaching.",
-            code: "FREE_COACH_DAILY_LIMIT_REACHED",
-            limit: FREE_DAILY_LIMIT,
-            used: messagesToday,
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 403,
+            error: {
+              code: "FREE_COACH_DAILY_LIMIT_REACHED",
+              message: "Daily message limit reached. Upgrade to PRO for unlimited coaching.",
+              details: {
+                limit: FREE_DAILY_LIMIT,
+                used: messagesToday,
+              },
+            },
           });
         }
       }
-      
-      const { messages, playerTag, contextType } = req.body as { 
-        messages: ChatMessage[]; 
-        playerTag?: string;
-        contextType?: string;
-      };
 
-      if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        return res.status(400).json({ error: "Messages array is required" });
+      const parsed = parseRequestBody(coachChatInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid coach chat payload",
+            details: parsed.details,
+          },
+        });
       }
+
+      const { messages, playerTag, contextType } = parsed.data;
 
       const lastUserMessage = messages.filter(m => m.role === 'user').pop();
       if (!lastUserMessage) {
-        return res.status(400).json({ error: "At least one user message is required" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "NO_USER_MESSAGE",
+            message: "At least one user message is required",
+          },
+        });
       }
 
       const lossPatterns = [
@@ -1094,8 +1839,9 @@ export async function registerRoutes(
           }
         } else {
           const profile = await storage.getProfile(userId);
-          if (profile?.clashTag) {
-            const playerResult = await getPlayerByTag(profile.clashTag);
+          const profileTag = getCanonicalProfileTag(profile);
+          if (profileTag) {
+            const playerResult = await getPlayerByTag(profileTag);
             if (playerResult.data) {
               const player = playerResult.data as any;
               playerContext = {
@@ -1105,7 +1851,7 @@ export async function registerRoutes(
                 currentDeck: player.currentDeck?.map((c: any) => c.name),
               };
               
-              const battlesResult = await getPlayerBattles(profile.clashTag);
+              const battlesResult = await getPlayerBattles(profileTag);
               if (battlesResult.data) {
                 const battles = battlesResult.data as any[];
                 playerContext.recentBattles = battles.slice(0, 5);
@@ -1188,7 +1934,13 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Error in coach chat:", error);
-      res.status(500).json({ error: "Failed to generate coach response" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "openai",
+        status: 500,
+        error: { code: "COACH_CHAT_FAILED", message: "Failed to generate coach response" },
+      });
     }
   });
 
@@ -1213,13 +1965,14 @@ export async function registerRoutes(
       let playerTag = providedTag;
       if (!playerTag) {
         const profile = await storage.getProfile(userId);
-        if (!profile?.clashTag) {
+        const profileTag = getCanonicalProfileTag(profile);
+        if (!profileTag) {
           return res.status(400).json({ 
             error: "Nenhum jogador vinculado. Vincule sua conta Clash Royale primeiro.",
             code: "NO_PLAYER_TAG",
           });
         }
-        playerTag = profile.clashTag;
+        playerTag = profileTag;
       }
       
       const battlesResult = await getPlayerBattles(playerTag);
@@ -1389,8 +2142,9 @@ export async function registerRoutes(
       const profile = await storage.getProfile(userId);
       let playerContext;
       
-      if (profile?.clashTag) {
-        const playerResult = await getPlayerByTag(profile.clashTag);
+      const profileTag = getCanonicalProfileTag(profile);
+      if (profileTag) {
+        const playerResult = await getPlayerByTag(profileTag);
         if (playerResult.data) {
           const player = playerResult.data as any;
           playerContext = {
@@ -1428,12 +2182,10 @@ export async function registerRoutes(
         )
       );
       
-      await storage.createNotification({
-        userId,
+      await createNotificationIfAllowed(userId, "training", {
         title: 'Novo plano de treinamento criado!',
         description: `"${generatedPlan.title}" está pronto com ${drills.length} exercícios para você praticar.`,
         type: 'success',
-        read: false,
       });
       
       res.json({
@@ -1447,19 +2199,58 @@ export async function registerRoutes(
   });
 
   app.patch('/api/training/drill/:drillId', isAuthenticated, async (req: any, res) => {
+    const route = "/api/training/drill/:drillId";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const parsed = parseRequestBody(trainingDrillUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid training drill update payload",
+            details: parsed.details,
+          },
+        });
+      }
+
       const { drillId } = req.params;
-      const { completedGames, status } = req.body as { completedGames?: number; status?: string };
+      const { completedGames, status } = parsed.data;
 
       const existingDrill = await storage.getTrainingDrill(drillId);
       if (!existingDrill) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
 
       const parentPlan = await storage.getTrainingPlan(existingDrill.planId);
       if (!parentPlan || parentPlan.userId !== userId) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
       
       const updateData: any = {};
@@ -1469,41 +2260,94 @@ export async function registerRoutes(
       const drill = await storage.updateTrainingDrill(drillId, updateData);
       
       if (!drill) {
-        return res.status(404).json({ error: "Drill não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
+        });
       }
       
       res.json(drill);
     } catch (error) {
       console.error("Error updating drill:", error);
-      res.status(500).json({ error: "Falha ao atualizar drill" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "DRILL_UPDATE_FAILED", message: "Falha ao atualizar drill" },
+      });
     }
   });
 
   app.patch('/api/training/plan/:planId', isAuthenticated, async (req: any, res) => {
+    const route = "/api/training/plan/:planId";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
-      const { planId } = req.params;
-      const { status } = req.body as { status?: string };
-      
-      if (!status) {
-        return res.status(400).json({ error: "Status é obrigatório" });
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
       }
+
+      const parsed = parseRequestBody(trainingPlanUpdateInputSchema, req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid training plan update payload",
+            details: parsed.details,
+          },
+        });
+      }
+
+      const { planId } = req.params;
+      const { status } = parsed.data;
 
       const existingPlan = await storage.getTrainingPlan(planId);
       if (!existingPlan || existingPlan.userId !== userId) {
-        return res.status(404).json({ error: "Plano não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
+        });
       }
       
       const plan = await storage.updateTrainingPlan(planId, { status });
       
       if (!plan) {
-        return res.status(404).json({ error: "Plano não encontrado" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
+        });
       }
       
       res.json(plan);
     } catch (error) {
       console.error("Error updating training plan:", error);
-      res.status(500).json({ error: "Falha ao atualizar plano de treinamento" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "TRAINING_PLAN_UPDATE_FAILED", message: "Falha ao atualizar plano de treinamento" },
+      });
     }
   });
 

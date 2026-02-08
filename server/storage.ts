@@ -1,4 +1,3 @@
-// From javascript_database and javascript_log_in_with_replit blueprints
 import {
   users,
   profiles,
@@ -7,6 +6,7 @@ import {
   favoritePlayers,
   notifications,
   userSettings,
+  notificationPreferences,
   playerSyncState,
   coachMessages,
   pushAnalyses,
@@ -27,6 +27,8 @@ import {
   type InsertNotification,
   type UserSettings,
   type InsertUserSettings,
+  type NotificationPreferences,
+  type InsertNotificationPreferences,
   type PlayerSyncState,
   type CoachMessage,
   type InsertCoachMessage,
@@ -37,42 +39,96 @@ import {
   type TrainingDrill,
   type InsertTrainingDrill,
   type MetaDeckCache,
-  type InsertMetaDeckCache,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
 
-// Interface for storage operations
+interface BootstrapResult {
+  profile: Profile;
+  settings: UserSettings;
+  subscription: Subscription;
+  notificationPreferences: NotificationPreferences;
+}
+
+interface MetaDeckWriteInput {
+  deckHash: string;
+  cards: string[];
+  usageCount?: number;
+  avgTrophies?: number | null;
+  archetype?: string | null;
+  lastUpdatedAt?: Date | null;
+}
+
+function normalizePlayerTag(tag: string | null | undefined): string | null | undefined {
+  if (tag === undefined) return undefined;
+  if (tag === null) return null;
+
+  const trimmed = tag.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutHash = trimmed.replace(/^#/, "").toUpperCase();
+  return `#${withoutHash}`;
+}
+
+function buildCanonicalProfileData(profileData: Partial<InsertProfile>): Partial<InsertProfile> {
+  const normalizedLegacy = normalizePlayerTag(profileData.clashTag as string | null | undefined);
+  const normalizedDefault = normalizePlayerTag(profileData.defaultPlayerTag as string | null | undefined);
+
+  let clashTag = normalizedLegacy;
+  let defaultPlayerTag = normalizedDefault;
+
+  if (defaultPlayerTag !== undefined && clashTag === undefined) {
+    clashTag = defaultPlayerTag;
+  }
+
+  if (clashTag !== undefined && defaultPlayerTag === undefined) {
+    defaultPlayerTag = clashTag;
+  }
+
+  if (defaultPlayerTag !== undefined) {
+    clashTag = defaultPlayerTag;
+  }
+
+  return {
+    ...profileData,
+    clashTag,
+    defaultPlayerTag,
+  };
+}
+
 export interface IStorage {
-  // User operations (Required by Replit Auth)
+  // User operations
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  
+  bootstrapUserData(userId: string): Promise<BootstrapResult>;
+
   // Profile operations
   getProfile(userId: string): Promise<Profile | undefined>;
   createProfile(profile: InsertProfile): Promise<Profile>;
   updateProfile(userId: string, profile: Partial<InsertProfile>): Promise<Profile | undefined>;
-  
+
   // Subscription operations
   getSubscription(userId: string): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
   isPro(userId: string): Promise<boolean>;
-  
+
   // Goals operations
   getGoals(userId: string): Promise<Goal[]>;
   getGoal(id: string): Promise<Goal | undefined>;
   createGoal(goal: InsertGoal): Promise<Goal>;
   updateGoal(id: string, goal: Partial<InsertGoal>): Promise<Goal | undefined>;
   deleteGoal(id: string): Promise<void>;
-  
+
   // Favorite Players operations
   getFavoritePlayers(userId: string): Promise<FavoritePlayer[]>;
   getFavoritePlayer(id: string): Promise<FavoritePlayer | undefined>;
   createFavoritePlayer(player: InsertFavoritePlayer): Promise<FavoritePlayer>;
   deleteFavoritePlayer(id: string): Promise<void>;
-  
+
   // Notifications operations
   getNotifications(userId: string): Promise<Notification[]>;
   getNotification(id: string): Promise<Notification | undefined>;
@@ -80,28 +136,35 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<void>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
   deleteNotification(id: string): Promise<void>;
-  
+
+  // Notification preferences operations
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  upsertNotificationPreferences(
+    userId: string,
+    preferences: Partial<InsertNotificationPreferences>,
+  ): Promise<NotificationPreferences>;
+
   // User Settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, settings: Partial<InsertUserSettings>): Promise<UserSettings | undefined>;
-  
+
   // Player Sync State operations
   getSyncState(userId: string): Promise<PlayerSyncState | undefined>;
   updateSyncState(userId: string): Promise<PlayerSyncState>;
-  
+
   // Coach Messages operations
   getCoachMessages(userId: string, limit?: number): Promise<CoachMessage[]>;
   createCoachMessage(message: InsertCoachMessage): Promise<CoachMessage>;
   countCoachMessagesToday(userId: string): Promise<number>;
-  
+
   // Push Analyses operations
   getPushAnalysis(id: string): Promise<PushAnalysis | undefined>;
   getLatestPushAnalysis(userId: string): Promise<PushAnalysis | undefined>;
   getPushAnalyses(userId: string, limit?: number): Promise<PushAnalysis[]>;
   createPushAnalysis(analysis: InsertPushAnalysis): Promise<PushAnalysis>;
   countPushAnalysesToday(userId: string): Promise<number>;
-  
+
   // Training Plans operations
   getActivePlan(userId: string): Promise<TrainingPlan | undefined>;
   getTrainingPlan(id: string): Promise<TrainingPlan | undefined>;
@@ -109,25 +172,21 @@ export interface IStorage {
   createTrainingPlan(plan: InsertTrainingPlan): Promise<TrainingPlan>;
   updateTrainingPlan(id: string, plan: Partial<InsertTrainingPlan>): Promise<TrainingPlan | undefined>;
   archiveOldPlans(userId: string): Promise<void>;
-  
+
   // Training Drills operations
   getTrainingDrill(id: string): Promise<TrainingDrill | undefined>;
   getDrillsByPlan(planId: string): Promise<TrainingDrill[]>;
   createTrainingDrill(drill: InsertTrainingDrill): Promise<TrainingDrill>;
   updateTrainingDrill(id: string, drill: Partial<InsertTrainingDrill>): Promise<TrainingDrill | undefined>;
   countActiveDrills(planId: string): Promise<number>;
-  
+
   // Meta Decks Cache operations
   getMetaDecks(): Promise<MetaDeckCache[]>;
-  createMetaDeck(deck: Partial<InsertMetaDeckCache>): Promise<MetaDeckCache>;
+  createMetaDeck(deck: Partial<MetaDeckWriteInput>): Promise<MetaDeckCache>;
   clearMetaDecks(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // ============================================================================
-  // User operations (Required by Replit Auth)
-  // ============================================================================
-  
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -145,39 +204,138 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
+
     return user;
   }
 
-  // ============================================================================
-  // Profile operations
-  // ============================================================================
-  
+  async bootstrapUserData(userId: string): Promise<BootstrapResult> {
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+      const fallbackDisplayName =
+        [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+        user?.email?.split("@")[0] ||
+        "Player";
+
+      await tx
+        .insert(profiles)
+        .values({
+          userId,
+          displayName: fallbackDisplayName,
+          region: "BR",
+          language: "pt",
+          role: "user",
+        })
+        .onConflictDoNothing();
+
+      await tx
+        .insert(userSettings)
+        .values({
+          userId,
+          theme: "dark",
+          preferredLanguage: "pt",
+          defaultLandingPage: "dashboard",
+          showAdvancedStats: false,
+          notificationsEnabled: true,
+          notificationsTraining: true,
+          notificationsBilling: true,
+          notificationsSystem: true,
+        })
+        .onConflictDoNothing();
+
+      const [existingSubscription] = await tx
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.userId, userId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (!existingSubscription) {
+        await tx.insert(subscriptions).values({
+          userId,
+          plan: "free",
+          status: "inactive",
+          cancelAtPeriodEnd: false,
+        });
+      }
+
+      await tx
+        .insert(notificationPreferences)
+        .values({
+          userId,
+          training: true,
+          billing: true,
+          system: true,
+        })
+        .onConflictDoNothing();
+
+      const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+      const [settings] = await tx.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+      const [subscription] = await tx
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.userId, userId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+      const [prefs] = await tx
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+        .limit(1);
+
+      if (!profile || !settings || !subscription || !prefs) {
+        throw new Error("Failed to bootstrap canonical user data");
+      }
+
+      return {
+        profile,
+        settings,
+        subscription,
+        notificationPreferences: prefs,
+      };
+    });
+  }
+
   async getProfile(userId: string): Promise<Profile | undefined> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId));
     return profile;
   }
 
   async createProfile(profileData: InsertProfile): Promise<Profile> {
-    const [profile] = await db.insert(profiles).values(profileData).returning();
+    const canonicalData = buildCanonicalProfileData(profileData);
+
+    const [profile] = await db
+      .insert(profiles)
+      .values(canonicalData as InsertProfile)
+      .onConflictDoUpdate({
+        target: profiles.userId,
+        set: {
+          ...canonicalData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
     return profile;
   }
 
   async updateProfile(userId: string, profileData: Partial<InsertProfile>): Promise<Profile | undefined> {
+    const canonicalData = buildCanonicalProfileData(profileData);
+
     const [profile] = await db
       .insert(profiles)
-      .values({ userId, ...profileData })
+      .values({ userId, ...canonicalData })
       .onConflictDoUpdate({
         target: profiles.userId,
-        set: { ...profileData, updatedAt: new Date() },
+        set: {
+          ...canonicalData,
+          updatedAt: new Date(),
+        },
       })
       .returning();
+
     return profile;
   }
 
-  // ============================================================================
-  // Subscription operations
-  // ============================================================================
-  
   async getSubscription(userId: string): Promise<Subscription | undefined> {
     const [subscription] = await db
       .select()
@@ -185,20 +343,39 @@ export class DatabaseStorage implements IStorage {
       .where(eq(subscriptions.userId, userId))
       .orderBy(desc(subscriptions.createdAt))
       .limit(1);
+
     return subscription;
   }
 
   async createSubscription(subscriptionData: InsertSubscription): Promise<Subscription> {
-    const [subscription] = await db.insert(subscriptions).values(subscriptionData).returning();
-    return subscription;
+    const existing = await this.getSubscription(subscriptionData.userId);
+    if (existing) {
+      const [updated] = await db
+        .update(subscriptions)
+        .set({
+          ...subscriptionData,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, existing.id))
+        .returning();
+
+      return updated;
+    }
+
+    const [created] = await db.insert(subscriptions).values(subscriptionData).returning();
+    return created;
   }
 
-  async updateSubscription(id: string, subscriptionData: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+  async updateSubscription(
+    id: string,
+    subscriptionData: Partial<InsertSubscription>,
+  ): Promise<Subscription | undefined> {
     const [subscription] = await db
       .update(subscriptions)
       .set({ ...subscriptionData, updatedAt: new Date() })
       .where(eq(subscriptions.id, id))
       .returning();
+
     return subscription;
   }
 
@@ -207,20 +384,17 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
+
     return subscription;
   }
 
   async isPro(userId: string): Promise<boolean> {
     const subscription = await this.getSubscription(userId);
-    return subscription?.plan === 'pro' && subscription?.status === 'active';
+    return subscription?.plan === "pro" && subscription?.status === "active";
   }
 
-  // ============================================================================
-  // Goals operations
-  // ============================================================================
-  
   async getGoals(userId: string): Promise<Goal[]> {
-    return await db.select().from(goals).where(eq(goals.userId, userId)).orderBy(desc(goals.createdAt));
+    return db.select().from(goals).where(eq(goals.userId, userId)).orderBy(desc(goals.createdAt));
   }
 
   async getGoal(id: string): Promise<Goal | undefined> {
@@ -239,6 +413,7 @@ export class DatabaseStorage implements IStorage {
       .set({ ...goalData, updatedAt: new Date() })
       .where(eq(goals.id, id))
       .returning();
+
     return goal;
   }
 
@@ -246,12 +421,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(goals).where(eq(goals.id, id));
   }
 
-  // ============================================================================
-  // Favorite Players operations
-  // ============================================================================
-  
   async getFavoritePlayers(userId: string): Promise<FavoritePlayer[]> {
-    return await db.select().from(favoritePlayers).where(eq(favoritePlayers.userId, userId)).orderBy(desc(favoritePlayers.createdAt));
+    return db
+      .select()
+      .from(favoritePlayers)
+      .where(eq(favoritePlayers.userId, userId))
+      .orderBy(desc(favoritePlayers.createdAt));
   }
 
   async getFavoritePlayer(id: string): Promise<FavoritePlayer | undefined> {
@@ -260,7 +435,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFavoritePlayer(playerData: InsertFavoritePlayer): Promise<FavoritePlayer> {
-    const [player] = await db.insert(favoritePlayers).values(playerData).returning();
+    const payload = {
+      ...playerData,
+      playerTag: normalizePlayerTag(playerData.playerTag) ?? playerData.playerTag,
+    };
+
+    const [player] = await db.insert(favoritePlayers).values(payload).returning();
     return player;
   }
 
@@ -268,12 +448,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(favoritePlayers).where(eq(favoritePlayers.id, id));
   }
 
-  // ============================================================================
-  // Notifications operations
-  // ============================================================================
-  
   async getNotifications(userId: string): Promise<Notification[]> {
-    return await db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt));
+    return db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
   }
 
   async getNotification(id: string): Promise<Notification | undefined> {
@@ -298,33 +478,79 @@ export class DatabaseStorage implements IStorage {
     await db.delete(notifications).where(eq(notifications.id, id));
   }
 
-  // ============================================================================
-  // User Settings operations
-  // ============================================================================
-  
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const [prefs] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+
+    return prefs;
+  }
+
+  async upsertNotificationPreferences(
+    userId: string,
+    preferencesData: Partial<InsertNotificationPreferences>,
+  ): Promise<NotificationPreferences> {
+    const [prefs] = await db
+      .insert(notificationPreferences)
+      .values({
+        userId,
+        training: preferencesData.training ?? true,
+        billing: preferencesData.billing ?? true,
+        system: preferencesData.system ?? true,
+      })
+      .onConflictDoUpdate({
+        target: notificationPreferences.userId,
+        set: {
+          ...preferencesData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    return prefs;
+  }
+
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {
     const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
     return settings;
   }
 
   async createUserSettings(settingsData: InsertUserSettings): Promise<UserSettings> {
-    const [settings] = await db.insert(userSettings).values(settingsData).returning();
-    return settings;
-  }
-
-  async updateUserSettings(userId: string, settingsData: Partial<InsertUserSettings>): Promise<UserSettings | undefined> {
     const [settings] = await db
-      .update(userSettings)
-      .set({ ...settingsData, updatedAt: new Date() })
-      .where(eq(userSettings.userId, userId))
+      .insert(userSettings)
+      .values(settingsData)
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          ...settingsData,
+          updatedAt: new Date(),
+        },
+      })
       .returning();
+
     return settings;
   }
 
-  // ============================================================================
-  // Player Sync State operations
-  // ============================================================================
-  
+  async updateUserSettings(
+    userId: string,
+    settingsData: Partial<InsertUserSettings>,
+  ): Promise<UserSettings | undefined> {
+    const [settings] = await db
+      .insert(userSettings)
+      .values({ userId, ...settingsData })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          ...settingsData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    return settings;
+  }
+
   async getSyncState(userId: string): Promise<PlayerSyncState | undefined> {
     const [state] = await db.select().from(playerSyncState).where(eq(playerSyncState.userId, userId));
     return state;
@@ -333,21 +559,18 @@ export class DatabaseStorage implements IStorage {
   async updateSyncState(userId: string): Promise<PlayerSyncState> {
     const [state] = await db
       .insert(playerSyncState)
-      .values({ userId, lastSyncedAt: new Date() })
+      .values({ userId, lastSyncedAt: new Date(), updatedAt: new Date() })
       .onConflictDoUpdate({
         target: playerSyncState.userId,
-        set: { lastSyncedAt: new Date() },
+        set: { lastSyncedAt: new Date(), updatedAt: new Date() },
       })
       .returning();
+
     return state;
   }
 
-  // ============================================================================
-  // Coach Messages operations
-  // ============================================================================
-  
-  async getCoachMessages(userId: string, limit: number = 50): Promise<CoachMessage[]> {
-    return await db
+  async getCoachMessages(userId: string, limit = 50): Promise<CoachMessage[]> {
+    return db
       .select()
       .from(coachMessages)
       .where(eq(coachMessages.userId, userId))
@@ -363,29 +586,23 @@ export class DatabaseStorage implements IStorage {
   async countCoachMessagesToday(userId: string): Promise<number> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    
+
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(coachMessages)
       .where(
         and(
           eq(coachMessages.userId, userId),
-          eq(coachMessages.role, 'user'),
-          gte(coachMessages.createdAt, todayStart)
-        )
+          eq(coachMessages.role, "user"),
+          gte(coachMessages.createdAt, todayStart),
+        ),
       );
+
     return result[0]?.count || 0;
   }
 
-  // ============================================================================
-  // Push Analyses operations
-  // ============================================================================
-  
   async getPushAnalysis(id: string): Promise<PushAnalysis | undefined> {
-    const [analysis] = await db
-      .select()
-      .from(pushAnalyses)
-      .where(eq(pushAnalyses.id, id));
+    const [analysis] = await db.select().from(pushAnalyses).where(eq(pushAnalyses.id, id));
     return analysis;
   }
 
@@ -396,11 +613,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(pushAnalyses.userId, userId))
       .orderBy(desc(pushAnalyses.createdAt))
       .limit(1);
+
     return analysis;
   }
 
-  async getPushAnalyses(userId: string, limit: number = 10): Promise<PushAnalysis[]> {
-    return await db
+  async getPushAnalyses(userId: string, limit = 10): Promise<PushAnalysis[]> {
+    return db
       .select()
       .from(pushAnalyses)
       .where(eq(pushAnalyses.userId, userId))
@@ -416,35 +634,23 @@ export class DatabaseStorage implements IStorage {
   async countPushAnalysesToday(userId: string): Promise<number> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    
+
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(pushAnalyses)
-      .where(
-        and(
-          eq(pushAnalyses.userId, userId),
-          gte(pushAnalyses.createdAt, todayStart)
-        )
-      );
+      .where(and(eq(pushAnalyses.userId, userId), gte(pushAnalyses.createdAt, todayStart)));
+
     return result[0]?.count || 0;
   }
 
-  // ============================================================================
-  // Training Plans operations
-  // ============================================================================
-  
   async getActivePlan(userId: string): Promise<TrainingPlan | undefined> {
     const [plan] = await db
       .select()
       .from(trainingPlans)
-      .where(
-        and(
-          eq(trainingPlans.userId, userId),
-          eq(trainingPlans.status, 'active')
-        )
-      )
+      .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active")))
       .orderBy(desc(trainingPlans.createdAt))
       .limit(1);
+
     return plan;
   }
 
@@ -454,7 +660,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTrainingPlans(userId: string): Promise<TrainingPlan[]> {
-    return await db
+    return db
       .select()
       .from(trainingPlans)
       .where(eq(trainingPlans.userId, userId))
@@ -466,38 +672,33 @@ export class DatabaseStorage implements IStorage {
     return plan;
   }
 
-  async updateTrainingPlan(id: string, planData: Partial<InsertTrainingPlan>): Promise<TrainingPlan | undefined> {
+  async updateTrainingPlan(
+    id: string,
+    planData: Partial<InsertTrainingPlan>,
+  ): Promise<TrainingPlan | undefined> {
     const [plan] = await db
       .update(trainingPlans)
       .set({ ...planData, updatedAt: new Date() })
       .where(eq(trainingPlans.id, id))
       .returning();
+
     return plan;
   }
 
   async archiveOldPlans(userId: string): Promise<void> {
     await db
       .update(trainingPlans)
-      .set({ status: 'archived', updatedAt: new Date() })
-      .where(
-        and(
-          eq(trainingPlans.userId, userId),
-          eq(trainingPlans.status, 'active')
-        )
-      );
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(and(eq(trainingPlans.userId, userId), eq(trainingPlans.status, "active")));
   }
 
-  // ============================================================================
-  // Training Drills operations
-  // ============================================================================
-  
   async getTrainingDrill(id: string): Promise<TrainingDrill | undefined> {
     const [drill] = await db.select().from(trainingDrills).where(eq(trainingDrills.id, id));
     return drill;
   }
 
   async getDrillsByPlan(planId: string): Promise<TrainingDrill[]> {
-    return await db
+    return db
       .select()
       .from(trainingDrills)
       .where(eq(trainingDrills.planId, planId))
@@ -509,12 +710,16 @@ export class DatabaseStorage implements IStorage {
     return drill;
   }
 
-  async updateTrainingDrill(id: string, drillData: Partial<InsertTrainingDrill>): Promise<TrainingDrill | undefined> {
+  async updateTrainingDrill(
+    id: string,
+    drillData: Partial<InsertTrainingDrill>,
+  ): Promise<TrainingDrill | undefined> {
     const [drill] = await db
       .update(trainingDrills)
       .set({ ...drillData, updatedAt: new Date() })
       .where(eq(trainingDrills.id, id))
       .returning();
+
     return drill;
   }
 
@@ -522,31 +727,45 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(trainingDrills)
-      .where(
-        and(
-          eq(trainingDrills.planId, planId),
-          sql`${trainingDrills.status} != 'completed'`
-        )
-      );
+      .where(and(eq(trainingDrills.planId, planId), sql`${trainingDrills.status} != 'completed'`));
+
     return result[0]?.count || 0;
   }
 
-  // ============================================================================
-  // Meta Decks Cache operations
-  // ============================================================================
-  
   async getMetaDecks(): Promise<MetaDeckCache[]> {
-    return await db
-      .select()
-      .from(metaDecksCache)
-      .orderBy(desc(metaDecksCache.usageCount));
+    return db.select().from(metaDecksCache).orderBy(desc(metaDecksCache.usageCount));
   }
 
-  async createMetaDeck(deckData: Partial<InsertMetaDeckCache>): Promise<MetaDeckCache> {
+  async createMetaDeck(deckData: Partial<MetaDeckWriteInput>): Promise<MetaDeckCache> {
+    if (!deckData.deckHash || !Array.isArray(deckData.cards)) {
+      throw new Error("deckHash and cards are required to create meta deck cache");
+    }
+
+    const normalizedCards = [...deckData.cards];
+    const normalizedPayload: MetaDeckWriteInput = {
+      deckHash: deckData.deckHash,
+      cards: normalizedCards,
+      usageCount: deckData.usageCount ?? 0,
+      avgTrophies: deckData.avgTrophies ?? null,
+      archetype: deckData.archetype ?? null,
+      lastUpdatedAt: deckData.lastUpdatedAt ?? new Date(),
+    };
+
     const [deck] = await db
       .insert(metaDecksCache)
-      .values(deckData as InsertMetaDeckCache)
+      .values(normalizedPayload)
+      .onConflictDoUpdate({
+        target: metaDecksCache.deckHash,
+        set: {
+          cards: normalizedCards,
+          usageCount: deckData.usageCount ?? 0,
+          avgTrophies: deckData.avgTrophies ?? null,
+          archetype: deckData.archetype ?? null,
+          lastUpdatedAt: new Date(),
+        },
+      })
       .returning();
+
     return deck;
   }
 
