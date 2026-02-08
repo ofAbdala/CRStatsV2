@@ -1,19 +1,4 @@
-import type { Express } from "express";
-import { createApp } from "../server/app";
+// @ts-expect-error dist/index.cjs is generated at build time
+import built from "../dist/index.cjs";
 
-let appPromise: Promise<Express> | null = null;
-
-async function getApp() {
-  if (!appPromise) {
-    appPromise = createApp({ enableViteInDevelopment: false }).then(
-      ({ app }) => app,
-    );
-  }
-
-  return appPromise;
-}
-
-export default async function handler(req: any, res: any) {
-  const app = await getApp();
-  return app(req, res);
-}
+export default (built as any).default;

@@ -1,4 +1,22 @@
+import type { Express } from "express";
 import { createApp, log } from "./app";
+
+let appPromise: Promise<Express> | null = null;
+
+async function getServerlessApp() {
+  if (!appPromise) {
+    appPromise = createApp({ enableViteInDevelopment: false }).then(
+      ({ app }) => app,
+    );
+  }
+
+  return appPromise;
+}
+
+export default async function handler(req: any, res: any) {
+  const app = await getServerlessApp();
+  return app(req, res);
+}
 
 async function start() {
   const { httpServer } = await createApp();
@@ -20,7 +38,10 @@ async function start() {
   );
 }
 
-start().catch((error) => {
-  console.error("Failed to start server:", error);
-  process.exit(1);
-});
+// Vercel runs the API as a serverless function, so we must not bind to a port there.
+if (process.env.VERCEL !== "1") {
+  start().catch((error) => {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  });
+}
