@@ -75,72 +75,9 @@ export const api = {
   // AI Coach endpoints
   coach: {
     chat: (messages: { role: string; content: string }[], playerTag?: string) =>
-      fetchAPI<{ message: string; timestamp: string; remainingMessages?: number }>('/coach/chat', {
+      fetchAPI<{ message: string; timestamp: string }>('/coach/chat', {
         method: 'POST',
         body: JSON.stringify({ messages, playerTag }),
-      }),
-    analyzePush: (playerTag?: string) =>
-      fetchAPI<{
-        id: string;
-        summary: string;
-        strengths: string[];
-        mistakes: string[];
-        recommendations: string[];
-        wins: number;
-        losses: number;
-        winRate: number;
-        netTrophies: number;
-        battlesCount: number;
-        pushStartTime: string;
-        pushEndTime: string;
-      }>('/coach/push-analysis', {
-        method: 'POST',
-        body: JSON.stringify({ playerTag }),
-      }),
-  },
-
-  // Training center endpoints
-  training: {
-    getActivePlan: () =>
-      fetchAPI<{
-        id: string;
-        userId: string;
-        title: string;
-        source: string;
-        status: string;
-        pushAnalysisId: string | null;
-        createdAt: string;
-        updatedAt: string;
-        drills: {
-          id: string;
-          planId: string;
-          focusArea: string;
-          description: string;
-          targetGames: number;
-          completedGames: number;
-          mode: string | null;
-          priority: number | null;
-          status: string;
-          createdAt: string;
-          updatedAt: string;
-        }[];
-      } | null>('/training/plan'),
-    getPlans: () =>
-      fetchAPI<any[]>('/training/plans'),
-    generateFromPush: (pushAnalysisId?: string) =>
-      fetchAPI<any>('/training/plan/generate', {
-        method: 'POST',
-        body: JSON.stringify({ pushAnalysisId }),
-      }),
-    updateDrill: (drillId: string, data: { completedGames?: number; status?: string }) =>
-      fetchAPI<any>(`/training/drill/${drillId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
-    updatePlan: (planId: string, data: { status?: string }) =>
-      fetchAPI<any>(`/training/plan/${planId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
       }),
   },
 

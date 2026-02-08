@@ -4,62 +4,29 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Zap, Sparkles, Loader2, AlertCircle, Clock, Receipt } from "lucide-react";
+import { Check, Crown, Zap, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale } from "@/hooks/use-locale";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-
-interface SubscriptionData {
-  plan: 'free' | 'pro';
-  status: 'inactive' | 'active' | 'canceled' | 'past_due';
-  currentPeriodEnd?: string;
-  stripeCustomerId?: string;
-  cancelAtPeriodEnd?: boolean;
-}
 
 export default function BillingPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { t, tArray, pricing, formatPrice, savingsPercent, currency, locale } = useLocale();
+  const { t, pricing, formatPrice, savingsPercent, currency } = useLocale();
   const [loadingPlan, setLoadingPlan] = useState<"monthly" | "yearly" | "portal" | null>(null);
-  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
 
-  const { data: subscription, isLoading: subscriptionLoading, error: subscriptionError } = useQuery<SubscriptionData>({
+  const { data: subscription, isLoading: subscriptionLoading } = useQuery({
     queryKey: ["subscription"],
-    queryFn: () => api.subscription.get() as Promise<SubscriptionData>,
+    queryFn: () => api.subscription.get(),
   });
 
-  useEffect(() => {
-    api.stripe.getConfig()
-      .then(() => setStripeConfigured(true))
-      .catch(() => setStripeConfigured(false));
-  }, []);
+  const isPro = (subscription as any)?.plan === "pro" || (subscription as any)?.status === "active";
 
-  const isPro = subscription?.plan === "pro" && subscription?.status === "active";
-  const subscriptionStatus = subscription?.status || 'inactive';
-  const isCanceled = subscriptionStatus === 'canceled';
-  const isPastDue = subscriptionStatus === 'past_due';
-  const currentPeriodEnd = subscription?.currentPeriodEnd;
-  const cancelAtPeriodEnd = subscription?.cancelAtPeriodEnd;
-
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString(locale, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  const freeFeatures = tArray('billing.free.features');
-  const proFeatures = tArray('billing.pro.features');
+  const freeFeatures = t('billing.free.features') as unknown as string[];
+  const proFeatures = t('billing.pro.features') as unknown as string[];
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -125,57 +92,18 @@ export default function BillingPage() {
           </div>
         ) : (
           <>
-            {stripeConfigured === false && (
-              <Alert variant="destructive" className="max-w-4xl" data-testid="alert-stripe-not-configured">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {t('billing.stripeNotConfigured')}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {isPastDue && (
-              <Alert variant="destructive" className="max-w-4xl" data-testid="alert-past-due">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {t('billing.paymentPastDue')}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {cancelAtPeriodEnd && currentPeriodEnd && subscription?.plan === 'pro' && (
-              <Alert className="max-w-4xl border-yellow-500/50" data-testid="alert-cancel-pending">
-                <Clock className="h-4 w-4 text-yellow-500" />
-                <AlertDescription>
-                  {t('billing.cancelPending', { date: formatDate(currentPeriodEnd) })}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex flex-col gap-2" data-testid="text-current-plan">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">{t('billing.currentPlan')}:</span>
-                <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
-                  {isPro ? (
-                    <>
-                      <Crown className="w-3 h-3 mr-1" />
-                      PRO
-                    </>
-                  ) : (
-                    "FREE"
-                  )}
-                </Badge>
-                {subscription?.plan === 'pro' && subscriptionStatus !== 'active' && (
-                  <Badge variant={isPastDue ? "destructive" : "secondary"} data-testid="badge-subscription-status">
-                    {isPastDue ? t('billing.status.pastDue') : isCanceled ? t('billing.status.canceled') : t('billing.status.inactive')}
-                  </Badge>
+            <div className="flex items-center gap-3" data-testid="text-current-plan">
+              <span className="text-sm text-muted-foreground">{t('billing.currentPlan')}:</span>
+              <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
+                {isPro ? (
+                  <>
+                    <Crown className="w-3 h-3 mr-1" />
+                    PRO
+                  </>
+                ) : (
+                  "FREE"
                 )}
-              </div>
-              {isPro && currentPeriodEnd && !cancelAtPeriodEnd && (
-                <p className="text-sm text-muted-foreground" data-testid="text-period-end">
-                  {t('billing.renewsOn', { date: formatDate(currentPeriodEnd) })}
-                </p>
-              )}
+              </Badge>
             </div>
 
             <div className="grid md:grid-cols-2 gap-6 max-w-4xl">
@@ -261,7 +189,7 @@ export default function BillingPage() {
                       <Button 
                         className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
                         onClick={() => handleUpgrade(pricing.monthlyPriceId, "monthly")}
-                        disabled={loadingPlan !== null || stripeConfigured === false}
+                        disabled={loadingPlan !== null}
                         data-testid="button-upgrade-monthly"
                       >
                         {loadingPlan === "monthly" ? (
@@ -273,7 +201,7 @@ export default function BillingPage() {
                         variant="outline" 
                         className="w-full border-green-500/50 text-green-500 hover:bg-green-500/10"
                         onClick={() => handleUpgrade(pricing.yearlyPriceId, "yearly")}
-                        disabled={loadingPlan !== null || stripeConfigured === false}
+                        disabled={loadingPlan !== null}
                         data-testid="button-upgrade-yearly"
                       >
                         {loadingPlan === "yearly" ? (
@@ -286,38 +214,6 @@ export default function BillingPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {isPro && (
-              <Card className="border-border/50 bg-card/50 max-w-4xl" data-testid="card-payment-history">
-                <CardHeader>
-                  <CardTitle className="text-lg font-display flex items-center gap-2">
-                    <Receipt className="w-5 h-5" />
-                    {t('billing.paymentHistory.title')}
-                  </CardTitle>
-                  <CardDescription>{t('billing.paymentHistory.description')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                    <Receipt className="w-12 h-12 mb-4 opacity-50" />
-                    <p className="text-sm">{t('billing.paymentHistory.comingSoon')}</p>
-                    <p className="text-xs mt-1">{t('billing.paymentHistory.usePortal')}</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-4"
-                      onClick={handleManageSubscription}
-                      disabled={loadingPlan === "portal"}
-                      data-testid="button-view-invoices-portal"
-                    >
-                      {loadingPlan === "portal" ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      ) : null}
-                      {t('billing.paymentHistory.viewInPortal')}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             <Card className="border-border/50 bg-card/50 max-w-4xl">
               <CardContent className="p-6">

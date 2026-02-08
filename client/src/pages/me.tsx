@@ -53,16 +53,9 @@ import {
 import { formatDistanceToNow, differenceInDays, startOfDay, format, getDay } from "date-fns";
 import { useGoals } from "@/hooks/useGoals";
 import { Progress } from "@/components/ui/progress";
-import { getArenaImageUrl } from "@/lib/clashIcons";
 import { Link } from "wouter";
 import { ptBR } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
-import { ArenaProgressBar } from "@/components/ArenaProgressBar";
-import { SyncButton } from "@/components/SyncButton";
-import { TiltAlert } from "@/components/TiltAlert";
-import { usePlayerSync } from "@/hooks/usePlayerSync";
-import { PushAnalysisCard } from "@/components/PushAnalysisCard";
-import { computeRealTrophyEvolution } from "@/lib/trophyEvolution";
 
 type PeriodFilter = 'today' | '7days' | '30days' | 'season';
 
@@ -70,16 +63,16 @@ function parseBattleTime(battleTime: string): Date {
   return new Date(battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
 }
 
-function formatGameMode(type: string | undefined, t: (key: string) => string): string {
-  if (!type) return t('gameModes.battle');
+function formatGameMode(type: string | undefined): string {
+  if (!type) return 'Batalha';
   const lowerType = type.toLowerCase();
-  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return t('gameModes.ladder');
-  if (lowerType.includes('challenge')) return t('gameModes.challenge');
-  if (lowerType.includes('tournament')) return t('gameModes.tournament');
+  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return 'Ladder';
+  if (lowerType.includes('challenge')) return 'Desafio';
+  if (lowerType.includes('tournament')) return 'Torneio';
   if (lowerType.includes('2v2')) return '2v2';
-  if (lowerType.includes('war')) return t('gameModes.war');
-  if (lowerType.includes('friendly')) return t('gameModes.friendly');
-  if (lowerType.includes('party')) return t('gameModes.party');
+  if (lowerType.includes('war')) return 'Guerra';
+  if (lowerType.includes('friendly')) return 'Amistoso';
+  if (lowerType.includes('party')) return 'Festa';
   return type.replace(/([A-Z])/g, ' $1').trim();
 }
 
@@ -271,14 +264,7 @@ export default function MePage() {
   });
 
   const { data: goalsData, isLoading: goalsLoading } = useGoals();
-  const { t, translations } = useLocale();
-  
-  const { 
-    syncData, 
-    sync, 
-    isSyncing,
-    lastSyncedAt 
-  } = usePlayerSync();
+  const { t } = useLocale();
 
   const isPro = (subscription as any)?.plan === 'PRO' || (subscription as any)?.plan === 'pro' || (subscription as any)?.status === 'active';
   const isLoading = profileLoading || playerLoading;
@@ -446,8 +432,19 @@ export default function MePage() {
   }, [stats.streak]);
 
   const chartData = React.useMemo(() => {
-    return computeRealTrophyEvolution(battles, player?.trophies ?? 0, 7);
-  }, [battles, player?.trophies]);
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - i));
+      const baseTrophies = player?.trophies || 5000;
+      const variation = Math.floor(Math.random() * 100) - 50;
+      return {
+        date: days[date.getDay()],
+        trophies: Math.max(0, baseTrophies + variation * (i - 3)),
+      };
+    });
+  }, [player?.trophies]);
 
   const deckUsage = React.useMemo(() => {
     if (!battles.length) return [];
@@ -478,10 +475,10 @@ export default function MePage() {
       .slice(0, 5)
       .map((deck, idx) => ({
         ...deck,
-        name: idx === 0 ? t('me.deckPrimary') : idx === 1 ? t('me.deckSecondary') : t('me.deckN', { n: idx + 1 }),
+        name: idx === 0 ? 'Deck Principal' : idx === 1 ? 'Deck Secundário' : `Deck ${idx + 1}`,
         winRate: deck.total > 0 ? Math.round((deck.wins / deck.total) * 100) : 0,
       }));
-  }, [battles, t]);
+  }, [battles]);
 
   const archetypeAnalysis = React.useMemo(() => {
     if (!battles.length) {
@@ -498,9 +495,9 @@ export default function MePage() {
 
     const archetypeStats: Record<string, { wins: number; losses: number }> = {
       'Beatdown': { wins: 0, losses: 0 },
-      'Cycle': { wins: 0, losses: 0 },
-      'Control': { wins: 0, losses: 0 },
-      'Air': { wins: 0, losses: 0 },
+      'Ciclo': { wins: 0, losses: 0 },
+      'Controle': { wins: 0, losses: 0 },
+      'Aéreo': { wins: 0, losses: 0 },
     };
 
     battles.forEach((battle: any) => {
@@ -516,16 +513,16 @@ export default function MePage() {
         else archetypeStats['Beatdown'].losses++;
       }
       if (cardNames.filter((name: string) => cycleCards.some(cc => name.includes(cc))).length >= 2) {
-        if (isWin) archetypeStats['Cycle'].wins++;
-        else archetypeStats['Cycle'].losses++;
+        if (isWin) archetypeStats['Ciclo'].wins++;
+        else archetypeStats['Ciclo'].losses++;
       }
       if (cardNames.some((name: string) => controlCards.some(cc => name.includes(cc)))) {
-        if (isWin) archetypeStats['Control'].wins++;
-        else archetypeStats['Control'].losses++;
+        if (isWin) archetypeStats['Controle'].wins++;
+        else archetypeStats['Controle'].losses++;
       }
       if (cardNames.filter((name: string) => airCards.some(ac => name.includes(ac))).length >= 2) {
-        if (isWin) archetypeStats['Air'].wins++;
-        else archetypeStats['Air'].losses++;
+        if (isWin) archetypeStats['Aéreo'].wins++;
+        else archetypeStats['Aéreo'].losses++;
       }
     });
 
@@ -602,7 +599,7 @@ export default function MePage() {
   }, [battles, player?.trophies]);
 
   const playVolumeData = React.useMemo(() => {
-    const dayNames = (translations as any)?.dayNames || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const matchesByDay: Record<string, number> = {};
     const matchesByDayOfWeek: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
     const matchesByHour: Record<number, number> = {};
@@ -657,7 +654,7 @@ export default function MePage() {
       peakHourCount: peakHour.count,
       totalMatches: totalMatchesLast14,
     };
-  }, [battles, translations]);
+  }, [battles]);
 
   const activeGoals = React.useMemo(() => {
     if (!goalsData || !Array.isArray(goalsData)) return [];
@@ -670,7 +667,7 @@ export default function MePage() {
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
             <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">{t('me.loadingProfile')}</p>
+            <p className="text-muted-foreground">Carregando perfil...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -685,15 +682,10 @@ export default function MePage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {clashTag 
-                ? t('me.playerLoadError', { tag: clashTag })
-                : t('me.noTagConfigured')}
+                ? `Não foi possível carregar os dados do jogador ${clashTag}. Verifique se a tag está correta.`
+                : 'Configure sua Clash Royale tag no perfil para ver seus dados.'}
             </AlertDescription>
           </Alert>
-        )}
-
-        {/* Tilt Alert */}
-        {syncData?.stats?.tiltLevel && syncData.stats.tiltLevel !== 'none' && (
-          <TiltAlert tiltLevel={syncData.stats.tiltLevel} />
         )}
 
         {/* Hero Header Section */}
@@ -708,19 +700,12 @@ export default function MePage() {
                     <Swords className="w-8 h-8 text-primary" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-3">
-                      <h1 
-                        className="text-2xl md:text-3xl font-display font-bold text-foreground"
-                        data-testid="header-player-name"
-                      >
-                        {player?.name || 'Jogador'}
-                      </h1>
-                      <SyncButton 
-                        variant="ghost"
-                        size="sm"
-                        showLastSync={false}
-                      />
-                    </div>
+                    <h1 
+                      className="text-2xl md:text-3xl font-display font-bold text-foreground"
+                      data-testid="header-player-name"
+                    >
+                      {player?.name || 'Jogador'}
+                    </h1>
                     <p 
                       className="text-muted-foreground font-mono text-sm"
                       data-testid="header-player-tag"
@@ -755,7 +740,7 @@ export default function MePage() {
                   </Badge>
                   <Badge variant="outline" className="bg-background/50">
                     <Swords className="w-3 h-3 mr-1" />
-                    {t('me.battlesCount', { count: stats.totalMatches })}
+                    {stats.totalMatches} partidas
                   </Badge>
                   <Badge 
                     variant="outline" 
@@ -768,13 +753,13 @@ export default function MePage() {
                   >
                     <Flame className="w-3 h-3 mr-1" />
                     {stats.streak.count > 0 
-                      ? (stats.streak.type === 'win' ? t('me.streakWins', { count: stats.streak.count }) : t('me.streakLosses', { count: stats.streak.count }))
-                      : t('me.noStreak')}
+                      ? `${stats.streak.count} ${stats.streak.type === 'win' ? 'vitórias' : 'derrotas'} seguidas`
+                      : 'Sem sequência'}
                   </Badge>
                   {stats.lastPlayed && (
                     <Badge variant="outline" className="bg-background/50">
                       <Clock className="w-3 h-3 mr-1" />
-                      {t('me.playedAgo', { time: stats.lastPlayed })}
+                      Jogou {stats.lastPlayed}
                     </Badge>
                   )}
                 </div>
@@ -787,7 +772,7 @@ export default function MePage() {
               >
                 {player?.arena?.id && (
                   <img 
-                    src={getArenaImageUrl(player.arena.id)}
+                    src={`https://cdn.royaleapi.com/static/img/arenas/arena${player.arena.id}.png`}
                     alt={player.arena.name}
                     className="w-16 h-16 md:w-20 md:h-20 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
@@ -807,23 +792,12 @@ export default function MePage() {
                   <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Award className="w-3 h-3 text-yellow-500" />
-                      {t('progress.best')}: {player?.bestTrophies?.toLocaleString() || 0}
+                      Melhor: {player?.bestTrophies?.toLocaleString() || 0}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            
-            {/* Arena Progress Bar */}
-            {player?.trophies && (
-              <div className="mt-4">
-                <ArenaProgressBar 
-                  trophies={player.trophies} 
-                  arenaId={player?.arena?.id} 
-                  arenaName={player?.arena?.name}
-                />
-              </div>
-            )}
           </div>
         </div>
 
@@ -831,16 +805,16 @@ export default function MePage() {
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto bg-card/50 border border-border/50 p-1 h-auto flex-wrap md:flex-nowrap">
             <TabsTrigger value="overview" data-testid="tab-overview" className="flex-1 min-w-[100px]">
-              {t('me.tabOverview')}
+              Visão Geral
             </TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-history" className="flex-1 min-w-[100px]">
-              {t('me.tabHistory')}
+              Histórico
             </TabsTrigger>
             <TabsTrigger value="decks" data-testid="tab-decks" className="flex-1 min-w-[100px]">
-              {t('me.tabDecks')}
+              Decks & Meta
             </TabsTrigger>
             <TabsTrigger value="progress" data-testid="tab-progress" className="flex-1 min-w-[100px]">
-              {t('me.tabProgress')}
+              Progresso
             </TabsTrigger>
           </TabsList>
 
@@ -852,16 +826,16 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Trophy className="w-4 h-4 text-primary" />
-                    {t('me.seasonSummary')}
+                    Resumo da Temporada
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.currentTrophies')}</span>
+                    <span className="text-sm text-muted-foreground">Troféus Atuais</span>
                     <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.bestSeason')}</span>
+                    <span className="text-sm text-muted-foreground">Melhor Temporada</span>
                     <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -869,7 +843,7 @@ export default function MePage() {
                     <span className="font-bold text-green-500">{stats.winRate}%</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.matches')}</span>
+                    <span className="text-sm text-muted-foreground">Partidas</span>
                     <span className="font-bold">{stats.totalMatches}</span>
                   </div>
                 </CardContent>
@@ -880,16 +854,16 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Target className="w-4 h-4 text-primary" />
-                    {t('me.recentPerformance')}
+                    Performance Recente
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.lastNBattles', { count: battles.length })}</span>
+                    <span className="text-sm text-muted-foreground">Últimas {battles.length} batalhas</span>
                     <span className="font-bold">{stats.winRate}% WR</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.currentStreak')}</span>
+                    <span className="text-sm text-muted-foreground">Sequência Atual</span>
                     <span className={cn(
                       "font-bold",
                       stats.streak.type === 'win' && "text-green-500",
@@ -901,7 +875,7 @@ export default function MePage() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('me.status')}</span>
+                    <span className="text-sm text-muted-foreground">Status</span>
                     <Badge variant={tiltStatus.variant}>{tiltStatus.label}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
@@ -925,7 +899,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Crown className={cn("w-4 h-4", isPro ? "text-yellow-500" : "text-muted-foreground")} />
-                    {t('me.accountStatus')}
+                    Status da Conta
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -936,26 +910,23 @@ export default function MePage() {
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('progress.totalWins')}</span>
+                    <span className="text-sm text-muted-foreground">Total de Vitórias</span>
                     <span className="font-bold">{player?.wins?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('progress.cardsFound')}</span>
+                    <span className="text-sm text-muted-foreground">Cartas Coletadas</span>
                     <span className="font-bold">{player?.cards?.length || 0}</span>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Push Analysis */}
-            <PushAnalysisCard isPro={isPro} />
-
             {/* Trophy Chart */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  {t('me.trophyEvolution')}
+                  Progressão de Troféus
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1008,13 +979,13 @@ export default function MePage() {
             {/* Game Mode Stats */}
             <div className="grid md:grid-cols-2 gap-6">
               <GameModeCard 
-                title={t('gameModes.ladderRanked')}
+                title="Ladder / Ranqueada"
                 icon={<Shield className="w-5 h-5" />}
                 stats={stats.ladderStats}
                 color="primary"
               />
               <GameModeCard 
-                title={t('gameModes.challenges')}
+                title="Desafios"
                 icon={<Zap className="w-5 h-5" />}
                 stats={stats.challengeStats}
                 color="yellow"
@@ -1032,7 +1003,7 @@ export default function MePage() {
                 onClick={() => setPeriodFilter('today')}
                 data-testid="filter-today"
               >
-                {t('filters.today')}
+                Hoje
               </Button>
               <Button
                 variant={periodFilter === '7days' ? 'default' : 'outline'}
@@ -1040,7 +1011,7 @@ export default function MePage() {
                 onClick={() => setPeriodFilter('7days')}
                 data-testid="filter-7days"
               >
-                {t('filters.days7')}
+                7 dias
               </Button>
               <Button
                 variant={periodFilter === '30days' ? 'default' : 'outline'}
@@ -1048,7 +1019,7 @@ export default function MePage() {
                 onClick={() => setPeriodFilter('30days')}
                 data-testid="filter-30days"
               >
-                {t('filters.days30')}
+                30 dias
               </Button>
               <Button
                 variant={periodFilter === 'season' ? 'default' : 'outline'}
@@ -1056,7 +1027,7 @@ export default function MePage() {
                 onClick={() => setPeriodFilter('season')}
                 data-testid="filter-season"
               >
-                {t('filters.season')}
+                Temporada
               </Button>
             </div>
 
@@ -1068,7 +1039,7 @@ export default function MePage() {
                     <Target className="w-5 h-5 text-primary" />
                     {lastPush ? (
                       <span className="font-medium" data-testid="push-summary">
-                        {t('me.lastPush', { games: lastPush.battles.length })}{' '}
+                        Último push: {lastPush.battles.length} partidas,{' '}
                         <span className="text-green-500">{lastPush.wins}V</span>
                         {' / '}
                         <span className="text-red-500">{lastPush.losses}D</span>
@@ -1077,7 +1048,7 @@ export default function MePage() {
                           lastPush.netTrophies > 0 ? "text-green-500" : 
                           lastPush.netTrophies < 0 ? "text-red-500" : "text-muted-foreground"
                         )}>
-                          {lastPush.netTrophies > 0 ? '+' : ''}{lastPush.netTrophies} {t('me.trophies')}
+                          {lastPush.netTrophies > 0 ? '+' : ''}{lastPush.netTrophies} troféus
                         </span>
                         {', '}
                         <span className="text-muted-foreground">
@@ -1086,7 +1057,7 @@ export default function MePage() {
                       </span>
                     ) : (
                       <span className="font-medium" data-testid="recent-stats-summary">
-                        {t('me.lastNBattlesSummary', { total: recentSeriesStats.total, winRate: recentSeriesStats.winRate })}
+                        Últimas {recentSeriesStats.total} partidas:{' '}
                         <span className="text-green-500">{recentSeriesStats.wins}V</span>
                         {' / '}
                         <span className="text-red-500">{recentSeriesStats.losses}D</span>
@@ -1095,7 +1066,7 @@ export default function MePage() {
                       </span>
                     )}
                   </div>
-                  <Badge variant="outline">{t('me.battlesCount', { count: filteredBattles.length })}</Badge>
+                  <Badge variant="outline">{filteredBattles.length} batalhas</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -1104,7 +1075,7 @@ export default function MePage() {
             <div className="space-y-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <Swords className="w-5 h-5 text-primary" />
-                {t('battle.battleHistory')}
+                Histórico de Batalhas
               </h3>
               
               {battlesLoading ? (
@@ -1112,7 +1083,7 @@ export default function MePage() {
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
               ) : sessions.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">{t('me.noBattlesFound')}</p>
+                <p className="text-center text-muted-foreground py-8">Nenhuma batalha encontrada neste período</p>
               ) : (
                 <div className="space-y-6">
                   {sessions.map((session, sessionIdx) => (
@@ -1130,7 +1101,7 @@ export default function MePage() {
                       const playerCards = battle.team?.[0]?.cards || [];
                       const opponentCards = battle.opponent?.[0]?.cards || [];
                       const opponent = battle.opponent?.[0];
-                      const gameMode = formatGameMode(battle.type, t);
+                      const gameMode = formatGameMode(battle.type);
                       
                       return (
                         <AccordionItem 
@@ -1157,7 +1128,7 @@ export default function MePage() {
                                     isWin && !isDraw && "bg-green-600 hover:bg-green-700"
                                   )}
                                 >
-                                  {isWin && !isDraw ? t('battle.victory') : isDraw ? t('battle.draw') : t('battle.defeat')}
+                                  {isWin && !isDraw ? "Vitória" : isDraw ? "Empate" : "Derrota"}
                                 </Badge>
                                 
                                 {/* Desktop info */}
@@ -1232,12 +1203,12 @@ export default function MePage() {
                                 <Badge variant="outline">{gameMode}</Badge>
                                 {opponent?.tag && (
                                   <span className="text-muted-foreground">
-                                    {t('battle.opponent')}: <span className="font-mono">{opponent.tag}</span>
+                                    Oponente: <span className="font-mono">{opponent.tag}</span>
                                   </span>
                                 )}
                                 {battle.deckSelection && (
                                   <span className="text-muted-foreground">
-                                    {t('me.selection')}: {battle.deckSelection}
+                                    Seleção: {battle.deckSelection}
                                   </span>
                                 )}
                               </div>
@@ -1247,7 +1218,7 @@ export default function MePage() {
                                 <div>
                                   <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                     <Swords className="w-4 h-4 text-primary" />
-                                    {t('battle.yourDeck')}
+                                    Seu Deck
                                   </h4>
                                   <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                                     {playerCards.map((card: any, cardIdx: number) => (
@@ -1272,7 +1243,7 @@ export default function MePage() {
                                 <div>
                                   <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                     <Shield className="w-4 h-4 text-red-500" />
-                                    {t('battle.opponentDeck')}
+                                    Deck do Oponente
                                   </h4>
                                   <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                                     {opponentCards.map((card: any, cardIdx: number) => (
@@ -1315,7 +1286,7 @@ export default function MePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Layers className="w-5 h-5 text-primary" />
-                  {t('decks.currentDeck')}
+                  Deck Atual
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1336,7 +1307,7 @@ export default function MePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-8">{t('decks.noDeckEquipped')}</p>
+                  <p className="text-center text-muted-foreground py-8">Nenhum deck equipado</p>
                 )}
               </CardContent>
             </Card>
@@ -1345,7 +1316,7 @@ export default function MePage() {
             <div>
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <Swords className="w-5 h-5 text-primary" />
-                {t('profile.mostUsedDecks')}
+                Decks Mais Usados
               </h3>
               {deckUsage.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1404,10 +1375,10 @@ export default function MePage() {
                     {battlesLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        {t('me.analyzeBattles')}
+                        Analisando batalhas...
                       </div>
                     ) : (
-                      t('me.noBattlesForDecks')
+                      'Nenhuma batalha encontrada para analisar decks'
                     )}
                   </CardContent>
                 </Card>
@@ -1424,7 +1395,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <ThumbsUp className="w-5 h-5 text-green-500" />
-                    {t('analysis.strengths')}
+                    Forças
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -1435,8 +1406,8 @@ export default function MePage() {
                         className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/20"
                       >
                         <div>
-                          <p className="font-medium text-green-500">{t('analysis.strongAgainst', { archetype: strength.archetype })}</p>
-                          <p className="text-xs text-muted-foreground">{t('me.matchesPlayed', { count: strength.matches })}</p>
+                          <p className="font-medium text-green-500">Bom contra: {strength.archetype}</p>
+                          <p className="text-xs text-muted-foreground">{strength.matches} partidas</p>
                         </div>
                         <Badge variant="outline" className="border-green-500/50 text-green-500">
                           {strength.winRate}% WR
@@ -1449,8 +1420,8 @@ export default function MePage() {
                         "p-3 rounded-lg bg-muted/50 border border-border/50",
                         !isPro && "blur-sm"
                       )}>
-                        <p className="font-medium text-green-500">{t('analysis.strongAgainst', { archetype: 'Cycle Decks' })}</p>
-                        <p className="text-xs text-muted-foreground">{t('analysis.basedOnBattles')}</p>
+                        <p className="font-medium text-green-500">Bom contra: Decks de ciclo</p>
+                        <p className="text-xs text-muted-foreground">Análise baseada em batalhas</p>
                       </div>
                       {!isPro && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1464,7 +1435,7 @@ export default function MePage() {
                   )}
                   {archetypeAnalysis.strengths.length === 0 && isPro && (
                     <p className="text-sm text-muted-foreground text-center py-2">
-                      {t('analysis.playMoreForStrengths')}
+                      Jogue mais partidas para ver suas forças
                     </p>
                   )}
                 </CardContent>
@@ -1478,7 +1449,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <ThumbsDown className="w-5 h-5 text-red-500" />
-                    {t('analysis.weaknesses')}
+                    Fraquezas
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -1489,8 +1460,8 @@ export default function MePage() {
                         className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20"
                       >
                         <div>
-                          <p className="font-medium text-red-500">{t('analysis.weakAgainst', { archetype: weakness.archetype })}</p>
-                          <p className="text-xs text-muted-foreground">{t('me.matchesPlayed', { count: weakness.matches })}</p>
+                          <p className="font-medium text-red-500">Dificuldade contra: {weakness.archetype}</p>
+                          <p className="text-xs text-muted-foreground">{weakness.matches} partidas</p>
                         </div>
                         <Badge variant="outline" className="border-red-500/50 text-red-500">
                           {weakness.winRate}% WR
@@ -1503,8 +1474,8 @@ export default function MePage() {
                         "p-3 rounded-lg bg-muted/50 border border-border/50",
                         !isPro && "blur-sm"
                       )}>
-                        <p className="font-medium text-red-500">{t('analysis.weakAgainst', { archetype: 'Beatdown' })}</p>
-                        <p className="text-xs text-muted-foreground">{t('analysis.basedOnBattles')}</p>
+                        <p className="font-medium text-red-500">Dificuldade contra: Beatdown</p>
+                        <p className="text-xs text-muted-foreground">Análise baseada em batalhas</p>
                       </div>
                       {!isPro && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1518,7 +1489,7 @@ export default function MePage() {
                   )}
                   {archetypeAnalysis.weaknesses.length === 0 && isPro && (
                     <p className="text-sm text-muted-foreground text-center py-2">
-                      {t('analysis.playMoreForWeaknesses')}
+                      Jogue mais partidas para ver suas fraquezas
                     </p>
                   )}
                 </CardContent>
@@ -1534,7 +1505,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    {t('progress.trophyEvolution')}
+                    Evolução de Troféus
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1572,9 +1543,9 @@ export default function MePage() {
                           }}
                           formatter={(value: number, name: string) => [
                             value.toLocaleString(), 
-                            name === 'trophies' ? t('me.trophies') : name
+                            name === 'trophies' ? 'Troféus' : name
                           ]}
-                          labelFormatter={(label) => `${t('progress.date')}: ${label}`}
+                          labelFormatter={(label) => `Data: ${label}`}
                         />
                         <Area 
                           type="monotone" 
@@ -1592,12 +1563,12 @@ export default function MePage() {
                   <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
                     <div className="flex items-center gap-2">
                       <Trophy className="w-4 h-4 text-primary" />
-                      <span className="text-muted-foreground">{t('progress.current')}:</span>
+                      <span className="text-muted-foreground">Atual:</span>
                       <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Award className="w-4 h-4 text-yellow-500" />
-                      <span className="text-muted-foreground">{t('progress.best')}:</span>
+                      <span className="text-muted-foreground">Melhor:</span>
                       <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
                     </div>
                   </div>
@@ -1608,24 +1579,24 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    {t('progress.trophyEvolution')}
+                    Evolução de Troféus
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Trophy className="w-12 h-12 text-muted-foreground/50 mb-4" />
                     <p className="text-lg font-medium text-muted-foreground mb-2">
-                      {t('progress.noEvolutionData')}
+                      Sem dados de evolução disponíveis
                     </p>
                     <p className="text-sm text-muted-foreground/70">
                       {battles.length === 0 
-                        ? t('progress.playMoreForProgress')
-                        : t('progress.noBattlesTrophyData')}
+                        ? "Jogue mais partidas para ver seu progresso"
+                        : "Suas batalhas recentes não possuem dados de troféus"}
                     </p>
                     {player?.trophies && (
                       <div className="mt-6 flex items-center gap-2">
                         <Trophy className="w-4 h-4 text-primary" />
-                        <span className="text-muted-foreground">{t('progress.currentTrophies')}:</span>
+                        <span className="text-muted-foreground">Troféus atuais:</span>
                         <span className="font-bold text-primary">{player.trophies.toLocaleString()}</span>
                       </div>
                     )}
@@ -1640,7 +1611,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Swords className="w-5 h-5 text-primary" />
-                    {t('progress.playVolume')}
+                    Volume de Jogo (14 dias)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1670,7 +1641,7 @@ export default function MePage() {
                             color: 'hsl(var(--popover-foreground))'
                           }}
                           formatter={(value: number) => [`${value} partidas`, 'Partidas']}
-                          labelFormatter={(label) => `${t('progress.date')}: ${label}`}
+                          labelFormatter={(label) => `Data: ${label}`}
                         />
                         <Bar 
                           dataKey="matches" 
@@ -1692,7 +1663,7 @@ export default function MePage() {
                       <Swords className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">{t('progress.avgPerDay')}</p>
+                      <p className="text-xs text-muted-foreground">Média por Dia</p>
                       <p className="text-2xl font-bold">{playVolumeData.avgMatchesPerDay}</p>
                     </div>
                   </CardContent>
@@ -1703,7 +1674,7 @@ export default function MePage() {
                       <Flame className="w-5 h-5 text-green-500" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">{t('progress.mostActiveDay')}</p>
+                      <p className="text-xs text-muted-foreground">Dia Mais Ativo</p>
                       <p className="text-xl font-bold">{playVolumeData.mostActiveDay}</p>
                       <p className="text-xs text-muted-foreground">{playVolumeData.mostActiveDayCount} partidas</p>
                     </div>
@@ -1715,7 +1686,7 @@ export default function MePage() {
                       <Clock className="w-5 h-5 text-yellow-500" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">{t('progress.peakHour')}</p>
+                      <p className="text-xs text-muted-foreground">Horário de Pico</p>
                       <p className="text-xl font-bold">{playVolumeData.peakHour}</p>
                       <p className="text-xs text-muted-foreground">{playVolumeData.peakHourCount} partidas</p>
                     </div>
@@ -1729,11 +1700,11 @@ export default function MePage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Target className="w-5 h-5 text-primary" />
-                  {t('progress.activeGoals')}
+                  Metas Ativas
                 </CardTitle>
                 <Link href="/profile">
                   <Button variant="outline" size="sm" data-testid="link-manage-goals">
-                    {t('progress.manageGoals')}
+                    Gerenciar Metas
                   </Button>
                 </Link>
               </CardHeader>
@@ -1776,10 +1747,10 @@ export default function MePage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <Target className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p className="mb-2">{t('progress.noActiveGoals')}</p>
+                    <p className="mb-2">Nenhuma meta ativa</p>
                     <Link href="/profile">
                       <Button variant="outline" size="sm">
-                        {t('progress.createGoal')}
+                        Criar Meta
                       </Button>
                     </Link>
                   </div>
@@ -1793,16 +1764,16 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Award className="w-5 h-5 text-yellow-500" />
-                    {t('progress.generalAchievements')}
+                    Conquistas Gerais
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <StatRow label={t('progress.kingLevel')} value={player?.expLevel || 0} />
-                  <StatRow label={t('progress.totalWins')} value={player?.wins?.toLocaleString() || 0} />
-                  <StatRow label={t('progress.totalLosses')} value={player?.losses?.toLocaleString() || 0} />
-                  <StatRow label={t('progress.threeCrownWins')} value={player?.threeCrownWins?.toLocaleString() || 0} />
-                  <StatRow label={t('progress.challengeMaxWins')} value={player?.challengeMaxWins || 0} />
-                  <StatRow label={t('progress.cardsFound')} value={player?.cards?.length || 0} />
+                  <StatRow label="Nível do Rei" value={player?.expLevel || 0} />
+                  <StatRow label="Total de Vitórias" value={player?.wins?.toLocaleString() || 0} />
+                  <StatRow label="Total de Derrotas" value={player?.losses?.toLocaleString() || 0} />
+                  <StatRow label="Vitórias em 3 Coroas" value={player?.threeCrownWins?.toLocaleString() || 0} />
+                  <StatRow label="Máximo de Desafio" value={player?.challengeMaxWins || 0} />
+                  <StatRow label="Cartas Encontradas" value={player?.cards?.length || 0} />
                 </CardContent>
               </Card>
               
@@ -1810,14 +1781,14 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Crown className="w-5 h-5 text-yellow-500" />
-                    {t('progress.clanAchievements')}
+                    Conquistas de Clã
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <StatRow label={t('progress.totalDonations')} value={player?.totalDonations?.toLocaleString() || 0} />
-                  <StatRow label={t('progress.donationsReceived')} value={player?.clanCardsCollected?.toLocaleString() || 0} />
-                  <StatRow label={t('progress.clanWars')} value={player?.warDayWins || 0} />
-                  <StatRow label={t('progress.clanContribution')} value={player?.clanContributionPoints?.toLocaleString() || 0} />
+                  <StatRow label="Doações Totais" value={player?.totalDonations?.toLocaleString() || 0} />
+                  <StatRow label="Doações Recebidas" value={player?.clanCardsCollected?.toLocaleString() || 0} />
+                  <StatRow label="Guerras de Clã" value={player?.warDayWins || 0} />
+                  <StatRow label="Contribuição de Clã" value={player?.clanContributionPoints?.toLocaleString() || 0} />
                 </CardContent>
               </Card>
             </div>
@@ -1830,7 +1801,7 @@ export default function MePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Zap className="w-5 h-5 text-yellow-500" />
-                  {t('progress.advancedAnalytics')}
+                  Análises Avançadas
                   {!isPro && (
                     <Badge variant="outline" className="ml-2 border-yellow-500/50 text-yellow-500">
                       PRO
@@ -1845,19 +1816,19 @@ export default function MePage() {
                     !isPro && "blur-sm pointer-events-none"
                   )}>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                      <h4 className="font-medium mb-2">{t('progress.trophyPrediction')}</h4>
+                      <h4 className="font-medium mb-2">Predição de Troféus</h4>
                       <p className="text-2xl font-bold text-primary">+150</p>
-                      <p className="text-xs text-muted-foreground">{t('progress.nextWeek')}</p>
+                      <p className="text-xs text-muted-foreground">próxima semana</p>
                     </div>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                      <h4 className="font-medium mb-2">{t('progress.idealDeck')}</h4>
+                      <h4 className="font-medium mb-2">Deck Ideal</h4>
                       <p className="text-2xl font-bold text-green-500">85%</p>
-                      <p className="text-xs text-muted-foreground">{t('progress.estimatedWinRate')}</p>
+                      <p className="text-xs text-muted-foreground">winrate estimado</p>
                     </div>
                     <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                      <h4 className="font-medium mb-2">{t('progress.matchupAnalysis')}</h4>
+                      <h4 className="font-medium mb-2">Matchup Analysis</h4>
                       <p className="text-2xl font-bold text-yellow-500">12</p>
-                      <p className="text-xs text-muted-foreground">{t('progress.decksAnalyzed')}</p>
+                      <p className="text-xs text-muted-foreground">decks analisados</p>
                     </div>
                   </div>
                   {!isPro && (
@@ -1865,14 +1836,14 @@ export default function MePage() {
                       <div className="p-3 rounded-full bg-yellow-500/20 mb-3">
                         <Lock className="w-6 h-6 text-yellow-500" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-3">{t('me.availableOnPro')}</p>
+                      <p className="text-sm text-muted-foreground mb-3">Disponível no plano PRO</p>
                       <Link href="/billing">
                         <Button 
                           size="sm" 
                           className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600"
                           data-testid="button-unlock-pro"
                         >
-                          {t('me.unlockPro')}
+                          Desbloquear no PRO
                         </Button>
                       </Link>
                     </div>
@@ -1893,7 +1864,6 @@ function GameModeCard({ title, icon, stats, color }: {
   stats: { wins: number; losses: number; matches: number; winRate: number | string };
   color: 'primary' | 'yellow';
 }) {
-  const { t } = useLocale();
   const colorClasses = {
     primary: 'text-primary',
     yellow: 'text-yellow-500',
@@ -1911,11 +1881,11 @@ function GameModeCard({ title, icon, stats, color }: {
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-2xl font-bold text-green-500">{stats.wins}</p>
-            <p className="text-xs text-muted-foreground">{t('me.wins')}</p>
+            <p className="text-xs text-muted-foreground">Vitórias</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-red-500">{stats.losses}</p>
-            <p className="text-xs text-muted-foreground">{t('me.losses')}</p>
+            <p className="text-xs text-muted-foreground">Derrotas</p>
           </div>
           <div>
             <p className="text-2xl font-bold">{stats.winRate}%</p>
@@ -1925,7 +1895,7 @@ function GameModeCard({ title, icon, stats, color }: {
         {stats.matches > 0 && (
           <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Swords className="w-4 h-4" />
-            {t('me.matchesPlayed', { count: stats.matches })}
+            {stats.matches} partidas
           </div>
         )}
       </CardContent>

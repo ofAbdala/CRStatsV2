@@ -6,14 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
-import { Send, Sparkles, AlertCircle, Lock, Crown, MessageCircle } from "lucide-react";
+import { Send, Sparkles, AlertCircle, Lock, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocale } from "@/hooks/use-locale";
-
-const FREE_DAILY_LIMIT = 5;
 
 interface Message {
   id: string;
@@ -24,13 +21,11 @@ interface Message {
 
 export default function CoachPage() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [limitReached, setLimitReached] = useState(false);
-  const [remainingMessages, setRemainingMessages] = useState<number>(FREE_DAILY_LIMIT);
+  const [requiresPro, setRequiresPro] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery({
@@ -76,7 +71,7 @@ export default function CoachPage() {
     setInput("");
     setIsTyping(true);
     setError(null);
-    setLimitReached(false);
+    setRequiresPro(false);
 
     try {
       const chatMessages = messages
@@ -94,14 +89,9 @@ export default function CoachPage() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      
-      if (typeof response.remainingMessages === 'number') {
-        setRemainingMessages(response.remainingMessages);
-      }
     } catch (err: any) {
-      if (err.message?.includes("FREE_COACH_DAILY_LIMIT_REACHED") || err.status === 403) {
-        setLimitReached(true);
-        setRemainingMessages(0);
+      if (err.message?.includes("PRO") || err.message?.includes("402")) {
+        setRequiresPro(true);
         setMessages((prev) => prev.filter(m => m.id !== userMessage.id));
       } else {
         setError(err.message || t('errors.generic'));
@@ -115,28 +105,43 @@ export default function CoachPage() {
     setInput(text);
   };
 
-  const canSendMessage = isPro || (!limitReached && remainingMessages > 0);
+  if (!isPro || requiresPro) {
+    return (
+      <DashboardLayout>
+        <div className="h-[calc(100vh-8rem)] flex flex-col items-center justify-center gap-6">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center">
+              <Lock className="w-10 h-10 text-yellow-500" />
+            </div>
+            <h1 className="text-3xl font-display font-bold text-foreground flex items-center justify-center gap-2">
+              <Sparkles className="w-6 h-6 text-primary" />
+              {t('coach.title')}
+            </h1>
+            <p className="text-muted-foreground">
+              {t('coach.proRequired')}
+            </p>
+            <div className="pt-4">
+              <Link href="/billing">
+                <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600" data-testid="button-upgrade-pro">
+                  <Crown className="w-4 h-4 mr-2" />
+                  {t('billing.subscribeMonthly')}
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2" data-testid="title-coach">
-              {t('coach.title')} <span className="text-xs font-normal px-2 py-1 rounded bg-primary/20 text-primary uppercase tracking-wide">Beta</span>
-            </h1>
-            <p className="text-muted-foreground">{t('coach.subtitle')}</p>
-          </div>
-          
-          {!isPro && (
-            <div className="flex items-center gap-2 text-sm bg-muted/50 px-3 py-2 rounded-lg" data-testid="coach-limit-indicator">
-              <MessageCircle className="w-4 h-4 text-muted-foreground" />
-              <span className="text-muted-foreground">
-                {remainingMessages}/{FREE_DAILY_LIMIT} {t('coachLimits.remaining', { n: remainingMessages, total: FREE_DAILY_LIMIT }).split(' ').slice(-2).join(' ')}
-              </span>
-              <Progress value={(remainingMessages / FREE_DAILY_LIMIT) * 100} className="w-16 h-2" />
-            </div>
-          )}
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2" data-testid="title-coach">
+            {t('coach.title')} <span className="text-xs font-normal px-2 py-1 rounded bg-primary/20 text-primary uppercase tracking-wide">Beta</span>
+          </h1>
+          <p className="text-muted-foreground">{t('coach.subtitle')}</p>
         </div>
 
         <Card className="flex-1 flex flex-col border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
@@ -197,21 +202,6 @@ export default function CoachPage() {
                   {error}
                 </div>
               )}
-              {limitReached && (
-                <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-lg p-4 space-y-3" data-testid="limit-reached-banner">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-5 h-5 text-yellow-500" />
-                    <span className="font-semibold text-foreground">{t('coachLimits.limitReached')}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{t('coachLimits.limitReachedDesc')}</p>
-                  <Link href="/billing">
-                    <Button size="sm" className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600" data-testid="button-upgrade-from-limit">
-                      <Crown className="w-4 h-4 mr-2" />
-                      {t('coachLimits.upgradeCta')}
-                    </Button>
-                  </Link>
-                </div>
-              )}
               <div ref={scrollRef} />
             </div>
           </ScrollArea>
@@ -221,15 +211,15 @@ export default function CoachPage() {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={limitReached ? t('coachLimits.limitReached') : t('coach.placeholder')}
+                placeholder={t('coach.placeholder')}
                 className="h-12 pl-4 pr-12 bg-background/50 border-border shadow-inner"
                 data-testid="input-message"
-                disabled={isTyping || limitReached}
+                disabled={isTyping}
               />
               <Button 
                 type="submit" 
                 size="icon" 
-                disabled={!input.trim() || isTyping || !canSendMessage}
+                disabled={!input.trim() || isTyping}
                 data-testid="button-send"
                 className={cn(
                   "absolute right-2 top-2 h-8 w-8 transition-all",
@@ -240,9 +230,9 @@ export default function CoachPage() {
               </Button>
             </form>
             <div className="max-w-3xl mx-auto mt-2 flex justify-center gap-2 flex-wrap">
-              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.counterMegaKnight'))} text={t('coach.suggestions.counterMegaKnight')} />
-              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.analyzeLastDefeat'))} text={t('coach.suggestions.analyzeLastDefeat')} />
-              <SuggestionPill onClick={() => handleSuggestion(t('coach.suggestions.bestDeckArena17'))} text={t('coach.suggestions.bestDeckArena17')} />
+              <SuggestionPill onClick={() => handleSuggestion("Como counterar Megacavaleiro?")} text="Como counterar Megacavaleiro?" />
+              <SuggestionPill onClick={() => handleSuggestion("Analise minha última derrota")} text="Analise minha última derrota" />
+              <SuggestionPill onClick={() => handleSuggestion("Melhor deck para Arena 17")} text="Melhor deck para Arena 17" />
             </div>
           </div>
         </Card>

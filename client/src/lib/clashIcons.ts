@@ -20,20 +20,7 @@ export function getCardImageFromApi(iconUrl?: { medium?: string; small?: string 
 }
 
 export function getArenaImageUrl(arenaId: number): string {
-  let simpleId = arenaId;
-  if (arenaId >= 54000000) {
-    simpleId = arenaId - 54000000;
-  }
-  
-  if (simpleId >= 1 && simpleId <= 24) {
-    return `${ROYALE_API_CDN}/img/arenas/arena${simpleId}.png`;
-  }
-  
-  if (simpleId >= 25) {
-    return `${ROYALE_API_CDN}/img/arenas/arena24.png`;
-  }
-  
-  return `${ROYALE_API_CDN}/img/arenas/arena1.png`;
+  return `${ROYALE_API_CDN}/arenas/arena${arenaId}.png`;
 }
 
 export function getArenaImageByName(arenaName: string): string {

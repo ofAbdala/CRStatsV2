@@ -75,33 +75,3 @@ export async function getPlayerBattles(tag: string) {
 export async function getCards() {
   return clashRoyaleRequest('/cards');
 }
-
-export async function getPlayerRankings(locationId: string = 'global') {
-  return clashRoyaleRequest(`/locations/${locationId}/pathoflegend/players`);
-}
-
-export async function getClanRankings(locationId: string = '57000006') {
-  // Use 57000006 for international/global rankings
-  const actualLocationId = locationId === 'global' ? '57000006' : locationId;
-  return clashRoyaleRequest(`/locations/${actualLocationId}/rankings/clans`);
-}
-
-export async function getClanByTag(tag: string) {
-  const cleanTag = tag.replace('#', '');
-  const encodedTag = encodeURIComponent(`#${cleanTag}`);
-  return clashRoyaleRequest(`/clans/${encodedTag}`);
-}
-
-export async function getClanMembers(tag: string) {
-  const cleanTag = tag.replace('#', '');
-  const encodedTag = encodeURIComponent(`#${cleanTag}`);
-  return clashRoyaleRequest(`/clans/${encodedTag}/members`);
-}
-
-export async function getLocations() {
-  return clashRoyaleRequest('/locations');
-}
-
-export async function getTopPlayersInLocation(locationId: string, limit: number = 50) {
-  return clashRoyaleRequest(`/locations/${locationId}/rankings/players?limit=${limit}`);
-}
