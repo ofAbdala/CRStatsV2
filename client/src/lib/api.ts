@@ -7,32 +7,55 @@ type ApiErrorDetail = { path?: string; message?: string; code?: string } | unkno
 interface ApiErrorResponse {
   code?: string;
   message?: string;
-  error?: string;
+  error?:
+    | string
+    | {
+        code?: string;
+        message?: string;
+        details?: ApiErrorDetail[] | ApiErrorDetail;
+      };
   details?: ApiErrorDetail[] | ApiErrorDetail;
+  requestId?: string;
 }
 
 export class ApiError extends Error {
   status: number;
   code?: string;
   details?: ApiErrorDetail[] | ApiErrorDetail;
+  requestId?: string;
 
   constructor({
     status,
     message,
     code,
     details,
+    requestId,
   }: {
     status: number;
     message: string;
     code?: string;
     details?: ApiErrorDetail[] | ApiErrorDetail;
+    requestId?: string;
   }) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.requestId = requestId;
   }
+}
+
+function normalizeApiErrorPayload(payload: ApiErrorResponse): ApiErrorResponse {
+  if (payload.error && typeof payload.error === "object") {
+    return {
+      ...payload,
+      code: payload.code || payload.error.code,
+      message: payload.message || payload.error.message,
+      details: payload.details || payload.error.details,
+    };
+  }
+  return payload;
 }
 
 function detailsToText(details: ApiErrorDetail[] | ApiErrorDetail | undefined): string {
@@ -60,7 +83,8 @@ function detailsToText(details: ApiErrorDetail[] | ApiErrorDetail | undefined): 
 }
 
 function buildErrorMessage(status: number, payload: ApiErrorResponse): string {
-  const baseMessage = payload.message || payload.error || `HTTP ${status}`;
+  const errorText = typeof payload.error === "string" ? payload.error : undefined;
+  const baseMessage = payload.message || errorText || `HTTP ${status}`;
   const detailText = detailsToText(payload.details);
   const withDetails = detailText ? `${baseMessage} - ${detailText}` : baseMessage;
   return payload.code ? `[${payload.code}] ${withDetails}` : withDetails;
@@ -88,12 +112,16 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   });
 
   if (!response.ok) {
-    const payload = await parseErrorPayload(response);
+    const parsedPayload = await parseErrorPayload(response);
+    const payload = normalizeApiErrorPayload(parsedPayload);
+    const requestId = payload.requestId || response.headers.get("x-request-id") || undefined;
+
     throw new ApiError({
       status: response.status,
       code: payload.code,
       details: payload.details,
       message: buildErrorMessage(response.status, payload),
+      requestId,
     });
   }
 
@@ -132,6 +160,7 @@ export const api = {
     list: () => fetchAPI("/notifications"),
     markRead: (id: string) => fetchAPI(`/notifications/${id}/read`, { method: "POST" }),
     markAllRead: () => fetchAPI("/notifications/read-all", { method: "POST" }),
+    clearAll: () => fetchAPI("/notifications", { method: "DELETE" }),
   },
 
   notificationPreferences: {

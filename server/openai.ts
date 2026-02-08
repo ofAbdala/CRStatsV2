@@ -67,6 +67,13 @@ export interface GeneratedTrainingPlan {
   drills: TrainingPlanDrill[];
 }
 
+export interface ProviderLogContext {
+  requestId?: string;
+  userId?: string | null;
+  route?: string;
+  provider?: string;
+}
+
 async function createCompletion(messages: ChatMessage[], maxTokens = 600): Promise<string> {
   if (!hasOpenAIConfig) {
     throw new Error("OpenAI configuration is not available");
@@ -150,6 +157,21 @@ function fallbackTrainingPlan(analysis: PushAnalysisResult): GeneratedTrainingPl
   };
 }
 
+function logOpenAIError(operation: string, error: unknown, context?: ProviderLogContext) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(
+    JSON.stringify({
+      provider: context?.provider || "openai",
+      operation,
+      route: context?.route,
+      userId: context?.userId || "anonymous",
+      requestId: context?.requestId,
+      message,
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
 export async function generateCoachResponse(
   messages: ChatMessage[],
   playerContext?: {
@@ -159,6 +181,7 @@ export async function generateCoachResponse(
     currentDeck?: string[];
     recentBattles?: unknown[];
   },
+  logContext?: ProviderLogContext,
 ): Promise<string> {
   const systemPrompt = `Você é um coach especialista de Clash Royale.
 Responda em português brasileiro, de forma objetiva, acionável e sem floreios.
@@ -175,13 +198,14 @@ ${playerContext ? `Contexto: ${JSON.stringify(playerContext)}` : ""}`;
 
     return result || "Desculpe, não consegui gerar uma resposta agora.";
   } catch (error) {
-    console.error("OpenAI coach error:", error);
+    logOpenAIError("coach_chat", error, logContext);
     return "Não consegui processar sua solicitação no momento. Tente novamente em alguns minutos.";
   }
 }
 
 export async function generatePushAnalysis(
   context: PushSessionContext,
+  logContext?: ProviderLogContext,
 ): Promise<PushAnalysisResult> {
   const systemPrompt = `Você é um analista de performance de Clash Royale.
 Retorne apenas JSON válido no formato:
@@ -213,7 +237,7 @@ Considere métricas agregadas como tilt, sequência de derrotas, variação méd
       recommendations: parsed.recommendations || [],
     };
   } catch (error) {
-    console.error("OpenAI push analysis error:", error);
+    logOpenAIError("push_analysis", error, logContext);
     return fallbackPushAnalysis(context);
   }
 }
@@ -225,6 +249,7 @@ export async function generateTrainingPlan(
     arena?: string;
     currentDeck?: string[];
   },
+  logContext?: ProviderLogContext,
 ): Promise<GeneratedTrainingPlan> {
   const systemPrompt = `Você cria planos de treino em Clash Royale.
 Retorne apenas JSON válido no formato:
@@ -259,7 +284,7 @@ Sem markdown.`;
       })),
     };
   } catch (error) {
-    console.error("OpenAI training plan error:", error);
+    logOpenAIError("training_plan", error, logContext);
     return fallbackTrainingPlan(analysis);
   }
 }

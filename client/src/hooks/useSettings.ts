@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
+import { detectLocale, t } from "@shared/i18n";
 
 export interface NotificationPreferences {
   training: boolean;
@@ -19,6 +20,19 @@ export interface UserSettingsResponse {
   notificationsBilling?: boolean;
   notificationsSystem?: boolean;
   notificationPreferences?: NotificationPreferences;
+}
+
+function resolveLocale() {
+  if (typeof window === "undefined") {
+    return "pt-BR" as const;
+  }
+
+  const localStorageLocale = window.localStorage.getItem("locale");
+  if (localStorageLocale === "pt-BR" || localStorageLocale === "en-US") {
+    return localStorageLocale;
+  }
+
+  return detectLocale(window.navigator.language);
 }
 
 export function useSettings() {
@@ -43,10 +57,12 @@ export function useUpdateSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
-      toast.success('Configurações atualizadas com sucesso!');
+      const locale = resolveLocale();
+      toast.success(t("settings.toast.updateSuccess", locale));
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao atualizar configurações: ${error.message}`);
+      const locale = resolveLocale();
+      toast.error(t("settings.toast.updateError", locale, { message: error.message }));
     },
   });
 }
@@ -59,10 +75,12 @@ export function useUpdateNotificationPreferences() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
-      toast.success('Preferências de notificação atualizadas!');
+      const locale = resolveLocale();
+      toast.success(t("settings.toast.preferencesUpdateSuccess", locale));
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao atualizar preferências: ${error.message}`);
+      const locale = resolveLocale();
+      toast.error(t("settings.toast.preferencesUpdateError", locale, { message: error.message }));
     },
   });
 }

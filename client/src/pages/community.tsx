@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, Users, Loader2, AlertCircle, Shield } from "lucide-react";
 import { api } from "@/lib/api";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface RankingPlayer {
   rank: number;
@@ -64,6 +67,7 @@ function extractItems<T>(payload: { items?: T[] } | T[] | null | undefined): T[]
 }
 
 export default function CommunityPage() {
+  const { t } = useLocale();
   const [selectedClanTag, setSelectedClanTag] = useState<string | null>(null);
 
   const playerRankingsQuery = useQuery({
@@ -89,14 +93,14 @@ export default function CommunityPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold">Community</h1>
-          <p className="text-muted-foreground">Rankings públicos de jogadores e clãs com links cruzados.</p>
+          <h1 className="text-3xl font-display font-bold">{t("pages.community.title")}</h1>
+          <p className="text-muted-foreground">{t("pages.community.subtitle")}</p>
         </div>
 
         <Tabs defaultValue="players" className="w-full">
           <TabsList className="grid w-full grid-cols-2 lg:w-[420px]">
-            <TabsTrigger value="players">Top jogadores</TabsTrigger>
-            <TabsTrigger value="clans">Top clãs</TabsTrigger>
+            <TabsTrigger value="players">{t("pages.community.tabs.players")}</TabsTrigger>
+            <TabsTrigger value="clans">{t("pages.community.tabs.clans")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="players" className="mt-4">
@@ -104,22 +108,24 @@ export default function CommunityPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-yellow-500" />
-                  Ranking de Jogadores
+                  {t("pages.community.playersRankingTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {playerRankingsQuery.isLoading ? (
                   <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Carregando ranking...
+                    {t("pages.community.loadingPlayers")}
                   </div>
                 ) : playerRankingsQuery.isError ? (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>Falha ao carregar ranking de jogadores.</AlertDescription>
-                  </Alert>
+                  <PageErrorState
+                    title={t("pages.community.playersErrorTitle")}
+                    description={getApiErrorMessage(playerRankingsQuery.error, t, "pages.community.playersErrorDescription")}
+                    error={playerRankingsQuery.error}
+                    onRetry={() => playerRankingsQuery.refetch()}
+                  />
                 ) : players.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Sem dados de ranking no momento.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("pages.community.emptyPlayers")}</p>
                 ) : (
                   players.slice(0, 50).map((player) => (
                     <div key={player.tag} className="flex items-center justify-between rounded-lg border border-border/40 p-3">
@@ -140,7 +146,7 @@ export default function CommunityPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">{player.trophies}</p>
-                        <p className="text-xs text-muted-foreground">troféus</p>
+                        <p className="text-xs text-muted-foreground">{t("pages.community.trophiesLabel")}</p>
                       </div>
                     </div>
                   ))
@@ -154,22 +160,24 @@ export default function CommunityPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  Ranking de Clãs
+                  {t("pages.community.clansRankingTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {clanRankingsQuery.isLoading ? (
                   <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Carregando clãs...
+                    {t("pages.community.loadingClans")}
                   </div>
                 ) : clanRankingsQuery.isError ? (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>Falha ao carregar ranking de clãs.</AlertDescription>
-                  </Alert>
+                  <PageErrorState
+                    title={t("pages.community.clansErrorTitle")}
+                    description={getApiErrorMessage(clanRankingsQuery.error, t, "pages.community.clansErrorDescription")}
+                    error={clanRankingsQuery.error}
+                    onRetry={() => clanRankingsQuery.refetch()}
+                  />
                 ) : clans.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Sem dados de clãs no momento.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("pages.community.emptyClans")}</p>
                 ) : (
                   clans.slice(0, 30).map((clan) => (
                     <div key={clan.tag} className="flex items-center justify-between rounded-lg border border-border/40 p-3">
@@ -180,7 +188,7 @@ export default function CommunityPage() {
                           <Badge variant="secondary">{clan.tag}</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Score {clan.clanScore} • {clan.members} membros
+                          {t("pages.community.clanScoreLine", { score: clan.clanScore, members: clan.members })}
                         </p>
                       </div>
                       <Button
@@ -188,7 +196,7 @@ export default function CommunityPage() {
                         size="sm"
                         onClick={() => setSelectedClanTag(clan.tag)}
                       >
-                        Ver membros
+                        {t("pages.community.viewMembers")}
                       </Button>
                     </div>
                   ))
@@ -201,26 +209,31 @@ export default function CommunityPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
-                    Clan público {selectedClanTag}
+                    {t("pages.community.publicClanTitle", { tag: selectedClanTag })}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {publicClanQuery.isLoading ? (
                     <div className="py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Carregando dados do clã...
+                      {t("pages.community.loadingPublicClan")}
                     </div>
                   ) : publicClanQuery.isError ? (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>Falha ao carregar dados públicos do clã.</AlertDescription>
-                    </Alert>
+                    <PageErrorState
+                      title={t("pages.community.publicClanErrorTitle")}
+                      description={getApiErrorMessage(publicClanQuery.error, t, "pages.community.publicClanErrorDescription")}
+                      error={publicClanQuery.error}
+                      onRetry={() => publicClanQuery.refetch()}
+                    />
                   ) : publicClanQuery.data ? (
                     <>
                       <div className="rounded-lg border border-border/40 p-3">
-                        <p className="font-semibold">{publicClanQuery.data.clan?.name || "Clã"}</p>
+                        <p className="font-semibold">{publicClanQuery.data.clan?.name || t("pages.community.clanFallback")}</p>
                         <p className="text-xs text-muted-foreground">
-                          {publicClanQuery.data.clan?.tag || selectedClanTag} • {publicClanQuery.data.clan?.members || publicClanQuery.data.members.length || 0} membros
+                          {t("pages.community.publicClanMeta", {
+                            tag: publicClanQuery.data.clan?.tag || selectedClanTag,
+                            members: publicClanQuery.data.clan?.members || publicClanQuery.data.members.length || 0,
+                          })}
                         </p>
                         {publicClanQuery.data.clan?.description ? (
                           <p className="text-sm text-muted-foreground mt-2">{publicClanQuery.data.clan.description}</p>
@@ -231,13 +244,15 @@ export default function CommunityPage() {
                         <Alert>
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription>
-                            Dados de membros parciais. {publicClanQuery.data.membersError || "Fonte externa indisponível."}
+                            {t("pages.community.partialMembers", {
+                              reason: publicClanQuery.data.membersError || t("pages.community.externalUnavailable"),
+                            })}
                           </AlertDescription>
                         </Alert>
                       )}
 
                       {publicClanQuery.data.members.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Sem membros disponíveis para este clã.</p>
+                        <p className="text-sm text-muted-foreground">{t("pages.community.emptyMembers")}</p>
                       ) : (
                         <div className="space-y-2">
                           {publicClanQuery.data.members.slice(0, 30).map((member) => (
@@ -246,7 +261,9 @@ export default function CommunityPage() {
                                 <Link href={`/p/${normalizeTagForPath(member.tag)}`}>
                                   <p className="font-medium hover:underline cursor-pointer">{member.name}</p>
                                 </Link>
-                                <p className="text-xs text-muted-foreground">{member.tag} • {member.role || "member"}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {t("pages.community.memberLine", { tag: member.tag, role: member.role || t("pages.community.memberFallbackRole") })}
+                                </p>
                               </div>
                               <p className="text-sm font-medium">{member.trophies || 0}</p>
                             </div>

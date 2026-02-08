@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -14,11 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { PRICING } from "@shared/pricing";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Crown, ExternalLink, Loader2, ReceiptText } from "lucide-react";
+import { Crown, ExternalLink, Loader2, ReceiptText } from "lucide-react";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface SubscriptionResponse {
   plan?: string;
@@ -40,15 +42,15 @@ interface BillingInvoice {
   invoicePdf: string | null;
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value: string | null | undefined, locale: "pt-BR" | "en-US") {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("pt-BR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return date.toLocaleDateString(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
-function formatMoneyFromCents(amountInCents: number, currency = "BRL") {
-  return new Intl.NumberFormat("pt-BR", {
+function formatMoneyFromCents(amountInCents: number, currency: string, locale: "pt-BR" | "en-US") {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currency.toUpperCase(),
     minimumFractionDigits: 2,
@@ -56,13 +58,8 @@ function formatMoneyFromCents(amountInCents: number, currency = "BRL") {
   }).format((amountInCents || 0) / 100);
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
 export default function BillingPage() {
+  const { t, locale } = useLocale();
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -86,8 +83,8 @@ export default function BillingPage() {
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha no checkout",
-        description: getErrorMessage(error, "Não foi possível iniciar a assinatura."),
+        title: t("pages.billing.toast.checkoutErrorTitle"),
+        description: getApiErrorMessage(error, t, "pages.billing.errors.checkout"),
         variant: "destructive",
       });
       setActiveAction(null);
@@ -102,8 +99,8 @@ export default function BillingPage() {
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha ao abrir portal",
-        description: getErrorMessage(error, "Não foi possível abrir o portal de cobrança."),
+        title: t("pages.billing.toast.portalErrorTitle"),
+        description: getApiErrorMessage(error, t, "pages.billing.errors.portal"),
         variant: "destructive",
       });
       setActiveAction(null);
@@ -114,15 +111,15 @@ export default function BillingPage() {
     const params = new URLSearchParams(search);
     if (params.get("success") === "true") {
       toast({
-        title: "Assinatura ativada",
-        description: "Seu plano PRO foi ativado com sucesso.",
+        title: t("pages.billing.toast.activatedTitle"),
+        description: t("pages.billing.toast.activatedDescription"),
       });
       setLocation("/billing", { replace: true });
     }
     if (params.get("canceled") === "true") {
       toast({
-        title: "Checkout cancelado",
-        description: "Você pode tentar novamente quando quiser.",
+        title: t("pages.billing.toast.canceledTitle"),
+        description: t("pages.billing.toast.canceledDescription"),
         variant: "destructive",
       });
       setLocation("/billing", { replace: true });
@@ -135,35 +132,44 @@ export default function BillingPage() {
   const isPro = subscription?.plan === "pro" && subscription?.status === "active";
 
   const renewalText = useMemo(() => {
-    if (!subscription?.currentPeriodEnd) return "Sem renovação ativa";
+    if (!subscription?.currentPeriodEnd) return t("pages.billing.renewal.none");
     if (subscription.cancelAtPeriodEnd) {
-      return `Cancelamento agendado para ${formatDate(subscription.currentPeriodEnd)}`;
+      return t("pages.billing.renewal.cancelAt", {
+        date: formatDate(subscription.currentPeriodEnd, locale),
+      });
     }
-    return `Renovação em ${formatDate(subscription.currentPeriodEnd)}`;
-  }, [subscription?.cancelAtPeriodEnd, subscription?.currentPeriodEnd]);
+    return t("pages.billing.renewal.nextAt", {
+      date: formatDate(subscription.currentPeriodEnd, locale),
+    });
+  }, [locale, subscription?.cancelAtPeriodEnd, subscription?.currentPeriodEnd, t]);
+
+  const hasLoadError = subscriptionQuery.isError || invoicesQuery.isError;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold">Billing</h1>
-          <p className="text-muted-foreground">Plano único: PRO mensal em BRL.</p>
+          <h1 className="text-3xl font-display font-bold">{t("pages.billing.title")}</h1>
+          <p className="text-muted-foreground">{t("pages.billing.subtitle")}</p>
         </div>
 
-        {(subscriptionQuery.isError || invoicesQuery.isError) && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {getErrorMessage(subscriptionQuery.error || invoicesQuery.error, "Falha ao carregar dados de billing.")}
-            </AlertDescription>
-          </Alert>
-        )}
+        {hasLoadError ? (
+          <PageErrorState
+            title={t("pages.billing.errorTitle")}
+            description={getApiErrorMessage(subscriptionQuery.error || invoicesQuery.error, t, "pages.billing.errors.load")}
+            error={subscriptionQuery.error || invoicesQuery.error}
+            onRetry={() => {
+              subscriptionQuery.refetch();
+              invoicesQuery.refetch();
+            }}
+          />
+        ) : null}
 
         {subscriptionQuery.isLoading ? (
           <Card className="border-border/50 bg-card/50">
             <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando assinatura...
+              {t("pages.billing.loadingSubscription")}
             </CardContent>
           </Card>
         ) : (
@@ -172,24 +178,26 @@ export default function BillingPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Crown className="w-5 h-5 text-yellow-500" />
-                  PRO mensal (BRL)
+                  {t("pages.billing.planTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
-                    {isPro ? "PRO ativo" : "Plano FREE"}
+                    {isPro ? t("pages.billing.planActive") : t("pages.billing.planFree")}
                   </Badge>
-                  <Badge variant="outline">{formatMoneyFromCents(Math.round(PRICING.BRL.monthlyPrice * 100), "BRL")}/mês</Badge>
+                  <Badge variant="outline">
+                    {formatMoneyFromCents(Math.round(PRICING.BRL.monthlyPrice * 100), "BRL", locale)}/{t("common.month")}
+                  </Badge>
                 </div>
 
                 <p className="text-sm text-muted-foreground">{renewalText}</p>
 
                 <div className="grid md:grid-cols-2 gap-3">
-                  <FeatureItem text="Coach ilimitado" />
-                  <FeatureItem text="Push analysis completo" />
-                  <FeatureItem text="Training center PRO" />
-                  <FeatureItem text="Acesso ao portal Stripe" />
+                  <FeatureItem text={t("pages.billing.features.coach")} />
+                  <FeatureItem text={t("pages.billing.features.pushAnalysis")} />
+                  <FeatureItem text={t("pages.billing.features.training")} />
+                  <FeatureItem text={t("pages.billing.features.portal")} />
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">
@@ -200,7 +208,7 @@ export default function BillingPage() {
                       data-testid="button-manage-subscription"
                     >
                       {activeAction === "portal" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Gerenciar assinatura
+                      {t("pages.billing.manage")}
                     </Button>
                   ) : (
                     <Button
@@ -210,7 +218,7 @@ export default function BillingPage() {
                       data-testid="button-upgrade-pro-brl"
                     >
                       {activeAction === "checkout" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Assinar PRO mensal
+                      {t("pages.billing.subscribe")}
                     </Button>
                   )}
                 </div>
@@ -219,24 +227,24 @@ export default function BillingPage() {
 
             <Card className="border-border/50 bg-card/50" data-testid="billing-status-card">
               <CardHeader>
-                <CardTitle className="text-base">Status da assinatura</CardTitle>
+                <CardTitle className="text-base">{t("pages.billing.status.title")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Plano</span>
-                  <span className="font-medium uppercase">{subscription?.plan || "free"}</span>
+                  <span className="text-muted-foreground">{t("pages.billing.status.plan")}</span>
+                  <span className="font-medium uppercase">{subscription?.plan || t("pages.billing.status.freeFallback")}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="font-medium">{subscription?.status || "inactive"}</span>
+                  <span className="text-muted-foreground">{t("pages.billing.status.status")}</span>
+                  <span className="font-medium">{subscription?.status || t("pages.billing.status.inactiveFallback")}</span>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Próximo ciclo</span>
-                  <span className="font-medium text-right">{formatDate(subscription?.currentPeriodEnd)}</span>
+                  <span className="text-muted-foreground">{t("pages.billing.status.nextCycle")}</span>
+                  <span className="font-medium text-right">{formatDate(subscription?.currentPeriodEnd, locale)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cancelamento ao fim</span>
-                  <span className="font-medium">{subscription?.cancelAtPeriodEnd ? "Sim" : "Não"}</span>
+                  <span className="text-muted-foreground">{t("pages.billing.status.cancelAtEnd")}</span>
+                  <span className="font-medium">{subscription?.cancelAtPeriodEnd ? t("common.yes") : t("common.no")}</span>
                 </div>
               </CardContent>
             </Card>
@@ -247,50 +255,51 @@ export default function BillingPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ReceiptText className="w-5 h-5" />
-              Histórico de faturas
+              {t("pages.billing.invoices.title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {invoicesQuery.isLoading ? (
-              <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Carregando faturas...
-              </div>
-            ) : invoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma fatura encontrada para esta conta.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Valor pago</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>{formatDate(invoice.createdAt)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{invoice.status || "unknown"}</Badge>
-                      </TableCell>
-                      <TableCell>{formatMoneyFromCents(invoice.amountPaid || invoice.amountDue || 0, invoice.currency || "BRL")}</TableCell>
-                      <TableCell>
-                        {formatDate(invoice.periodStart)} - {formatDate(invoice.periodEnd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {invoice.hostedInvoiceUrl ? (
+                <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t("pages.billing.invoices.loading")}
+                </div>
+              ) : invoices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("pages.billing.invoices.empty")}</p>
+              ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("pages.billing.invoices.table.date")}</TableHead>
+                        <TableHead>{t("pages.billing.invoices.table.status")}</TableHead>
+                        <TableHead>{t("pages.billing.invoices.table.amount")}</TableHead>
+                        <TableHead>{t("pages.billing.invoices.table.period")}</TableHead>
+                        <TableHead className="text-right">{t("pages.billing.invoices.table.actions")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
+                          <TableCell>{formatDate(invoice.createdAt, locale)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{invoice.status || t("pages.billing.invoices.unknownStatus")}</Badge>
+                          </TableCell>
+                          <TableCell>{formatMoneyFromCents(invoice.amountPaid || invoice.amountDue || 0, invoice.currency || "BRL", locale)}</TableCell>
+                          <TableCell>
+                            {formatDate(invoice.periodStart, locale)} - {formatDate(invoice.periodEnd, locale)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {invoice.hostedInvoiceUrl ? (
                           <a
                             href={invoice.hostedInvoiceUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center text-sm text-primary hover:underline"
-                          >
-                            Abrir
-                            <ExternalLink className="w-3 h-3 ml-1" />
-                          </a>
+                                className="inline-flex items-center text-sm text-primary hover:underline"
+                              >
+                                {t("pages.billing.invoices.open")}
+                                {" "}
+                                <ExternalLink className="w-3 h-3 ml-1" />
+                              </a>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
                         )}

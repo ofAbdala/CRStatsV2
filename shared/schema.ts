@@ -388,6 +388,8 @@ export const notificationPreferencesUpdateInputSchema = settingsNotificationCate
   { message: "At least one notification preference is required" },
 );
 
+export const playerSyncRequestSchema = z.object({}).strict();
+
 export const goalCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional(),
@@ -447,6 +449,7 @@ export type FavoriteCreateInput = z.infer<typeof favoriteCreateInputSchema>;
 export type CoachChatInput = z.infer<typeof coachChatInputSchema>;
 export type TrainingDrillUpdateInput = z.infer<typeof trainingDrillUpdateInputSchema>;
 export type TrainingPlanUpdateInput = z.infer<typeof trainingPlanUpdateInputSchema>;
+export type PlayerSyncRequestInput = z.infer<typeof playerSyncRequestSchema>;
 
 // ============================================================================
 // RELATIONS

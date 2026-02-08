@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/hooks/use-locale";
 
 export interface PushAnalysisCardData {
   id: string;
@@ -17,10 +18,10 @@ export interface PushAnalysisCardData {
   tiltLevel?: "high" | "medium" | "none";
 }
 
-function tiltLabel(tiltLevel?: "high" | "medium" | "none") {
-  if (tiltLevel === "high") return "Tilt alto";
-  if (tiltLevel === "medium") return "Tilt moderado";
-  return "Tilt controlado";
+function tiltLabel(tiltLevel: "high" | "medium" | "none" | undefined, t: (key: string) => string) {
+  if (tiltLevel === "high") return t("components.pushAnalysis.tilt.high");
+  if (tiltLevel === "medium") return t("components.pushAnalysis.tilt.medium");
+  return t("components.pushAnalysis.tilt.none");
 }
 
 export function PushAnalysisCard({
@@ -30,14 +31,20 @@ export function PushAnalysisCard({
   analysis: PushAnalysisCardData;
   className?: string;
 }) {
+  const { t } = useLocale();
   const winRate = Number.isFinite(analysis.winRate) ? analysis.winRate : 0;
 
   return (
     <Card className={cn("border-border/50 bg-card/50", className)} data-testid="push-analysis-card">
       <CardHeader className="space-y-3">
-        <CardTitle className="text-lg">Análise de Push</CardTitle>
+        <CardTitle className="text-lg">{t("components.pushAnalysis.title")}</CardTitle>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{analysis.wins}V / {analysis.losses}D</Badge>
+          <Badge variant="outline">
+            {t("components.pushAnalysis.winLoss", {
+              wins: analysis.wins,
+              losses: analysis.losses,
+            })}
+          </Badge>
           <Badge variant="outline">{Math.round(winRate)}% WR</Badge>
           <Badge
             variant="outline"
@@ -46,11 +53,13 @@ export function PushAnalysisCard({
               analysis.netTrophies < 0 && "text-red-500 border-red-500/40",
             )}
           >
-            {analysis.netTrophies > 0 ? "+" : ""}{analysis.netTrophies} troféus
+            {t("components.pushAnalysis.netTrophies", {
+              value: `${analysis.netTrophies > 0 ? "+" : ""}${analysis.netTrophies}`,
+            })}
           </Badge>
-          <Badge variant="outline">{analysis.battlesCount} partidas</Badge>
+          <Badge variant="outline">{t("components.pushAnalysis.matches", { count: analysis.battlesCount })}</Badge>
           {typeof analysis.durationMinutes === "number" && (
-            <Badge variant="outline">{analysis.durationMinutes} min</Badge>
+            <Badge variant="outline">{t("components.pushAnalysis.minutes", { value: analysis.durationMinutes })}</Badge>
           )}
           <Badge
             variant="outline"
@@ -60,20 +69,20 @@ export function PushAnalysisCard({
               (!analysis.tiltLevel || analysis.tiltLevel === "none") && "text-green-500 border-green-500/40",
             )}
           >
-            {tiltLabel(analysis.tiltLevel)}
+            {tiltLabel(analysis.tiltLevel, t)}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <section>
-          <h4 className="font-medium mb-1">Resumo</h4>
+          <h4 className="font-medium mb-1">{t("components.pushAnalysis.summaryTitle")}</h4>
           <p className="text-sm text-muted-foreground">{analysis.summary}</p>
         </section>
 
         <section>
-          <h4 className="font-medium mb-1">Forças</h4>
+          <h4 className="font-medium mb-1">{t("components.pushAnalysis.strengthsTitle")}</h4>
           {analysis.strengths.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem forças detectadas.</p>
+            <p className="text-sm text-muted-foreground">{t("components.pushAnalysis.emptyStrengths")}</p>
           ) : (
             <ul className="space-y-1 text-sm text-muted-foreground">
               {analysis.strengths.map((item, index) => (
@@ -84,9 +93,9 @@ export function PushAnalysisCard({
         </section>
 
         <section>
-          <h4 className="font-medium mb-1">Erros</h4>
+          <h4 className="font-medium mb-1">{t("components.pushAnalysis.mistakesTitle")}</h4>
           {analysis.mistakes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem erros detectados.</p>
+            <p className="text-sm text-muted-foreground">{t("components.pushAnalysis.emptyMistakes")}</p>
           ) : (
             <ul className="space-y-1 text-sm text-muted-foreground">
               {analysis.mistakes.map((item, index) => (
@@ -97,9 +106,9 @@ export function PushAnalysisCard({
         </section>
 
         <section>
-          <h4 className="font-medium mb-1">Recomendações</h4>
+          <h4 className="font-medium mb-1">{t("components.pushAnalysis.recommendationsTitle")}</h4>
           {analysis.recommendations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem recomendações disponíveis.</p>
+            <p className="text-sm text-muted-foreground">{t("components.pushAnalysis.emptyRecommendations")}</p>
           ) : (
             <ul className="space-y-1 text-sm text-muted-foreground">
               {analysis.recommendations.map((item, index) => (
@@ -112,4 +121,3 @@ export function PushAnalysisCard({
     </Card>
   );
 }
-

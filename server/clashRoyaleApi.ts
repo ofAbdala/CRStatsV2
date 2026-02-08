@@ -4,7 +4,14 @@ const BASE_URL = process.env.CLASH_ROYALE_API_URL || "https://proxy.royaleapi.de
 const API_KEY = process.env.CLASH_ROYALE_API_KEY;
 
 if (!API_KEY) {
-  console.warn("Warning: CLASH_ROYALE_API_KEY not set. Clash Royale API features will not work.");
+  console.warn(
+    JSON.stringify({
+      provider: "clash-royale",
+      route: "bootstrap",
+      message: "CLASH_ROYALE_API_KEY not set. Clash Royale API features will not work.",
+      at: new Date().toISOString(),
+    }),
+  );
 }
 
 interface ClashRoyaleApiResponse<T> {
@@ -40,7 +47,15 @@ async function clashRoyaleRequest<T>(endpoint: string): Promise<ClashRoyaleApiRe
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Clash Royale API error (${response.status}):`, errorText);
+      console.error(
+        JSON.stringify({
+          provider: "clash-royale",
+          endpoint,
+          status: response.status,
+          message: errorText,
+          at: new Date().toISOString(),
+        }),
+      );
 
       return {
         error: normalizeApiError(response.status, errorText),
@@ -54,7 +69,15 @@ async function clashRoyaleRequest<T>(endpoint: string): Promise<ClashRoyaleApiRe
       status: response.status,
     };
   } catch (error) {
-    console.error("Clash Royale API request failed:", error);
+    console.error(
+      JSON.stringify({
+        provider: "clash-royale",
+        endpoint,
+        status: 500,
+        message: error instanceof Error ? error.message : String(error),
+        at: new Date().toISOString(),
+      }),
+    );
     return {
       error: "Failed to connect to Clash Royale API",
       status: 500,

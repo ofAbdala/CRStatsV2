@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { enUS, ptBR } from "date-fns/locale";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,13 @@ import { usePlayerSync } from "@/hooks/usePlayerSync";
 import { useFavorites } from "@/hooks/useFavorites";
 import { AlertCircle, Crown, Loader2, RefreshCcw, Target, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ApiError } from "@/lib/api";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
-function getTiltLabel(tiltLevel?: "high" | "medium" | "none") {
-  if (tiltLevel === "high") return "Tilt alto";
-  if (tiltLevel === "medium") return "Tilt moderado";
-  return "Tilt controlado";
+function getTiltLabel(tiltLevel: "high" | "medium" | "none" | undefined, t: (key: string) => string) {
+  if (tiltLevel === "high") return t("pages.dashboard.tilt.high");
+  if (tiltLevel === "medium") return t("pages.dashboard.tilt.medium");
+  return t("pages.dashboard.tilt.none");
 }
 
 function getTiltClass(tiltLevel?: "high" | "medium" | "none") {
@@ -26,6 +27,7 @@ function getTiltClass(tiltLevel?: "high" | "medium" | "none") {
 }
 
 export default function DashboardPage() {
+  const { t, locale } = useLocale();
   const { sync, derivedStatus, isLoading, isFetching, refresh, error } = usePlayerSync();
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
 
@@ -36,23 +38,23 @@ export default function DashboardPage() {
   const latestFive = battles.slice(0, 5);
 
   const updatedAtText = sync?.lastSyncedAt
-    ? format(new Date(sync.lastSyncedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-    : "Sem sincronização";
+    ? format(new Date(sync.lastSyncedAt), "Pp", { locale: locale === "pt-BR" ? ptBR : enUS })
+    : t("pages.dashboard.noSync");
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">Dashboard</h1>
-            <p className="text-muted-foreground">Fonte única: /api/player/sync</p>
+            <h1 className="text-3xl font-display font-bold">{t("pages.dashboard.title")}</h1>
+            <p className="text-muted-foreground">{t("pages.dashboard.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className={getTiltClass(stats?.tiltLevel)}>
-              {getTiltLabel(stats?.tiltLevel)}
+              {getTiltLabel(stats?.tiltLevel, t)}
             </Badge>
             <Badge variant="outline">
-              Última atualização: {updatedAtText}
+              {t("pages.dashboard.lastUpdate", { time: updatedAtText })}
             </Badge>
             <Button
               variant="outline"
@@ -62,7 +64,7 @@ export default function DashboardPage() {
               data-testid="button-refresh-sync"
             >
               {isFetching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-              Sincronizar
+              {t("pages.dashboard.sync")}
             </Button>
           </div>
         </div>
@@ -71,7 +73,7 @@ export default function DashboardPage() {
           <Alert data-testid="sync-error-alert">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {error instanceof ApiError ? error.message : "Falha ao sincronizar dados do jogador."}
+              {getApiErrorMessage(error, t)}
             </AlertDescription>
           </Alert>
         )}
@@ -80,7 +82,7 @@ export default function DashboardPage() {
           <Alert data-testid="sync-partial-alert">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Sincronização parcial. Algumas fontes podem estar indisponíveis temporariamente.
+              {t("pages.dashboard.partialSync")}
             </AlertDescription>
           </Alert>
         )}
@@ -92,20 +94,20 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="Troféus" value={player?.trophies ?? 0} />
-              <StatCard title="Win Rate" value={`${Math.round(stats?.winRate ?? 0)}%`} />
-              <StatCard title="Vitórias" value={stats?.wins ?? 0} />
-              <StatCard title="Derrotas" value={stats?.losses ?? 0} />
+              <StatCard title={t("pages.dashboard.stats.trophies")} value={player?.trophies ?? 0} />
+              <StatCard title={t("pages.dashboard.stats.winRate")} value={`${Math.round(stats?.winRate ?? 0)}%`} />
+              <StatCard title={t("pages.dashboard.stats.wins")} value={stats?.wins ?? 0} />
+              <StatCard title={t("pages.dashboard.stats.losses")} value={stats?.losses ?? 0} />
             </div>
 
             <div className="grid lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 border-border/50 bg-card/50">
                 <CardHeader>
-                  <CardTitle>Últimas batalhas</CardTitle>
+                  <CardTitle>{t("pages.dashboard.recentBattlesTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {latestFive.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhuma batalha recente.</p>
+                    <p className="text-sm text-muted-foreground">{t("pages.dashboard.emptyBattles")}</p>
                   ) : (
                     latestFive.map((battle: any, index: number) => {
                       const myCrowns = battle?.team?.[0]?.crowns || 0;
@@ -128,7 +130,7 @@ export default function DashboardPage() {
                               {result}
                             </Badge>
                             <div>
-                              <p className="text-sm font-medium">{battle?.opponent?.[0]?.name || "Oponente"}</p>
+                              <p className="text-sm font-medium">{battle?.opponent?.[0]?.name || t("pages.dashboard.opponentFallback")}</p>
                               <p className="text-xs text-muted-foreground">
                                 {myCrowns} x {oppCrowns}
                               </p>
@@ -155,12 +157,12 @@ export default function DashboardPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Target className="w-4 h-4" />
-                      Metas
+                      {t("pages.dashboard.goalsTitle")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {goals.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Nenhuma meta ativa.</p>
+                      <p className="text-sm text-muted-foreground">{t("pages.dashboard.emptyGoals")}</p>
                     ) : (
                       goals.slice(0, 3).map((goal: any) => {
                         const currentValue = goal.currentValue || 0;
@@ -181,7 +183,7 @@ export default function DashboardPage() {
                     )}
                     <Link href="/profile">
                       <Button variant="outline" size="sm" className="w-full">
-                        Gerenciar metas
+                        {t("pages.dashboard.manageGoals")}
                       </Button>
                     </Link>
                   </CardContent>
@@ -191,14 +193,14 @@ export default function DashboardPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Crown className="w-4 h-4 text-yellow-500" />
-                      Favoritos
+                      {t("pages.dashboard.favoritesTitle")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {favoritesLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
                     ) : (favorites as any[]).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Sem jogadores favoritados.</p>
+                      <p className="text-sm text-muted-foreground">{t("pages.dashboard.emptyFavorites")}</p>
                     ) : (
                       (favorites as any[]).slice(0, 4).map((fav: any) => (
                         <div key={fav.id} className="flex justify-between text-sm border-b border-border/30 pb-1">
@@ -219,16 +221,16 @@ export default function DashboardPage() {
 }
 
 function StatCard({ title, value }: { title: string; value: string | number }) {
+  const { t } = useLocale();
   return (
     <Card className="border-border/50 bg-card/50">
       <CardContent className="p-5">
         <p className="text-sm text-muted-foreground">{title}</p>
         <div className="text-2xl font-display font-bold mt-1 flex items-center gap-2">
-          {title === "Troféus" ? <Trophy className="w-5 h-5 text-yellow-500" /> : null}
+          {title === t("pages.dashboard.stats.trophies") ? <Trophy className="w-5 h-5 text-yellow-500" /> : null}
           {value}
         </div>
       </CardContent>
     </Card>
   );
 }
-

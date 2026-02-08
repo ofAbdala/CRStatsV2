@@ -2,12 +2,27 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { randomUUID } from "crypto";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 
 const app = express();
 const httpServer = createServer(app);
+
+app.use((req, res, next) => {
+  const headerValue = req.headers["x-request-id"];
+  const requestId =
+    typeof headerValue === "string"
+      ? headerValue
+      : Array.isArray(headerValue) && typeof headerValue[0] === "string"
+        ? headerValue[0]
+        : randomUUID();
+
+  (req as any).requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
+});
 
 declare module "http" {
   interface IncomingMessage {
@@ -67,27 +82,56 @@ app.post(
   '/api/stripe/webhook/:uuid',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
+    const requestId = (req as any).requestId;
     const signature = req.headers['stripe-signature'];
 
     if (!signature) {
-      return res.status(400).json({ error: 'Missing stripe-signature' });
+      return res.status(400).json({
+        code: "STRIPE_SIGNATURE_MISSING",
+        message: "Missing stripe-signature",
+        requestId,
+      });
     }
 
     try {
       const sig = Array.isArray(signature) ? signature[0] : signature;
 
       if (!Buffer.isBuffer(req.body)) {
-        console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer');
-        return res.status(500).json({ error: 'Webhook processing error' });
+        console.error(
+          JSON.stringify({
+            provider: "stripe",
+            route: "/api/stripe/webhook/:uuid",
+            code: "STRIPE_WEBHOOK_PAYLOAD_INVALID",
+            message: "req.body is not a Buffer",
+            requestId,
+          }),
+        );
+        return res.status(400).json({
+          code: "STRIPE_WEBHOOK_PAYLOAD_INVALID",
+          message: "Invalid webhook payload",
+          requestId,
+        });
       }
 
       const { uuid } = req.params;
       await WebhookHandlers.processWebhook(req.body as Buffer, sig, uuid);
 
-      res.status(200).json({ received: true });
+      res.status(200).json({ received: true, requestId });
     } catch (error: any) {
-      console.error('Webhook error:', error.message);
-      res.status(400).json({ error: 'Webhook processing error' });
+      console.error(
+        JSON.stringify({
+          provider: "stripe",
+          route: "/api/stripe/webhook/:uuid",
+          code: "STRIPE_WEBHOOK_PROCESSING_FAILED",
+          message: error?.message || "Webhook processing error",
+          requestId,
+        }),
+      );
+      res.status(400).json({
+        code: "STRIPE_WEBHOOK_PROCESSING_FAILED",
+        message: "Webhook processing error",
+        requestId,
+      });
     }
   }
 );
@@ -129,6 +173,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      const requestId = (req as any).requestId;
+      if (requestId) {
+        logLine += ` [requestId=${requestId}]`;
+      }
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -152,6 +200,7 @@ app.use((req, res, next) => {
       code,
       message,
       details: err.details,
+      requestId: (req as any).requestId,
     });
 
     console.error(
@@ -162,6 +211,7 @@ app.use((req, res, next) => {
         status,
         code,
         message,
+        requestId: (req as any).requestId,
       }),
     );
     console.error("Unhandled application error:", err);

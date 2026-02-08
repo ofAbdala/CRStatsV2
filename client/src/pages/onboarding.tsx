@@ -8,6 +8,8 @@ import { Hash, Search, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface PlayerData {
   tag: string;
@@ -20,6 +22,7 @@ interface PlayerData {
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
+  const { t } = useLocale();
   const [tag, setTag] = useState("");
   const [step, setStep] = useState<"input" | "searching" | "confirm" | "error">("input");
   const [playerData, setPlayerData] = useState<PlayerData | null>(null);
@@ -37,7 +40,7 @@ export default function OnboardingPage() {
       setStep("confirm");
     },
     onError: (error: Error) => {
-      setErrorMessage(error.message || "Jogador não encontrado. Verifique a tag.");
+      setErrorMessage(getApiErrorMessage(error, t, "errors.playerNotFound"));
       setStep("error");
     },
   });
@@ -50,17 +53,17 @@ export default function OnboardingPage() {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['user'] });
       toast({
-        title: "Perfil conectado!",
-        description: "Carregando suas estatísticas...",
+        title: t("pages.onboarding.toast.profileConnectedTitle"),
+        description: t("pages.onboarding.toast.profileConnectedDescription"),
       });
       setTimeout(() => {
         setLocation("/dashboard");
       }, 500);
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
       toast({
-        title: "Erro ao salvar perfil",
-        description: error.message,
+        title: t("pages.onboarding.toast.profileSaveErrorTitle"),
+        description: getApiErrorMessage(error, t),
         variant: "destructive"
       });
     },
@@ -76,8 +79,8 @@ export default function OnboardingPage() {
     
     if (normalizedTag.length < 4) {
       toast({
-        title: "Tag inválida",
-        description: "A tag deve ter pelo menos 3 caracteres além do #",
+        title: t("errors.invalidTag"),
+        description: t("pages.onboarding.tagInvalidLength"),
         variant: "destructive"
       });
       return;
@@ -107,24 +110,24 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-lg animate-in fade-in slide-in-from-bottom-8 duration-500">
         <div className="text-center mb-8">
-          <h1 className="font-display text-3xl font-bold mb-2">Conecte seu Perfil</h1>
+          <h1 className="font-display text-3xl font-bold mb-2">{t("pages.onboarding.title")}</h1>
           <p className="text-muted-foreground">
-            Precisamos da sua Tag de Jogador para analisar suas batalhas.
+            {t("pages.onboarding.subtitle")}
           </p>
         </div>
 
         <Card className="border-border/50 shadow-2xl">
           <CardHeader>
-            <CardTitle>Buscar Jogador</CardTitle>
+            <CardTitle>{t("pages.onboarding.searchTitle")}</CardTitle>
             <CardDescription>
-              Você pode encontrar sua tag no seu perfil dentro do jogo, logo abaixo do seu nome.
+              {t("pages.onboarding.searchDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {step === "input" && (
               <form onSubmit={handleSearch} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="tag">Player Tag</Label>
+                  <Label htmlFor="tag">{t("pages.onboarding.playerTagLabel")}</Label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -136,11 +139,11 @@ export default function OnboardingPage() {
                       data-testid="input-player-tag"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Ex: #2P090J0 ou 2P090J0</p>
+                  <p className="text-xs text-muted-foreground">{t("pages.onboarding.playerTagHint")}</p>
                 </div>
                 <Button type="submit" className="w-full h-11" data-testid="button-search-player">
                   <Search className="w-4 h-4 mr-2" />
-                  Buscar Perfil
+                  {t("pages.onboarding.searchButton")}
                 </Button>
               </form>
             )}
@@ -148,7 +151,7 @@ export default function OnboardingPage() {
             {step === "searching" && (
               <div className="py-8 flex flex-col items-center justify-center text-center space-y-4">
                 <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Buscando dados na Supercell...</p>
+                <p className="text-sm text-muted-foreground">{t("pages.onboarding.searching")}</p>
               </div>
             )}
 
@@ -157,12 +160,12 @@ export default function OnboardingPage() {
                 <div className="flex items-center gap-4 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
                   <AlertCircle className="w-8 h-8 text-destructive shrink-0" />
                   <div>
-                    <h3 className="font-bold text-lg text-destructive">Jogador não encontrado</h3>
+                    <h3 className="font-bold text-lg text-destructive">{t("errors.playerNotFound")}</h3>
                     <p className="text-sm text-muted-foreground">{errorMessage}</p>
                   </div>
                 </div>
                 <Button variant="outline" className="w-full" onClick={handleRetry} data-testid="button-retry-search">
-                  Tentar novamente
+                  {t("errorBoundary.retry")}
                 </Button>
               </div>
             )}
@@ -175,13 +178,13 @@ export default function OnboardingPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-lg" data-testid="text-player-name">{playerData.name}</h3>
-                    <p className="text-sm text-muted-foreground">Tag: {playerData.tag}</p>
+                    <p className="text-sm text-muted-foreground">{t("pages.onboarding.tagPrefix", { tag: playerData.tag })}</p>
                     <p className="text-xs text-primary font-medium mt-1">
-                      {playerData.arena?.name || 'Arena'} • {playerData.trophies} Troféus
+                      {playerData.arena?.name || t("pages.onboarding.arenaFallback")} • {t("pages.onboarding.trophiesCount", { count: playerData.trophies })}
                     </p>
                     {playerData.clan && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Clan: {playerData.clan.name}
+                        {t("pages.onboarding.clanPrefix", { name: playerData.clan.name })}
                       </p>
                     )}
                   </div>
@@ -189,7 +192,7 @@ export default function OnboardingPage() {
 
                 <div className="flex gap-3">
                   <Button variant="outline" className="flex-1" onClick={handleRetry} data-testid="button-not-me">
-                    Não sou eu
+                    {t("pages.onboarding.notMe")}
                   </Button>
                   <Button 
                     className="flex-1" 
@@ -202,7 +205,7 @@ export default function OnboardingPage() {
                     ) : (
                       <CheckCircle2 className="w-4 h-4 mr-2" />
                     )}
-                    Confirmar
+                    {t("common.confirm")}
                   </Button>
                 </div>
               </div>
@@ -212,14 +215,14 @@ export default function OnboardingPage() {
 
         <div className="mt-8 text-center">
           <p className="text-xs text-muted-foreground">
-            Não tem o jogo instalado?{" "}
+            {t("pages.onboarding.downloadPrompt")}{" "}
             <a 
               href="https://supercell.com/en/games/clashroyale/" 
               target="_blank" 
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
             >
-              Baixar Clash Royale
+              {t("pages.onboarding.downloadLink")}
             </a>
           </p>
         </div>

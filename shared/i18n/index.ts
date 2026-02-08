@@ -3,6 +3,7 @@ import enUS from './translations/en-US.json';
 
 export type Locale = 'pt-BR' | 'en-US';
 export type SupportedCurrency = 'BRL';
+export type PreferredLanguage = 'pt' | 'en';
 
 const translations: Record<Locale, typeof ptBR> = {
   'pt-BR': ptBR,
@@ -32,6 +33,17 @@ export function detectLocale(acceptLanguage?: string | null): Locale {
 export function detectCurrency(locale: Locale): SupportedCurrency {
   void locale;
   return 'BRL';
+}
+
+export function preferredLanguageToLocale(language?: string | null): Locale {
+  if (!language) return DEFAULT_LOCALE;
+  const normalized = language.trim().toLowerCase();
+  if (normalized.startsWith("en")) return "en-US";
+  return "pt-BR";
+}
+
+export function localeToPreferredLanguage(locale: Locale): PreferredLanguage {
+  return locale === "en-US" ? "en" : "pt";
 }
 
 export function getCurrencyFromTimezone(): SupportedCurrency {

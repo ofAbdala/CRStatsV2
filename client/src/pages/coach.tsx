@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,8 @@ import { Loader2, Send, Sparkles, AlertCircle, Crown, LineChart, RotateCcw } fro
 import { cn } from "@/lib/utils";
 import { ApiError, api } from "@/lib/api";
 import { PushAnalysisCard, PushAnalysisCardData } from "@/components/PushAnalysisCard";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface Message {
   id: string;
@@ -21,18 +24,22 @@ interface Message {
   timestamp: string;
 }
 
-const QUICK_PROMPTS = [
-  "Por que perdi minha última partida?",
-  "Como reduzir tilt depois de duas derrotas?",
-  "Qual ajuste fazer no meu deck atual para ladder?",
-];
+function getQuickPrompts(t: (key: string) => string) {
+  return [
+    t("pages.coach.quickPrompts.lastLoss"),
+    t("pages.coach.quickPrompts.reduceTilt"),
+    t("pages.coach.quickPrompts.deckAdjust"),
+  ];
+}
 
 export default function CoachPage() {
+  const { t, locale } = useLocale();
+  const quickPrompts = getQuickPrompts(t);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Olá! Sou seu Coach IA. Posso analisar sua última derrota, seu deck e sua tomada de decisão.",
+      content: t("pages.coach.welcome"),
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -69,9 +76,9 @@ export default function CoachPage() {
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
-        setErrorText(error.message);
+        setErrorText(getApiErrorMessage(error, t));
       } else {
-        setErrorText("Falha ao gerar análise de push.");
+        setErrorText(t("pages.coach.pushAnalysisError"));
       }
     },
   });
@@ -85,7 +92,7 @@ export default function CoachPage() {
       return api.coach.chat(
         history,
         profile?.clashTag,
-        QUICK_PROMPTS.includes(content) ? "quick_prompt" : "manual",
+        quickPrompts.includes(content) ? "quick_prompt" : "manual",
       );
     },
     onSuccess: (response) => {
@@ -116,9 +123,9 @@ export default function CoachPage() {
       }
 
       if (error instanceof ApiError && error.code === "COACH_CHAT_FAILED") {
-        setErrorText("Falha temporária do provedor de IA. Você pode tentar novamente sem perder o histórico.");
+        setErrorText(t("pages.coach.providerTemporaryError"));
       } else {
-        setErrorText(error instanceof Error ? error.message : "Falha ao responder com o coach.");
+        setErrorText(getApiErrorMessage(error, t));
       }
       setRetryContent(content);
     },
@@ -162,12 +169,12 @@ export default function CoachPage() {
           <div>
             <h1 className="text-3xl font-display font-bold flex items-center gap-2">
               <Sparkles className="w-6 h-6 text-primary" />
-              Coach IA
+              {t("coach.title")}
             </h1>
-            <p className="text-muted-foreground">Assistente tático com contexto da sua conta e última derrota.</p>
+            <p className="text-muted-foreground">{t("pages.coach.subtitle")}</p>
           </div>
           <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
-            {isPro ? "PRO" : "FREE"}
+            {isPro ? t("pages.coach.planPro") : t("pages.coach.planFree")}
           </Badge>
         </div>
 
@@ -175,10 +182,11 @@ export default function CoachPage() {
           <Alert className="border-primary/40">
             <Crown className="h-4 w-4 text-primary" />
             <AlertDescription>
-              Plano FREE com limite diário. {remainingMessages !== null ? `Restantes hoje: ${remainingMessages}.` : ""}
+              {t("pages.coach.freeLimitDescription")}
+              {remainingMessages !== null ? ` ${t("pages.coach.remainingToday", { count: remainingMessages })}` : ""}
               {" "}
               <Link href="/billing" className="underline">
-                Fazer upgrade para PRO
+                {t("pages.coach.upgradeCta")}
               </Link>
             </AlertDescription>
           </Alert>
@@ -188,9 +196,9 @@ export default function CoachPage() {
           <Alert variant="destructive" data-testid="coach-limit-banner">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Limite diário do FREE atingido.{" "}
+              {t("pages.coach.limitReached")}{" "}
               <Link href="/billing" className="underline">
-                Assine PRO para uso ilimitado
+                {t("pages.coach.upgradeUnlimited")}
               </Link>
               .
             </AlertDescription>
@@ -210,7 +218,7 @@ export default function CoachPage() {
                   onClick={() => submitMessage(retryContent)}
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
-                  Tentar novamente
+                  {t("errorBoundary.retry")}
                 </Button>
               ) : null}
             </AlertDescription>
@@ -220,7 +228,7 @@ export default function CoachPage() {
         <div className="grid lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2 border-border/50 bg-card/50 overflow-hidden">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Chat</CardTitle>
+              <CardTitle className="text-lg">{t("pages.coach.chatTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <ScrollArea className="h-[55vh] pr-3">
@@ -231,7 +239,7 @@ export default function CoachPage() {
                       className={cn("flex gap-3", message.role === "user" && "flex-row-reverse")}
                     >
                       <Avatar className="w-8 h-8">
-                        <AvatarFallback>{message.role === "assistant" ? "AI" : "EU"}</AvatarFallback>
+                        <AvatarFallback>{message.role === "assistant" ? "AI" : t("pages.coach.youShort")}</AvatarFallback>
                       </Avatar>
                       <div
                         className={cn(
@@ -241,7 +249,7 @@ export default function CoachPage() {
                       >
                         <p className="whitespace-pre-wrap">{message.content}</p>
                         <p className="text-[10px] opacity-60 mt-1">
-                          {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(message.timestamp).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                     </div>
@@ -253,7 +261,7 @@ export default function CoachPage() {
                       </Avatar>
                       <div className="rounded-xl px-3 py-2 bg-muted text-sm flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Pensando...
+                        {t("coach.thinking")}
                       </div>
                     </div>
                   )}
@@ -265,7 +273,7 @@ export default function CoachPage() {
                 <Input
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  placeholder="Ex: por que perdi minha última partida?"
+                  placeholder={t("pages.coach.inputPlaceholder")}
                   disabled={chatMutation.isPending || limitReached}
                 />
                 <Button type="submit" size="icon" disabled={chatMutation.isPending || limitReached || !input.trim()}>
@@ -274,7 +282,7 @@ export default function CoachPage() {
               </form>
 
               <div className="flex flex-wrap gap-2">
-                {QUICK_PROMPTS.map((prompt) => (
+                {quickPrompts.map((prompt) => (
                   <Button
                     key={prompt}
                     variant="outline"
@@ -295,7 +303,7 @@ export default function CoachPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <LineChart className="w-4 h-4" />
-                  Push Analysis
+                  {t("pages.coach.pushAnalysisTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -308,17 +316,17 @@ export default function CoachPage() {
                     {pushAnalysisMutation.isPending ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        Gerando...
+                        {t("pages.coach.generating")}
                       </>
                     ) : (
-                      "Gerar nova análise"
+                      t("pages.coach.generateAnalysis")
                     )}
                   </Button>
                 ) : (
                   <Link href="/billing">
                     <Button className="w-full" variant="outline">
                       <Crown className="w-4 h-4 mr-2" />
-                      Upgrade para PRO
+                      {t("pages.coach.upgradeCta")}
                     </Button>
                   </Link>
                 )}
@@ -329,15 +337,22 @@ export default function CoachPage() {
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-6 flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Carregando análise mais recente...
+                  {t("pages.coach.loadingLatestAnalysis")}
                 </CardContent>
               </Card>
+            ) : latestAnalysisQuery.isError ? (
+              <PageErrorState
+                title={t("pages.coach.latestAnalysisErrorTitle")}
+                description={getApiErrorMessage(latestAnalysisQuery.error, t, "pages.coach.latestAnalysisErrorDescription")}
+                error={latestAnalysisQuery.error}
+                onRetry={() => latestAnalysisQuery.refetch()}
+              />
             ) : latestAnalysis ? (
               <PushAnalysisCard analysis={latestAnalysis} />
             ) : (
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-6 text-sm text-muted-foreground">
-                  Sem análise de push salva.
+                  {t("pages.coach.noSavedAnalysis")}
                 </CardContent>
               </Card>
             )}

@@ -18,12 +18,21 @@ import {
   goalCreateInputSchema,
   goalUpdateInputSchema,
   notificationPreferencesUpdateInputSchema,
+  playerSyncRequestSchema,
   profileCreateInputSchema,
   profileUpdateInputSchema,
   settingsUpdateInputSchema,
   trainingDrillUpdateInputSchema,
   trainingPlanUpdateInputSchema,
 } from "@shared/schema";
+import {
+  type PushSession,
+  computeConsecutiveLosses,
+  computeGoalAutoProgress,
+  computePushSessions,
+  computeTiltLevel,
+  evaluateFreeCoachLimit,
+} from "./domain/syncRules";
 
 const FREE_DAILY_LIMIT = 5;
 const PRO_BRL_MONTHLY_PRICE_ID = PRICING.BRL.monthlyPriceId;
@@ -34,6 +43,7 @@ interface ApiErrorPayload {
   code: string;
   message: string;
   details?: unknown;
+  requestId?: string;
 }
 
 interface SyncErrorItem {
@@ -47,16 +57,30 @@ function getUserId(req: any): string | null {
   return req?.user?.claims?.sub ?? null;
 }
 
-function logApiContext(route: string, userId: string | null, provider: ApiProvider, status: number) {
+function logApiContext(
+  route: string,
+  userId: string | null,
+  provider: ApiProvider,
+  status: number,
+  requestId?: string,
+) {
   console.info(
     JSON.stringify({
       route,
       userId: userId ?? "anonymous",
       provider,
       status,
+      requestId,
       at: new Date().toISOString(),
     }),
   );
+}
+
+function getResponseRequestId(res: Response): string | undefined {
+  const headerValue = res.getHeader("x-request-id");
+  if (typeof headerValue === "string") return headerValue;
+  if (Array.isArray(headerValue) && typeof headerValue[0] === "string") return headerValue[0];
+  return undefined;
 }
 
 function sendApiError(
@@ -75,8 +99,12 @@ function sendApiError(
     error: ApiErrorPayload;
   },
 ) {
-  logApiContext(route, userId, provider, status);
-  return res.status(status).json(error);
+  const requestId = getResponseRequestId(res);
+  logApiContext(route, userId, provider, status, requestId);
+  return res.status(status).json({
+    ...error,
+    requestId,
+  });
 }
 
 function parseRequestBody<T>(schema: z.ZodType<T>, payload: unknown) {
@@ -108,6 +136,13 @@ function getCanonicalProfileTag(profile: { defaultPlayerTag?: string | null; cla
 
 function isTemporaryProviderStatus(status: number) {
   return status === 429 || status >= 500;
+}
+
+function getClashErrorCode(status: number) {
+  if (status === 404) return "CLASH_RESOURCE_NOT_FOUND";
+  if (status === 429) return "CLASH_RATE_LIMIT";
+  if (status >= 500) return "CLASH_PROVIDER_UNAVAILABLE";
+  return "CLASH_PROVIDER_ERROR";
 }
 
 type NotificationCategory = "training" | "billing" | "system";
@@ -154,57 +189,6 @@ async function createNotificationIfAllowed(
   });
 }
 
-function computeTiltLevel(battles: any[]): 'high' | 'medium' | 'none' {
-  if (!battles || battles.length === 0) return 'none';
-  
-  const last10 = battles.slice(0, 10);
-  
-  let wins = 0;
-  let losses = 0;
-  let netTrophies = 0;
-  let consecutiveLosses = 0;
-  let maxConsecutiveLosses = 0;
-  
-  for (const battle of last10) {
-    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    const trophyChange = battle.team?.[0]?.trophyChange || 0;
-    
-    if (isVictory) {
-      wins++;
-      consecutiveLosses = 0;
-    } else {
-      losses++;
-      consecutiveLosses++;
-      maxConsecutiveLosses = Math.max(maxConsecutiveLosses, consecutiveLosses);
-    }
-    netTrophies += trophyChange;
-  }
-  
-  const winRate = last10.length > 0 ? (wins / last10.length) * 100 : 50;
-  
-  if (maxConsecutiveLosses >= 3 || (winRate < 40 && netTrophies <= -60)) {
-    return 'high';
-  }
-  
-  if (winRate >= 40 && winRate <= 50 && netTrophies < 0) {
-    return 'medium';
-  }
-  
-  return 'none';
-}
-
-function computeConsecutiveLosses(battles: any[]): number {
-  let streak = 0;
-  for (const battle of battles) {
-    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    if (isVictory) {
-      break;
-    }
-    streak += 1;
-  }
-  return streak;
-}
-
 function getStripeSubscriptionPeriodEnd(subscription: Stripe.Subscription | null | undefined): Date | null {
   const itemPeriodEnd = subscription?.items?.data?.[0]?.current_period_end;
   if (typeof itemPeriodEnd === "number") {
@@ -236,88 +220,6 @@ function buildPushModeBreakdown(battles: any[]) {
   }
 
   return Array.from(byMode.values()).sort((a, b) => b.matches - a.matches);
-}
-
-interface PushSession {
-  startTime: Date;
-  endTime: Date;
-  battles: any[];
-  wins: number;
-  losses: number;
-  winRate: number;
-  netTrophies: number;
-}
-
-function computePushSessions(battles: any[]): PushSession[] {
-  if (!battles || battles.length < 2) return [];
-  
-  const sortedBattles = [...battles].sort((a, b) => 
-    new Date(b.battleTime).getTime() - new Date(a.battleTime).getTime()
-  );
-  
-  const sessions: PushSession[] = [];
-  let currentSession: any[] = [];
-  
-  for (let i = 0; i < sortedBattles.length; i++) {
-    const battle = sortedBattles[i];
-    const battleTime = new Date(battle.battleTime);
-    
-    if (currentSession.length === 0) {
-      currentSession.push(battle);
-    } else {
-      const lastBattle = currentSession[currentSession.length - 1];
-      const lastBattleTime = new Date(lastBattle.battleTime);
-      const timeDiff = lastBattleTime.getTime() - battleTime.getTime();
-      const thirtyMinutes = 30 * 60 * 1000;
-      
-      if (timeDiff <= thirtyMinutes) {
-        currentSession.push(battle);
-      } else {
-        if (currentSession.length >= 2) {
-          sessions.push(createSessionFromBattles(currentSession));
-        }
-        currentSession = [battle];
-      }
-    }
-  }
-  
-  if (currentSession.length >= 2) {
-    sessions.push(createSessionFromBattles(currentSession));
-  }
-  
-  return sessions;
-}
-
-function createSessionFromBattles(battles: any[]): PushSession {
-  let wins = 0;
-  let losses = 0;
-  let netTrophies = 0;
-  
-  for (const battle of battles) {
-    const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    const trophyChange = battle.team?.[0]?.trophyChange || 0;
-    
-    if (isVictory) {
-      wins++;
-    } else {
-      losses++;
-    }
-    netTrophies += trophyChange;
-  }
-  
-  const battleTimes = battles.map(b => new Date(b.battleTime));
-  const startTime = new Date(Math.min(...battleTimes.map(t => t.getTime())));
-  const endTime = new Date(Math.max(...battleTimes.map(t => t.getTime())));
-  
-  return {
-    startTime,
-    endTime,
-    battles,
-    wins,
-    losses,
-    winRate: battles.length > 0 ? (wins / battles.length) * 100 : 0,
-    netTrophies,
-  };
 }
 
 function computeBattleStats(battles: any[]) {
@@ -867,41 +769,130 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const notifications = await storage.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
       console.error("Error fetching notifications:", error);
-      res.status(500).json({ message: "Failed to fetch notifications" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_FETCH_FAILED", message: "Failed to fetch notifications" },
+      });
     }
   });
 
   app.post('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications/:id/read";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       const { id } = req.params;
       const notification = await storage.getNotification(id);
       if (!notification || notification.userId !== userId) {
-        return res.status(404).json({ message: "Notification not found" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 404,
+          error: { code: "NOTIFICATION_NOT_FOUND", message: "Notification not found" },
+        });
       }
 
       await storage.markNotificationAsRead(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking notification as read:", error);
-      res.status(500).json({ message: "Failed to mark notification as read" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATION_READ_FAILED", message: "Failed to mark notification as read" },
+      });
     }
   });
 
   app.post('/api/notifications/read-all', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications/read-all";
+    const userId = getUserId(req);
+
     try {
-      const userId = req.user.claims.sub;
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
       await storage.markAllNotificationsAsRead(userId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
-      res.status(500).json({ message: "Failed to mark all notifications as read" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_MARK_ALL_READ_FAILED", message: "Failed to mark all notifications as read" },
+      });
+    }
+  });
+
+  app.delete('/api/notifications', isAuthenticated, async (req: any, res) => {
+    const route = "/api/notifications";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "replit-oidc",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      await storage.deleteNotificationsByUser(userId);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "NOTIFICATIONS_CLEAR_FAILED", message: "Failed to clear notifications" },
+      });
     }
   });
 
@@ -1152,49 +1143,103 @@ export async function registerRoutes(
   // ============================================================================
   
   app.get('/api/clash/player/:tag', async (req: any, res) => {
+    const route = "/api/clash/player/:tag";
+    const userId = getUserId(req);
+
     try {
       const { tag } = req.params;
       const result = await getPlayerByTag(tag);
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch player data",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching player:", error);
-      res.status(500).json({ error: "Failed to fetch player data" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_PLAYER_FETCH_FAILED", message: "Failed to fetch player data" },
+      });
     }
   });
 
   app.get('/api/clash/player/:tag/battles', async (req: any, res) => {
+    const route = "/api/clash/player/:tag/battles";
+    const userId = getUserId(req);
+
     try {
       const { tag } = req.params;
       const result = await getPlayerBattles(tag);
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch battle history",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching battles:", error);
-      res.status(500).json({ error: "Failed to fetch battle history" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_BATTLES_FETCH_FAILED", message: "Failed to fetch battle history" },
+      });
     }
   });
 
   app.get('/api/clash/cards', async (req: any, res) => {
+    const route = "/api/clash/cards";
+    const userId = getUserId(req);
+
     try {
       const result = await getCards();
       
       if (result.error) {
-        return res.status(result.status).json({ error: result.error });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "clash-royale",
+          status: result.status,
+          error: {
+            code: getClashErrorCode(result.status),
+            message: result.error || "Failed to fetch cards",
+          },
+        });
       }
 
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching cards:", error);
-      res.status(500).json({ error: "Failed to fetch cards" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "clash-royale",
+        status: 500,
+        error: { code: "CLASH_CARDS_FETCH_FAILED", message: "Failed to fetch cards" },
+      });
     }
   });
 
@@ -1214,6 +1259,21 @@ export async function registerRoutes(
           provider: "replit-oidc",
           status: 401,
           error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const payload = parseRequestBody(playerSyncRequestSchema, req.body);
+      if (!payload.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid player sync payload",
+            details: payload.details,
+          },
         });
       }
 
@@ -1253,7 +1313,7 @@ export async function registerRoutes(
           status: playerResult.status,
         });
 
-        logApiContext(route, userId, "clash-royale", playerResult.status || 500);
+        logApiContext(route, userId, "clash-royale", playerResult.status || 500, getResponseRequestId(res));
 
         return res.json({
           status: syncStatus,
@@ -1298,31 +1358,17 @@ export async function registerRoutes(
         goals = await storage.getGoals(userId);
 
         for (const goal of goals) {
-          if (goal.completed) continue;
+          const progress = computeGoalAutoProgress(goal, {
+            playerTrophies: player.trophies || 0,
+            winRate: stats.winRate || 0,
+            streak: stats.streak,
+          });
 
-          let shouldUpdate = false;
-          let newCurrentValue = goal.currentValue || 0;
-          let shouldComplete = false;
-
-          if (goal.type === 'trophies') {
-            newCurrentValue = player.trophies;
-            shouldUpdate = newCurrentValue !== goal.currentValue;
-            shouldComplete = newCurrentValue >= goal.targetValue;
-          } else if (goal.type === 'winrate') {
-            newCurrentValue = Math.round(stats.winRate);
-            shouldUpdate = newCurrentValue !== goal.currentValue;
-            shouldComplete = newCurrentValue >= goal.targetValue;
-          } else if (goal.type === 'streak' && stats.streak.type === 'win') {
-            newCurrentValue = stats.streak.count;
-            shouldUpdate = newCurrentValue > (goal.currentValue || 0);
-            shouldComplete = newCurrentValue >= goal.targetValue;
-          }
-
-          if (shouldUpdate) {
+          if (progress?.shouldUpdate) {
             await storage.updateGoal(goal.id, {
-              currentValue: newCurrentValue,
-              completed: shouldComplete,
-              completedAt: shouldComplete ? new Date() : undefined,
+              currentValue: progress.currentValue,
+              completed: progress.completed,
+              completedAt: progress.completed ? new Date() : undefined,
             });
           }
         }
@@ -1339,7 +1385,7 @@ export async function registerRoutes(
       }
 
       const responseStatus = syncStatus;
-      logApiContext(route, userId, "clash-royale", 200);
+      logApiContext(route, userId, "clash-royale", 200, getResponseRequestId(res));
 
       res.json({
         status: responseStatus,
@@ -1414,22 +1460,46 @@ export async function registerRoutes(
   // ============================================================================
 
   app.get('/api/stripe/config', async (req, res) => {
+    const route = "/api/stripe/config";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const publishableKey = await getStripePublishableKey();
       res.json({ publishableKey });
     } catch (error) {
       console.error("Error fetching Stripe config:", error);
-      res.status(500).json({ error: "Failed to fetch Stripe configuration" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_CONFIG_FETCH_FAILED", message: "Failed to fetch Stripe configuration" },
+      });
     }
   });
 
   app.get('/api/stripe/products', async (req, res) => {
+    const route = "/api/stripe/products";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`SELECT * FROM stripe.products WHERE active = true`
@@ -1437,14 +1507,29 @@ export async function registerRoutes(
       res.json({ data: result.rows });
     } catch (error) {
       console.error("Error fetching products:", error);
-      res.status(500).json({ error: "Failed to fetch products" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRODUCTS_FETCH_FAILED", message: "Failed to fetch products" },
+      });
     }
   });
 
   app.get('/api/stripe/prices', async (req, res) => {
+    const route = "/api/stripe/prices";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`SELECT * FROM stripe.prices WHERE active = true`
@@ -1452,14 +1537,29 @@ export async function registerRoutes(
       res.json({ data: result.rows });
     } catch (error) {
       console.error("Error fetching prices:", error);
-      res.status(500).json({ error: "Failed to fetch prices" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRICES_FETCH_FAILED", message: "Failed to fetch prices" },
+      });
     }
   });
 
   app.get('/api/stripe/products-with-prices', async (req, res) => {
+    const route = "/api/stripe/products-with-prices";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured", data: [] });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
       const result = await db.execute(
         sql`
@@ -1507,7 +1607,13 @@ export async function registerRoutes(
       res.json({ data: Array.from(productsMap.values()) });
     } catch (error) {
       console.error("Error fetching products with prices:", error);
-      res.status(500).json({ error: "Failed to fetch products" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_PRODUCTS_WITH_PRICES_FETCH_FAILED", message: "Failed to fetch products" },
+      });
     }
   });
 
@@ -1723,24 +1829,54 @@ export async function registerRoutes(
   // ============================================================================
   
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: any, res) => {
+    const route = "/api/stripe/webhook";
+    const userId = getUserId(req);
+
     try {
       if (!process.env.REPLIT_CONNECTORS_HOSTNAME) {
-        return res.status(503).json({ error: "Stripe not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+        });
       }
 
       const signature = req.headers['stripe-signature'];
       if (!signature) {
-        return res.status(400).json({ error: "Missing stripe-signature" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_SIGNATURE_MISSING", message: "Missing stripe-signature" },
+        });
       }
 
       if (!Buffer.isBuffer(req.body)) {
-        return res.status(400).json({ error: "Invalid webhook payload" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_WEBHOOK_PAYLOAD_INVALID", message: "Invalid webhook payload" },
+        });
       }
 
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       if (!webhookSecret) {
         console.error("STRIPE_WEBHOOK_SECRET is not configured");
-        return res.status(503).json({ error: "Stripe webhook secret not configured" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 503,
+          error: {
+            code: "STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED",
+            message: "Stripe webhook secret not configured",
+          },
+        });
       }
 
       const sig = Array.isArray(signature) ? signature[0] : signature;
@@ -1752,7 +1888,13 @@ export async function registerRoutes(
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
       } catch (error) {
         console.error("Invalid Stripe webhook signature:", error);
-        return res.status(400).json({ error: "Invalid webhook signature" });
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "stripe",
+          status: 400,
+          error: { code: "STRIPE_WEBHOOK_SIGNATURE_INVALID", message: "Invalid webhook signature" },
+        });
       }
 
       console.log(`Stripe webhook received: ${event.type}`);
@@ -1917,7 +2059,13 @@ export async function registerRoutes(
       res.json({ received: true });
     } catch (error) {
       console.error("Error processing webhook:", error);
-      res.status(500).json({ error: "Webhook processing failed" });
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 500,
+        error: { code: "STRIPE_WEBHOOK_PROCESSING_FAILED", message: "Webhook processing failed" },
+      });
     }
   });
 
@@ -1944,7 +2092,8 @@ export async function registerRoutes(
       
       if (!isPro) {
         const messagesToday = await storage.countCoachMessagesToday(userId);
-        if (messagesToday >= FREE_DAILY_LIMIT) {
+        const limitState = evaluateFreeCoachLimit(messagesToday, FREE_DAILY_LIMIT);
+        if (limitState.reached) {
           return sendApiError(res, {
             route,
             userId,
@@ -2149,7 +2298,12 @@ export async function registerRoutes(
         console.warn("Failed to fetch player context, continuing without it:", contextError);
       }
 
-      const aiResponse = await generateCoachResponse(messages, playerContext);
+      const aiResponse = await generateCoachResponse(messages, playerContext, {
+        provider: "openai",
+        route,
+        userId,
+        requestId: getResponseRequestId(res),
+      });
       
       await storage.createCoachMessage({
         userId,
@@ -2165,7 +2319,9 @@ export async function registerRoutes(
         contextType: contextType || null,
       });
       
-      const remainingMessages = isPro ? null : FREE_DAILY_LIMIT - (await storage.countCoachMessagesToday(userId));
+      const remainingMessages = isPro
+        ? null
+        : evaluateFreeCoachLimit(await storage.countCoachMessagesToday(userId), FREE_DAILY_LIMIT).remaining;
       
       res.json({ 
         message: aiResponse,
@@ -2321,7 +2477,12 @@ export async function registerRoutes(
         battles: battleContexts,
       };
 
-      const analysisResult = await generatePushAnalysis(pushSessionContext);
+      const analysisResult = await generatePushAnalysis(pushSessionContext, {
+        provider: "openai",
+        route,
+        userId,
+        requestId: getResponseRequestId(res),
+      });
 
       const savedAnalysis = await storage.createPushAnalysis({
         userId,
@@ -2525,7 +2686,12 @@ export async function registerRoutes(
         }
       }
       
-      const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext);
+      const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext, {
+        provider: "openai",
+        route: "/api/training/plan/generate",
+        userId,
+        requestId: getResponseRequestId(res),
+      });
       
       await storage.archiveOldPlans(userId);
       

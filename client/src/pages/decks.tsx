@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageErrorState from "@/components/PageErrorState";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Loader2, RefreshCcw, Swords, Target } from "lucide-react";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 interface MyDeckStats {
   key: string;
@@ -124,6 +127,7 @@ function buildMyDeckStats(battles: any[]): MyDeckStats[] {
 }
 
 export default function DecksPage() {
+  const { t } = useLocale();
   const { sync, isLoading: syncLoading, isFetching: syncFetching, refresh } = usePlayerSync();
 
   const metaDecksQuery = useQuery({
@@ -143,19 +147,19 @@ export default function DecksPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">Decks & Meta</h1>
-            <p className="text-muted-foreground">Seus decks reais a partir do sync + meta decks com cache previsível.</p>
+            <h1 className="text-3xl font-display font-bold">{t("pages.decks.title")}</h1>
+            <p className="text-muted-foreground">{t("pages.decks.subtitle")}</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => refresh()} disabled={syncFetching}>
             {syncFetching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-            Atualizar sync
+            {t("pages.decks.refreshSync")}
           </Button>
         </div>
 
         <Tabs defaultValue="my-decks" className="w-full">
           <TabsList className="grid w-full grid-cols-2 lg:w-[420px]">
-            <TabsTrigger value="my-decks">My decks</TabsTrigger>
-            <TabsTrigger value="meta-decks">Meta decks</TabsTrigger>
+            <TabsTrigger value="my-decks">{t("pages.decks.tabs.myDecks")}</TabsTrigger>
+            <TabsTrigger value="meta-decks">{t("pages.decks.tabs.metaDecks")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="my-decks" className="mt-4 space-y-4">
@@ -163,13 +167,13 @@ export default function DecksPage() {
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Carregando decks do jogador...
+                  {t("pages.decks.loadingMyDecks")}
                 </CardContent>
               </Card>
             ) : myDecks.length === 0 ? (
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhum deck encontrado no histórico recente. Faça sync e jogue algumas partidas.
+                  {t("pages.decks.emptyMyDecks")}
                 </CardContent>
               </Card>
             ) : (
@@ -177,24 +181,24 @@ export default function DecksPage() {
                 <Card key={deck.key} className="border-border/50 bg-card/50">
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Swords className="w-4 h-4" />
-                        Deck #{index + 1}
-                        {index === 0 ? <Badge>Principal</Badge> : null}
-                      </CardTitle>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <Badge variant="outline">{deck.matches} partidas</Badge>
-                        <Badge variant="outline" className={cn(deck.winRate >= 50 ? "text-green-500 border-green-500/40" : "text-red-500 border-red-500/40")}>
-                          {Math.round(deck.winRate)}% WR
-                        </Badge>
-                        <Badge variant="outline" className={cn(deck.netTrophies >= 0 ? "text-green-500 border-green-500/40" : "text-red-500 border-red-500/40")}>
-                          {deck.netTrophies > 0 ? "+" : ""}{deck.netTrophies} troféus
-                        </Badge>
-                        {deck.avgElixir !== null && (
-                          <Badge variant="outline">{deck.avgElixir.toFixed(1)} elixir</Badge>
-                        )}
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Swords className="w-4 h-4" />
+                          {t("pages.decks.deckIndex", { index: index + 1 })}
+                          {index === 0 ? <Badge>{t("pages.decks.mainDeckBadge")}</Badge> : null}
+                        </CardTitle>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <Badge variant="outline">{t("pages.decks.matches", { count: deck.matches })}</Badge>
+                          <Badge variant="outline" className={cn(deck.winRate >= 50 ? "text-green-500 border-green-500/40" : "text-red-500 border-red-500/40")}>
+                            {Math.round(deck.winRate)}% WR
+                          </Badge>
+                          <Badge variant="outline" className={cn(deck.netTrophies >= 0 ? "text-green-500 border-green-500/40" : "text-red-500 border-red-500/40")}>
+                          {t("pages.decks.netTrophies", { value: `${deck.netTrophies > 0 ? "+" : ""}${deck.netTrophies}` })}
+                          </Badge>
+                          {deck.avgElixir !== null && (
+                          <Badge variant="outline">{t("pages.decks.avgElixir", { value: deck.avgElixir.toFixed(1) })}</Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
@@ -215,7 +219,7 @@ export default function DecksPage() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Exibindo cache antigo de meta decks porque o refresh externo falhou. A UI segue funcional.
+                  {t("pages.decks.staleCache")}
                 </AlertDescription>
               </Alert>
             )}
@@ -224,18 +228,20 @@ export default function DecksPage() {
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Carregando meta decks...
+                  {t("pages.decks.loadingMetaDecks")}
                 </CardContent>
               </Card>
             ) : metaDecksQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>Falha ao carregar meta decks.</AlertDescription>
-              </Alert>
+              <PageErrorState
+                title={t("pages.decks.metaErrorTitle")}
+                description={getApiErrorMessage(metaDecksQuery.error, t, "pages.decks.metaErrorDescription")}
+                error={metaDecksQuery.error}
+                onRetry={() => metaDecksQuery.refetch()}
+              />
             ) : metaDecks.length === 0 ? (
               <Card className="border-border/50 bg-card/50">
                 <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                  Sem dados de meta no momento. Tente novamente mais tarde.
+                  {t("pages.decks.emptyMetaDecks")}
                 </CardContent>
               </Card>
             ) : (
@@ -245,15 +251,15 @@ export default function DecksPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <CardTitle className="text-base flex items-center gap-2">
                         <Target className="w-4 h-4" />
-                        {deck.archetype || "Deck meta"}
+                        {deck.archetype || t("pages.decks.metaDeckFallback")}
                       </CardTitle>
                       <div className="flex flex-wrap gap-2 text-xs">
                         <Badge variant="outline" className="text-green-500 border-green-500/40">
-                          {deck.estimatedWinRate?.toFixed?.(1) ?? deck.estimatedWinRate}% WR estimado
+                          {t("pages.decks.estimatedWr", { value: deck.estimatedWinRate?.toFixed?.(1) ?? deck.estimatedWinRate })}
                         </Badge>
-                        <Badge variant="outline">sample {deck.sampleSize ?? deck.usageCount ?? 0}</Badge>
-                        <Badge variant="outline">uso {deck.usageCount ?? 0}</Badge>
-                        {typeof deck.avgTrophies === "number" && <Badge variant="outline">{deck.avgTrophies} troféus médios</Badge>}
+                        <Badge variant="outline">{t("pages.decks.sampleSize", { value: deck.sampleSize ?? deck.usageCount ?? 0 })}</Badge>
+                        <Badge variant="outline">{t("pages.decks.usageCount", { value: deck.usageCount ?? 0 })}</Badge>
+                        {typeof deck.avgTrophies === "number" && <Badge variant="outline">{t("pages.decks.avgTrophies", { value: deck.avgTrophies })}</Badge>}
                       </div>
                     </div>
                   </CardHeader>

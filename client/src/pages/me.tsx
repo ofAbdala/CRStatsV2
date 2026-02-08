@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format, formatDistanceToNow, startOfDay, subDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { enUS, ptBR } from "date-fns/locale";
 import { Link } from "wouter";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
@@ -13,15 +13,14 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
-  Clock,
-  Crown,
   Layers,
   Loader2,
   RefreshCcw,
   Trophy,
   Zap,
 } from "lucide-react";
-import { ApiError } from "@/lib/api";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 
 type PeriodFilter = "today" | "7days" | "30days" | "season";
 type TiltLevel = "high" | "medium" | "none";
@@ -81,10 +80,10 @@ function computeTiltLevel(battles: any[]): TiltLevel {
   return "none";
 }
 
-function tiltText(level: TiltLevel) {
-  if (level === "high") return "Tilt alto";
-  if (level === "medium") return "Tilt moderado";
-  return "Tilt controlado";
+function tiltText(level: TiltLevel, t: (key: string) => string) {
+  if (level === "high") return t("pages.me.tilt.high");
+  if (level === "medium") return t("pages.me.tilt.medium");
+  return t("pages.me.tilt.none");
 }
 
 function tiltClass(level: TiltLevel) {
@@ -161,6 +160,7 @@ function groupBattlesIntoSessions(battles: any[], maxGapMinutes = 30): SessionSu
 }
 
 export default function MePage() {
+  const { t, locale } = useLocale();
   const { sync, derivedStatus, isLoading, isFetching, refresh, error } = usePlayerSync();
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("7days");
 
@@ -210,8 +210,8 @@ export default function MePage() {
   }, [lastPushFromSync]);
 
   const updatedAtText = sync?.lastSyncedAt
-    ? format(new Date(sync.lastSyncedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-    : "Sem sincronização";
+    ? format(new Date(sync.lastSyncedAt), "Pp", { locale: locale === "pt-BR" ? ptBR : enUS })
+    : t("pages.me.noSync");
 
   const recentStats = useMemo(() => {
     const sample = filteredBattles.slice(0, 10);
@@ -236,17 +236,17 @@ export default function MePage() {
       <div className="space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">{player?.name || "Meu Perfil"}</h1>
-            <p className="text-muted-foreground font-mono">{player?.tag || "Sem tag vinculada"}</p>
+            <h1 className="text-3xl font-display font-bold">{player?.name || t("pages.me.title")}</h1>
+            <p className="text-muted-foreground font-mono">{player?.tag || t("pages.me.noTag")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={tiltClass(stats?.tiltLevel || "none")}>
-              {tiltText(stats?.tiltLevel || "none")}
+              {tiltText(stats?.tiltLevel || "none", t)}
             </Badge>
-            <Badge variant="outline">Última atualização: {updatedAtText}</Badge>
+            <Badge variant="outline">{t("pages.me.lastUpdate", { time: updatedAtText })}</Badge>
             <Button variant="outline" size="sm" onClick={() => refresh()} disabled={isFetching}>
               {isFetching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-              Sincronizar
+              {t("pages.me.sync")}
             </Button>
           </div>
         </div>
@@ -255,7 +255,7 @@ export default function MePage() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {error instanceof ApiError ? error.message : "Falha ao carregar dados do jogador."}
+              {getApiErrorMessage(error, t)}
             </AlertDescription>
           </Alert>
         )}
@@ -267,16 +267,16 @@ export default function MePage() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <TopStat title="Troféus" value={player?.trophies ?? 0} />
-              <TopStat title="Win Rate" value={`${Math.round(stats?.winRate ?? 0)}%`} />
-              <TopStat title="V/D" value={`${stats?.wins ?? 0}/${stats?.losses ?? 0}`} />
-              <TopStat title="Partidas" value={stats?.totalMatches ?? 0} />
+              <TopStat title={t("pages.me.stats.trophies")} value={player?.trophies ?? 0} />
+              <TopStat title={t("pages.me.stats.winRate")} value={`${Math.round(stats?.winRate ?? 0)}%`} />
+              <TopStat title={t("pages.me.stats.winLoss")} value={`${stats?.wins ?? 0}/${stats?.losses ?? 0}`} />
+              <TopStat title={t("pages.me.stats.matches")} value={stats?.totalMatches ?? 0} />
             </div>
 
             <Tabs defaultValue="history" className="w-full">
               <TabsList className="grid grid-cols-2 w-full md:w-[360px]">
-                <TabsTrigger value="history">Histórico</TabsTrigger>
-                <TabsTrigger value="goals">Metas</TabsTrigger>
+                <TabsTrigger value="history">{t("pages.me.tabs.history")}</TabsTrigger>
+                <TabsTrigger value="goals">{t("pages.me.tabs.goals")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="history" className="space-y-4 mt-4">
@@ -285,7 +285,7 @@ export default function MePage() {
                     {lastPushSummary ? (
                       <div className="text-sm" data-testid="push-summary-row">
                         <p className="font-medium">
-                          Push válido: {lastPushSummary.battlesCount} partidas,
+                          {t("pages.me.validPush", { count: lastPushSummary.battlesCount })},
                           {" "}
                           <span className="text-green-500">{lastPushSummary.wins}V</span>/
                           <span className="text-red-500">{lastPushSummary.losses}D</span>,
@@ -294,15 +294,15 @@ export default function MePage() {
                             {lastPushSummary.netTrophies > 0 ? "+" : ""}{lastPushSummary.netTrophies}
                           </span>,
                           {" "}
-                          {lastPushSummary.durationMinutes} min
+                          {t("pages.me.minutes", { value: lastPushSummary.durationMinutes })}
                         </p>
                         <Badge variant="outline" className={tiltClass(lastPushSummary.tiltLevel)}>
-                          {tiltText(lastPushSummary.tiltLevel)}
+                          {tiltText(lastPushSummary.tiltLevel, t)}
                         </Badge>
                       </div>
                     ) : (
                       <div className="text-sm">
-                        Sessão recente: {recentStats.total} partidas,
+                        {t("pages.me.recentSession", { count: recentStats.total })},
                         {" "}
                         <span className="text-green-500">{recentStats.wins}V</span>/
                         <span className="text-red-500">{recentStats.losses}D</span>
@@ -311,10 +311,10 @@ export default function MePage() {
                       </div>
                     )}
                     <div className="flex gap-2">
-                      <PeriodButton value="today" current={periodFilter} onChange={setPeriodFilter} label="Hoje" />
+                      <PeriodButton value="today" current={periodFilter} onChange={setPeriodFilter} label={t("pages.me.filters.today")} />
                       <PeriodButton value="7days" current={periodFilter} onChange={setPeriodFilter} label="7d" />
                       <PeriodButton value="30days" current={periodFilter} onChange={setPeriodFilter} label="30d" />
-                      <PeriodButton value="season" current={periodFilter} onChange={setPeriodFilter} label="Temp." />
+                      <PeriodButton value="season" current={periodFilter} onChange={setPeriodFilter} label={t("pages.me.filters.season")} />
                     </div>
                   </CardContent>
                 </Card>
@@ -323,7 +323,7 @@ export default function MePage() {
                   {sessions.length === 0 ? (
                     <Card className="border-border/50 bg-card/50">
                       <CardContent className="py-8 text-center text-muted-foreground">
-                        Nenhuma batalha no período.
+                        {t("pages.me.emptyBattles")}
                       </CardContent>
                     </Card>
                   ) : (
@@ -333,12 +333,12 @@ export default function MePage() {
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <CardTitle className="text-base flex items-center gap-2">
                               <Layers className="w-4 h-4" />
-                              {session.isValidPush ? "Push válido" : "Sessão simples"}
+                              {session.isValidPush ? t("pages.me.session.valid") : t("pages.me.session.simple")}
                             </CardTitle>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline">{session.battles.length} partidas</Badge>
+                              <Badge variant="outline">{t("pages.me.matchesBadge", { count: session.battles.length })}</Badge>
                               <Badge variant="outline" className={tiltClass(session.tiltLevel)}>
-                                {tiltText(session.tiltLevel)}
+                                {tiltText(session.tiltLevel, t)}
                               </Badge>
                             </div>
                           </div>
@@ -352,17 +352,21 @@ export default function MePage() {
                                 <span className={cn(session.netTrophies >= 0 ? "text-green-500" : "text-red-500")}>
                                   {session.netTrophies > 0 ? "+" : ""}{session.netTrophies}
                                 </span>
-                                {" "}• {session.durationMinutes} min
+                                {" "}• {t("pages.me.minutes", { value: session.durationMinutes })}
                               </>
                             ) : (
-                              "1 partida sem sequência de push (gap > 30 min)."
+                              t("pages.me.singleSession")
                             )}
                           </p>
                           <div className="space-y-2">
                             {session.battles.map((battle: any, index: number) => {
                               const myCrowns = battle?.team?.[0]?.crowns || 0;
                               const oppCrowns = battle?.opponent?.[0]?.crowns || 0;
-                              const result = myCrowns > oppCrowns ? "Vitória" : myCrowns < oppCrowns ? "Derrota" : "Empate";
+                              const result = myCrowns > oppCrowns
+                                ? t("battle.victory")
+                                : myCrowns < oppCrowns
+                                  ? t("battle.defeat")
+                                  : t("battle.draw");
                               const trophyChange = battle?.team?.[0]?.trophyChange || 0;
                               return (
                                 <div
@@ -370,10 +374,13 @@ export default function MePage() {
                                   className="flex items-center justify-between rounded-md border border-border/30 px-3 py-2 text-sm"
                                 >
                                   <div>
-                                    <p className="font-medium">{battle?.opponent?.[0]?.name || "Oponente"}</p>
+                                    <p className="font-medium">{battle?.opponent?.[0]?.name || t("battle.opponent")}</p>
                                     <p className="text-xs text-muted-foreground">
                                       {result} • {myCrowns}x{oppCrowns} •{" "}
-                                      {formatDistanceToNow(parseBattleTime(battle?.battleTime), { addSuffix: true, locale: ptBR })}
+                                      {formatDistanceToNow(parseBattleTime(battle?.battleTime), {
+                                        addSuffix: true,
+                                        locale: locale === "pt-BR" ? ptBR : enUS,
+                                      })}
                                     </p>
                                   </div>
                                   <span className={cn(trophyChange > 0 && "text-green-500", trophyChange < 0 && "text-red-500")}>
@@ -393,11 +400,11 @@ export default function MePage() {
               <TabsContent value="goals" className="space-y-4 mt-4">
                 <Card className="border-border/50 bg-card/50">
                   <CardHeader>
-                    <CardTitle>Metas ativas</CardTitle>
+                    <CardTitle>{t("pages.me.activeGoals")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {goals.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Nenhuma meta ativa.</p>
+                      <p className="text-sm text-muted-foreground">{t("pages.me.emptyGoals")}</p>
                     ) : (
                       goals.map((goal: any) => {
                         const current = goal.currentValue || 0;
@@ -418,7 +425,7 @@ export default function MePage() {
                       <Link href="/billing">
                         <Button variant="outline" size="sm">
                           <Zap className="w-4 h-4 mr-2" />
-                          Ver plano PRO
+                          {t("pages.me.viewPro")}
                         </Button>
                       </Link>
                     </div>
@@ -434,12 +441,13 @@ export default function MePage() {
 }
 
 function TopStat({ title, value }: { title: string; value: string | number }) {
+  const { t } = useLocale();
   return (
     <Card className="border-border/50 bg-card/50">
       <CardContent className="p-4">
         <p className="text-sm text-muted-foreground">{title}</p>
         <p className="text-2xl font-display font-bold mt-1 flex items-center gap-2">
-          {title === "Troféus" ? <Trophy className="w-5 h-5 text-yellow-500" /> : null}
+          {title === t("pages.me.stats.trophies") ? <Trophy className="w-5 h-5 text-yellow-500" /> : null}
           {value}
         </p>
       </CardContent>
@@ -469,4 +477,3 @@ function PeriodButton({
     </Button>
   );
 }
-

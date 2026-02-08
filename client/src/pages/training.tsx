@@ -2,16 +2,17 @@ import { useMemo } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { ApiError, api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/hooks/use-locale";
+import { getApiErrorMessage } from "@/lib/errorMessages";
 import {
-  AlertCircle,
   CheckCircle2,
   Crown,
   Loader2,
@@ -53,15 +54,16 @@ function isDrillDone(drill: TrainingDrill) {
   return drill.status === "completed" || drill.status === "skipped" || drill.completedGames >= drill.targetGames;
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message;
+function getErrorMessage(error: unknown, t: (key: string) => string, fallbackKey: string) {
+  if (error instanceof ApiError) return getApiErrorMessage(error, t, fallbackKey);
   if (error instanceof Error) return error.message;
-  return fallback;
+  return t(fallbackKey);
 }
 
 export default function TrainingPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLocale();
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -99,14 +101,14 @@ export default function TrainingPage() {
       await queryClient.invalidateQueries({ queryKey: ["latest-push-analysis"] });
       await queryClient.invalidateQueries({ queryKey: ["latest-push-analysis", "training"] });
       toast({
-        title: "Análise gerada",
-        description: "A análise mais recente já está disponível para montar o plano.",
+        title: t("pages.training.toast.analysisGeneratedTitle"),
+        description: t("pages.training.toast.analysisGeneratedDescription"),
       });
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha ao gerar análise",
-        description: getErrorMessage(error, "Não foi possível gerar a análise de push."),
+        title: t("pages.training.toast.analysisGenerateErrorTitle"),
+        description: getErrorMessage(error, t, "pages.training.errors.generateAnalysis"),
         variant: "destructive",
       });
     },
@@ -118,14 +120,14 @@ export default function TrainingPage() {
       queryClient.setQueryData(["training-plan"], plan);
       await queryClient.invalidateQueries({ queryKey: ["training-plans"] });
       toast({
-        title: "Plano criado",
-        description: `Novo plano ativo: ${plan.title}`,
+        title: t("pages.training.toast.planCreatedTitle"),
+        description: t("pages.training.toast.planCreatedDescription", { title: plan.title }),
       });
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha ao criar plano",
-        description: getErrorMessage(error, "Não foi possível gerar o plano de treino."),
+        title: t("pages.training.toast.planCreateErrorTitle"),
+        description: getErrorMessage(error, t, "pages.training.errors.generatePlan"),
         variant: "destructive",
       });
     },
@@ -145,8 +147,8 @@ export default function TrainingPage() {
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha ao atualizar drill",
-        description: getErrorMessage(error, "Não foi possível atualizar o drill."),
+        title: t("pages.training.toast.drillUpdateErrorTitle"),
+        description: getErrorMessage(error, t, "pages.training.errors.updateDrill"),
         variant: "destructive",
       });
     },
@@ -158,14 +160,14 @@ export default function TrainingPage() {
       await queryClient.invalidateQueries({ queryKey: ["training-plan"] });
       await queryClient.invalidateQueries({ queryKey: ["training-plans"] });
       toast({
-        title: "Plano concluído",
-        description: "Parabéns! Seu plano foi marcado como concluído.",
+        title: t("pages.training.toast.planCompletedTitle"),
+        description: t("pages.training.toast.planCompletedDescription"),
       });
     },
     onError: (error: unknown) => {
       toast({
-        title: "Falha ao concluir plano",
-        description: getErrorMessage(error, "Não foi possível concluir o plano."),
+        title: t("pages.training.toast.planCompleteErrorTitle"),
+        description: getErrorMessage(error, t, "pages.training.errors.completePlan"),
         variant: "destructive",
       });
     },
@@ -217,11 +219,11 @@ export default function TrainingPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">Centro de Treinamento</h1>
-            <p className="text-muted-foreground">Fluxo completo: análise de push, plano, drills e conclusão.</p>
+            <h1 className="text-3xl font-display font-bold">{t("pages.training.title")}</h1>
+            <p className="text-muted-foreground">{t("pages.training.subtitle")}</p>
           </div>
           <Badge variant={isPro ? "default" : "secondary"}>
-            {isPro ? "PRO" : "FREE"}
+            {isPro ? t("pages.training.planPro") : t("pages.training.planFree")}
           </Badge>
         </div>
 
@@ -230,12 +232,12 @@ export default function TrainingPage() {
             <CardContent className="py-8 text-center space-y-3">
               <Crown className="w-8 h-8 text-yellow-500 mx-auto" />
               <p className="text-sm text-muted-foreground">
-                O Centro de Treinamento completo é exclusivo do plano PRO.
+                {t("pages.training.proOnly")}
               </p>
               <Link href="/billing">
                 <Button>
                   <Crown className="w-4 h-4 mr-2" />
-                  Fazer upgrade para PRO
+                  {t("pages.training.upgradeCta")}
                 </Button>
               </Link>
             </CardContent>
@@ -246,16 +248,22 @@ export default function TrainingPage() {
           <Card className="border-border/50 bg-card/50">
             <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando treinamento...
+              {t("pages.training.loading")}
             </CardContent>
           </Card>
         )}
 
         {isPro && !loadingState && queryError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{getErrorMessage(queryError, "Falha ao carregar dados de treinamento.")}</AlertDescription>
-          </Alert>
+          <PageErrorState
+            title={t("pages.training.errors.loadTitle")}
+            description={getErrorMessage(queryError, t, "pages.training.errors.loadData")}
+            error={queryError}
+            onRetry={() => {
+              activePlanQuery.refetch();
+              plansQuery.refetch();
+              latestAnalysisQuery.refetch();
+            }}
+          />
         )}
 
         {isPro && !loadingState && !queryError && (
@@ -268,13 +276,13 @@ export default function TrainingPage() {
                       <div className="flex flex-wrap items-center gap-2 justify-between">
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Target className="w-5 h-5" />
-                          {activePlan?.title || "Plano ativo"}
+                          {activePlan?.title || t("pages.training.activePlanTitle")}
                         </CardTitle>
-                        <Badge variant="outline">Ativo</Badge>
+                        <Badge variant="outline">{t("pages.training.status.active")}</Badge>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span>Progresso do plano</span>
+                          <span>{t("pages.training.planProgress")}</span>
                           <span>{planProgress}%</span>
                         </div>
                         <Progress value={planProgress} className="h-2" />
@@ -292,17 +300,24 @@ export default function TrainingPage() {
                                   <p className="font-medium">{drill.focusArea}</p>
                                   <p className="text-sm text-muted-foreground">{drill.description}</p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Modo: {drill.mode} • Prioridade {drill.priority}
+                                    {t("pages.training.drillMeta", {
+                                      mode: drill.mode,
+                                      priority: drill.priority,
+                                    })}
                                   </p>
                                 </div>
                                 <Badge variant="outline" className={cn(done && "text-green-500 border-green-500/40")}>
-                                  {done ? "Concluído" : drill.status === "in_progress" ? "Em progresso" : "Pendente"}
+                                  {done
+                                    ? t("pages.training.status.completed")
+                                    : drill.status === "in_progress"
+                                      ? t("pages.training.status.inProgress")
+                                      : t("pages.training.status.pending")}
                                 </Badge>
                               </div>
 
                               <div className="space-y-1">
                                 <div className="flex justify-between text-xs text-muted-foreground">
-                                  <span>{drill.completedGames}/{drill.targetGames} partidas</span>
+                                  <span>{t("pages.training.drillProgress", { completed: drill.completedGames, target: drill.targetGames })}</span>
                                   <span>{drillProgress}%</span>
                                 </div>
                                 <Progress value={drillProgress} className="h-2" />
@@ -316,7 +331,7 @@ export default function TrainingPage() {
                                   disabled={done || updateDrillMutation.isPending}
                                 >
                                   <Plus className="w-4 h-4 mr-1" />
-                                  +1 partida
+                                  {t("pages.training.incrementDrill")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -324,7 +339,7 @@ export default function TrainingPage() {
                                   disabled={done || updateDrillMutation.isPending}
                                 >
                                   <CheckCircle2 className="w-4 h-4 mr-1" />
-                                  Marcar concluído
+                                  {t("pages.training.markDrillCompleted")}
                                 </Button>
                               </div>
                             </CardContent>
@@ -341,18 +356,18 @@ export default function TrainingPage() {
                           {completePlanMutation.isPending ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                              Concluindo plano...
+                              {t("pages.training.completingPlan")}
                             </>
                           ) : (
                             <>
                               <CheckCircle2 className="w-4 h-4 mr-2" />
-                              Marcar plano como concluído
+                              {t("pages.training.markPlanCompleted")}
                             </>
                           )}
                         </Button>
                         {!allDrillsCompleted && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Conclua todos os drills para finalizar o plano.
+                            {t("pages.training.finishAllDrillsHint")}
                           </p>
                         )}
                       </div>
@@ -361,61 +376,61 @@ export default function TrainingPage() {
                 </>
               ) : completedPlan ? (
                 <Card className="border-border/50 bg-card/50" data-testid="training-state-completed">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      Plano concluído
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Você já concluiu "{completedPlan.title}". Gere uma nova análise de push para iniciar o próximo ciclo.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        {t("pages.training.completedStateTitle")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        {t("pages.training.completedStateDescription", { title: completedPlan.title })}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
                         variant="outline"
                         onClick={() => generateAnalysisMutation.mutate()}
                         disabled={generateAnalysisMutation.isPending}
                       >
-                        {generateAnalysisMutation.isPending ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Gerando análise...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Gerar nova análise de push
-                          </>
-                        )}
-                      </Button>
+                          {generateAnalysisMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              {t("pages.training.generatingAnalysis")}
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              {t("pages.training.generateNewAnalysis")}
+                            </>
+                          )}
+                        </Button>
                       <Button
                         onClick={() => generatePlanMutation.mutate(latestAnalysis?.id)}
                         disabled={generatePlanMutation.isPending || !latestAnalysis}
                       >
-                        {generatePlanMutation.isPending ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Gerando plano...
-                          </>
-                        ) : (
-                          <>
-                            <Swords className="w-4 h-4 mr-2" />
-                            Gerar novo plano
-                          </>
-                        )}
-                      </Button>
+                          {generatePlanMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              {t("pages.training.generatingPlan")}
+                            </>
+                          ) : (
+                            <>
+                              <Swords className="w-4 h-4 mr-2" />
+                              {t("pages.training.generateNewPlan")}
+                            </>
+                          )}
+                        </Button>
                     </div>
                   </CardContent>
                 </Card>
               ) : (
                 <Card className="border-border/50 bg-card/50" data-testid="training-state-empty">
                   <CardHeader>
-                    <CardTitle className="text-lg">Nenhum plano ativo</CardTitle>
+                    <CardTitle className="text-lg">{t("pages.training.emptyStateTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Para começar, gere uma análise de push e depois monte seu plano de drills personalizado.
+                      {t("pages.training.emptyStateDescription")}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -426,12 +441,12 @@ export default function TrainingPage() {
                         {generateAnalysisMutation.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Gerando análise...
+                            {t("pages.training.generatingAnalysis")}
                           </>
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4 mr-2" />
-                            Gerar análise de push
+                            {t("pages.training.generateAnalysis")}
                           </>
                         )}
                       </Button>
@@ -442,19 +457,19 @@ export default function TrainingPage() {
                         {generatePlanMutation.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Gerando plano...
+                            {t("pages.training.generatingPlan")}
                           </>
                         ) : (
                           <>
                             <Zap className="w-4 h-4 mr-2" />
-                            Gerar plano de treino
+                            {t("pages.training.generatePlan")}
                           </>
                         )}
                       </Button>
                     </div>
                     {!latestAnalysis && (
                       <p className="text-xs text-muted-foreground">
-                        Você precisa de uma análise de push para gerar o plano.
+                        {t("pages.training.analysisRequiredHint")}
                       </p>
                     )}
                   </CardContent>
@@ -468,21 +483,21 @@ export default function TrainingPage() {
               ) : (
                 <Card className="border-border/50 bg-card/50">
                   <CardHeader>
-                    <CardTitle className="text-base">Análise de push</CardTitle>
+                    <CardTitle className="text-base">{t("pages.training.pushAnalysisTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-muted-foreground">
-                    Gere uma análise para alimentar seu próximo plano de treino.
+                    {t("pages.training.pushAnalysisDescription")}
                   </CardContent>
                 </Card>
               )}
 
               <Card className="border-border/50 bg-card/50">
                 <CardHeader>
-                  <CardTitle className="text-base">Dica de execução</CardTitle>
+                  <CardTitle className="text-base">{t("pages.training.executionTipTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Execute os drills em blocos curtos de 3 a 5 partidas para reduzir variância.</p>
-                  <p>Se detectar tilt alto na análise, pause após 2 derrotas seguidas.</p>
+                  <p>{t("pages.training.executionTip1")}</p>
+                  <p>{t("pages.training.executionTip2")}</p>
                 </CardContent>
               </Card>
             </div>

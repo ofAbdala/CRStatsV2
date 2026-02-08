@@ -2,13 +2,14 @@ import type { ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Crown, Loader2, Trophy, AlertCircle } from "lucide-react";
+import { ArrowLeft, Crown, Loader2, Trophy } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/hooks/use-locale";
 
 interface PublicPlayerResponse {
   player: {
@@ -24,15 +25,16 @@ interface PublicPlayerResponse {
   recentBattles: any[];
 }
 
-function getBattleResultLabel(battle: any) {
+function getBattleResultLabel(battle: any, t: (key: string) => string) {
   const myCrowns = battle?.team?.[0]?.crowns || 0;
   const oppCrowns = battle?.opponent?.[0]?.crowns || 0;
-  if (myCrowns > oppCrowns) return "Vitória";
-  if (myCrowns < oppCrowns) return "Derrota";
-  return "Empate";
+  if (myCrowns > oppCrowns) return t("battle.victory");
+  if (myCrowns < oppCrowns) return t("battle.defeat");
+  return t("battle.draw");
 }
 
 export default function PublicProfilePage() {
+  const { t } = useLocale();
   const [, params] = useRoute("/p/:tag");
   const rawTag = params?.tag || "";
   const playerTag = rawTag ? `#${rawTag.replace(/^#/, "")}` : "";
@@ -55,7 +57,7 @@ export default function PublicProfilePage() {
         <Link href="/community">
           <Button variant="ghost">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar para Community
+            {t("pages.publicProfile.backToCommunity")}
           </Button>
         </Link>
 
@@ -63,14 +65,16 @@ export default function PublicProfilePage() {
           <Card className="border-border/50 bg-card/50">
             <CardContent className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando perfil público...
+              {t("pages.publicProfile.loading")}
             </CardContent>
           </Card>
         ) : publicPlayerQuery.isError || !player ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Não foi possível carregar o perfil público para {playerTag}.</AlertDescription>
-          </Alert>
+          <PageErrorState
+            title={t("pages.publicProfile.errorTitle")}
+            description={t("pages.publicProfile.errorDescription", { tag: playerTag })}
+            error={publicPlayerQuery.error}
+            onRetry={() => publicPlayerQuery.refetch()}
+          />
         ) : (
           <>
             <Card className="border-border/50 bg-card/50">
@@ -81,40 +85,45 @@ export default function PublicProfilePage() {
                   </Avatar>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h1 className="text-2xl font-display font-bold">{player.name || "Jogador"}</h1>
+                      <h1 className="text-2xl font-display font-bold">{player.name || t("pages.publicProfile.playerFallback")}</h1>
                       <Badge variant="outline">{player.tag || playerTag}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {player.arena?.name || "Arena desconhecida"}
+                      {player.arena?.name || t("pages.publicProfile.arenaFallback")}
                       {player.clan?.name ? ` • ${player.clan.name}` : ""}
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 min-w-[230px]">
-                  <StatBox label="Troféus" value={String(player.trophies || 0)} icon={<Trophy className="w-4 h-4 text-yellow-500" />} />
-                  <StatBox label="Best" value={String(player.bestTrophies || 0)} />
-                  <StatBox label="Win Rate" value={`${winRate}%`} className="text-green-500" />
-                  <StatBox label="V/D" value={`${player.wins || 0}/${player.losses || 0}`} />
+                  <StatBox label={t("pages.publicProfile.stats.trophies")} value={String(player.trophies || 0)} icon={<Trophy className="w-4 h-4 text-yellow-500" />} />
+                  <StatBox label={t("pages.publicProfile.stats.best")} value={String(player.bestTrophies || 0)} />
+                  <StatBox label={t("pages.publicProfile.stats.winRate")} value={`${winRate}%`} className="text-green-500" />
+                  <StatBox label={t("pages.publicProfile.stats.winLoss")} value={`${player.wins || 0}/${player.losses || 0}`} />
                 </div>
               </CardContent>
             </Card>
 
             <Card className="border-border/50 bg-card/50">
               <CardHeader>
-                <CardTitle>Histórico recente</CardTitle>
+                <CardTitle>{t("pages.publicProfile.recentHistoryTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {battles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sem batalhas recentes disponíveis.</p>
+                  <p className="text-sm text-muted-foreground">{t("pages.publicProfile.emptyBattles")}</p>
                 ) : (
                   battles.slice(0, 10).map((battle: any, index: number) => {
-                    const result = getBattleResultLabel(battle);
+                    const result = getBattleResultLabel(battle, t);
                     const trophyChange = battle?.team?.[0]?.trophyChange || 0;
                     return (
                       <div key={`${battle?.battleTime || "battle"}-${index}`} className="rounded-lg border border-border/40 p-3 flex items-center justify-between">
                         <div>
-                          <p className="font-medium">{result} vs {battle?.opponent?.[0]?.name || "Oponente"}</p>
+                          <p className="font-medium">
+                            {t("pages.publicProfile.battleLine", {
+                              result,
+                              opponent: battle?.opponent?.[0]?.name || t("battle.opponent"),
+                            })}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {(battle?.team?.[0]?.crowns || 0)} x {(battle?.opponent?.[0]?.crowns || 0)}
                           </p>
@@ -132,13 +141,13 @@ export default function PublicProfilePage() {
             <Card className="border-border/50 bg-card/50">
               <CardContent className="py-5 flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="font-medium">Quer análise tática desse jogador?</p>
-                  <p className="text-sm text-muted-foreground">Use o Coach IA para comparar padrão de derrota e ajustes.</p>
+                  <p className="font-medium">{t("pages.publicProfile.coachCtaTitle")}</p>
+                  <p className="text-sm text-muted-foreground">{t("pages.publicProfile.coachCtaDescription")}</p>
                 </div>
                 <Link href="/coach">
                   <Button>
                     <Crown className="w-4 h-4 mr-2" />
-                    Abrir Coach
+                    {t("pages.publicProfile.openCoach")}
                   </Button>
                 </Link>
               </CardContent>
