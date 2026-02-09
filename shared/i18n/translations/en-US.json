@@ -573,7 +573,7 @@
     "syncError": "Sync failed",
     "sync": "Sync",
     "noSync": "No sync yet",
-    "lastUpdate": "Last update: {time}",
+    "lastUpdate": "Updated at {time}",
     "partialSync": "Some data could not be refreshed in this sync.",
     "trophyProgressTitle": "Trophy progress",
     "currentDeckTitle": "Current deck",
@@ -598,6 +598,12 @@
       "losses": "Losses",
       "lossesLine": "{count} losses"
     },
+    "tiltAlert": {
+      "title": "Tilt warning",
+      "description": "Tilt risk: {risk}%. Last battle: {time}.",
+      "snooze6h": "Mute for 6h",
+      "dismiss": "Dismiss"
+    },
     "tilt": {
       "high": "High tilt",
       "medium": "Moderate tilt",
@@ -608,7 +614,7 @@
       "title": "My profile",
       "noTag": "No linked tag",
       "noSync": "No sync yet",
-      "lastUpdate": "Last update: {time}",
+      "lastUpdate": "Updated at {time}",
       "sync": "Sync",
       "validPush": "Valid push ({count} matches)",
       "recentSession": "Recent session ({count} matches)",
@@ -857,6 +863,11 @@
     "community": {
       "title": "Community",
       "subtitle": "Public player and clan rankings with cross links.",
+      "tagSearchTitle": "Search player by tag",
+      "tagSearchPlaceholder": "2P090J0",
+      "tagSearchButton": "Search",
+      "tagSearchEmpty": "Enter a tag to search.",
+      "tagSearchInvalid": "Invalid tag. Use only letters and numbers (e.g. 2P090J0).",
       "tabs": {
         "players": "Top players",
         "clans": "Top clans"
@@ -891,6 +902,10 @@
       "loading": "Loading public profile...",
       "errorTitle": "Failed to load public profile",
       "errorDescription": "Could not load public profile for {tag}.",
+      "invalidTagTitle": "Invalid tag",
+      "invalidTagDescription": "The provided tag ({tag}) is not valid.",
+      "tagNotFoundTitle": "Tag not found",
+      "tagNotFoundDescription": "We couldn't find a player for {tag}.",
       "playerFallback": "Player",
       "arenaFallback": "Unknown arena",
       "stats": {

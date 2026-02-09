@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import PageErrorState from "@/components/PageErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Trophy, Users, Loader2, AlertCircle, Shield } from "lucide-react";
+import { Trophy, Users, Loader2, AlertCircle, Shield, Hash, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
+import { parseClashTag } from "@shared/clashTag";
 
 interface RankingPlayer {
   rank: number;
@@ -68,7 +70,28 @@ function extractItems<T>(payload: { items?: T[] } | T[] | null | undefined): T[]
 
 export default function CommunityPage() {
   const { t } = useLocale();
+  const [, setLocation] = useLocation();
   const [selectedClanTag, setSelectedClanTag] = useState<string | null>(null);
+  const [searchTag, setSearchTag] = useState("");
+  const [searchTagError, setSearchTagError] = useState<string | null>(null);
+
+  const handleTagSearchSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmed = searchTag.trim();
+    if (!trimmed) {
+      setSearchTagError(t("pages.community.tagSearchEmpty"));
+      return;
+    }
+
+    const parsed = parseClashTag(trimmed);
+    if (!parsed) {
+      setSearchTagError(t("pages.community.tagSearchInvalid"));
+      return;
+    }
+
+    setSearchTagError(null);
+    setLocation(`/p/${parsed.withoutHash}`);
+  };
 
   const playerRankingsQuery = useQuery({
     queryKey: ["community-player-rankings", "global"],
@@ -104,6 +127,40 @@ export default function CommunityPage() {
           </TabsList>
 
           <TabsContent value="players" className="mt-4">
+            <Card className="border-border/50 bg-card/50 mb-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="w-5 h-5" />
+                  {t("pages.community.tagSearchTitle")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleTagSearchSubmit} className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Hash className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={searchTag}
+                        onChange={(event) => {
+                          setSearchTag(event.target.value.toUpperCase().replace(/^#/, ""));
+                          setSearchTagError(null);
+                        }}
+                        placeholder={t("pages.community.tagSearchPlaceholder")}
+                        className="pl-9 font-mono uppercase"
+                        aria-label={t("pages.community.tagSearchPlaceholder")}
+                      />
+                    </div>
+                    <Button type="submit" disabled={!searchTag.trim()}>
+                      {t("pages.community.tagSearchButton")}
+                    </Button>
+                  </div>
+                  {searchTagError ? (
+                    <p className="text-sm text-destructive">{searchTagError}</p>
+                  ) : null}
+                </form>
+              </CardContent>
+            </Card>
+
             <Card className="border-border/50 bg-card/50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

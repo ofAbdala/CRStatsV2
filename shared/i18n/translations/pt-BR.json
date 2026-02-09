@@ -573,7 +573,7 @@
     "syncError": "Falha na sincronização",
     "sync": "Sincronizar",
     "noSync": "Sem sincronização",
-    "lastUpdate": "Última atualização: {time}",
+    "lastUpdate": "Atualizado em {time}",
     "partialSync": "Parte dos dados não pôde ser atualizada nesta sincronização.",
     "trophyProgressTitle": "Progresso de Troféus",
     "currentDeckTitle": "Deck Atual",
@@ -598,6 +598,12 @@
       "losses": "Derrotas",
       "lossesLine": "{count} derrotas"
     },
+    "tiltAlert": {
+      "title": "Alerta de tilt",
+      "description": "Risco de tilt: {risk}%. Última batalha: {time}.",
+      "snooze6h": "Silenciar por 6h",
+      "dismiss": "Dispensar"
+    },
     "tilt": {
       "high": "Tilt alto",
       "medium": "Tilt moderado",
@@ -608,7 +614,7 @@
       "title": "Meu perfil",
       "noTag": "Sem tag vinculada",
       "noSync": "Sem sincronização",
-      "lastUpdate": "Última atualização: {time}",
+      "lastUpdate": "Atualizado em {time}",
       "sync": "Sincronizar",
       "validPush": "Push válido ({count} partidas)",
       "recentSession": "Sessão recente ({count} partidas)",
@@ -857,6 +863,11 @@
     "community": {
       "title": "Comunidade",
       "subtitle": "Rankings públicos de jogadores e clãs com links cruzados.",
+      "tagSearchTitle": "Buscar jogador por tag",
+      "tagSearchPlaceholder": "2P090J0",
+      "tagSearchButton": "Buscar",
+      "tagSearchEmpty": "Informe uma tag para buscar.",
+      "tagSearchInvalid": "Tag inválida. Use apenas letras e números (ex: 2P090J0).",
       "tabs": {
         "players": "Top jogadores",
         "clans": "Top clãs"
@@ -891,6 +902,10 @@
       "loading": "Carregando perfil público...",
       "errorTitle": "Falha ao carregar perfil público",
       "errorDescription": "Não foi possível carregar o perfil público para {tag}.",
+      "invalidTagTitle": "Tag inválida",
+      "invalidTagDescription": "A tag informada ({tag}) não é válida.",
+      "tagNotFoundTitle": "Tag não encontrada",
+      "tagNotFoundDescription": "Não encontramos um jogador para {tag}.",
       "playerFallback": "Jogador",
       "arenaFallback": "Arena desconhecida",
       "stats": {

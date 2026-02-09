@@ -18,6 +18,9 @@ export interface PlayerSyncResponse {
     winRate: number;
     streak: { type: "win" | "loss" | "none"; count: number };
     tiltLevel: TiltLevel;
+    tiltRisk: number;
+    tiltAlert: boolean;
+    lastBattleAt: string | null;
   };
   goals: any[];
   lastSyncedAt: string | null;
@@ -61,4 +64,3 @@ export function usePlayerSync() {
     refresh,
   };
 }
-

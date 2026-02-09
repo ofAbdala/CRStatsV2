@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Link, useRoute } from "wouter";
+import { useEffect, type ReactNode } from "react";
+import { Link, useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import PageErrorState from "@/components/PageErrorState";
@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Crown, Loader2, Trophy } from "lucide-react";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/hooks/use-locale";
+import { parseClashTag } from "@shared/clashTag";
 
 interface PublicPlayerResponse {
   player: {
@@ -35,15 +36,27 @@ function getBattleResultLabel(battle: any, t: (key: string) => string) {
 
 export default function PublicProfilePage() {
   const { t } = useLocale();
+  const [, setLocation] = useLocation();
   const [, params] = useRoute("/p/:tag");
-  const rawTag = params?.tag || "";
-  const playerTag = rawTag ? `#${rawTag.replace(/^#/, "")}` : "";
+  const rawTagParam = params?.tag || "";
+  const parsedTag = parseClashTag(rawTagParam);
+  const canonicalTag = parsedTag?.withoutHash || "";
+  const displayTag = parsedTag?.withHash || (rawTagParam ? `#${rawTagParam.replace(/^#/, "").toUpperCase()}` : "");
+
+  useEffect(() => {
+    if (!parsedTag) return;
+    if (rawTagParam !== parsedTag.withoutHash) {
+      setLocation(`/p/${parsedTag.withoutHash}`, { replace: true });
+    }
+  }, [parsedTag, rawTagParam, setLocation]);
 
   const publicPlayerQuery = useQuery({
-    queryKey: ["public-player", rawTag],
-    queryFn: () => api.public.getPlayer(rawTag) as Promise<PublicPlayerResponse>,
-    enabled: Boolean(rawTag),
+    queryKey: ["public-player", canonicalTag],
+    queryFn: () => api.public.getPlayer(canonicalTag) as Promise<PublicPlayerResponse>,
+    enabled: Boolean(canonicalTag),
   });
+
+  const isNotFound = publicPlayerQuery.error instanceof ApiError && publicPlayerQuery.error.status === 404;
 
   const player = publicPlayerQuery.data?.player;
   const battles = publicPlayerQuery.data?.recentBattles || [];
@@ -61,7 +74,13 @@ export default function PublicProfilePage() {
           </Button>
         </Link>
 
-        {publicPlayerQuery.isLoading ? (
+        {!canonicalTag ? (
+          <PageErrorState
+            title={t("pages.publicProfile.invalidTagTitle")}
+            description={t("pages.publicProfile.invalidTagDescription", { tag: displayTag || "#?" })}
+            showReload={false}
+          />
+        ) : publicPlayerQuery.isLoading ? (
           <Card className="border-border/50 bg-card/50">
             <CardContent className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -70,8 +89,12 @@ export default function PublicProfilePage() {
           </Card>
         ) : publicPlayerQuery.isError || !player ? (
           <PageErrorState
-            title={t("pages.publicProfile.errorTitle")}
-            description={t("pages.publicProfile.errorDescription", { tag: playerTag })}
+            title={isNotFound ? t("pages.publicProfile.tagNotFoundTitle") : t("pages.publicProfile.errorTitle")}
+            description={
+              isNotFound
+                ? t("pages.publicProfile.tagNotFoundDescription", { tag: displayTag })
+                : t("pages.publicProfile.errorDescription", { tag: displayTag })
+            }
             error={publicPlayerQuery.error}
             onRetry={() => publicPlayerQuery.refetch()}
           />
@@ -86,7 +109,7 @@ export default function PublicProfilePage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h1 className="text-2xl font-display font-bold">{player.name || t("pages.publicProfile.playerFallback")}</h1>
-                      <Badge variant="outline">{player.tag || playerTag}</Badge>
+                      <Badge variant="outline">{player.tag || displayTag}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {player.arena?.name || t("pages.publicProfile.arenaFallback")}

@@ -1,4 +1,14 @@
-export type TiltLevel = "high" | "medium" | "none";
+import {
+  computeTiltLevel,
+  computeTiltState,
+  parseBattleTime,
+  type TiltDecayStage,
+  type TiltLevel,
+  type TiltState,
+} from "@shared/domain/tilt";
+
+export type { TiltDecayStage, TiltLevel, TiltState };
+export { computeTiltLevel, computeTiltState, parseBattleTime };
 
 export interface PushSession {
   startTime: Date;
@@ -21,60 +31,6 @@ interface GoalAutoProgressContext {
   playerTrophies: number;
   winRate: number;
   streak: { type: "win" | "loss" | "none"; count: number };
-}
-
-export function parseBattleTime(value: string): Date {
-  if (!value) return new Date(NaN);
-
-  const formatted = value.replace(
-    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.(\d{3})Z$/,
-    "$1-$2-$3T$4:$5:$6.$7Z",
-  );
-
-  const parsed = new Date(formatted);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed;
-  }
-
-  return new Date(value);
-}
-
-export function computeTiltLevel(battles: any[]): TiltLevel {
-  if (!battles || battles.length === 0) return "none";
-
-  const last10 = battles.slice(0, 10);
-
-  let wins = 0;
-  let netTrophies = 0;
-  let consecutiveLosses = 0;
-  let maxConsecutiveLosses = 0;
-
-  for (const battle of last10) {
-    const isVictory = battle?.team?.[0]?.crowns > battle?.opponent?.[0]?.crowns;
-    const trophyChange = battle?.team?.[0]?.trophyChange || 0;
-
-    if (isVictory) {
-      wins += 1;
-      consecutiveLosses = 0;
-    } else {
-      consecutiveLosses += 1;
-      maxConsecutiveLosses = Math.max(maxConsecutiveLosses, consecutiveLosses);
-    }
-
-    netTrophies += trophyChange;
-  }
-
-  const winRate = last10.length > 0 ? (wins / last10.length) * 100 : 50;
-
-  if (maxConsecutiveLosses >= 3 || (winRate < 40 && netTrophies <= -60)) {
-    return "high";
-  }
-
-  if (winRate >= 40 && winRate <= 50 && netTrophies < 0) {
-    return "medium";
-  }
-
-  return "none";
 }
 
 export function computeConsecutiveLosses(battles: any[]): number {

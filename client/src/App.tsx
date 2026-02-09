@@ -22,6 +22,7 @@ import PublicProfilePage from "@/pages/public-profile";
 import BillingPage from "@/pages/billing";
 import MePage from "@/pages/me";
 import NotificationsPage from "@/pages/notifications";
+import GoalsPage from "@/pages/goals";
 
 function withLocalBoundary(component: ComponentType, contextKey: string) {
   return function ComponentWithBoundary() {
@@ -40,6 +41,7 @@ const CoachWithBoundary = withLocalBoundary(CoachPage, "coach");
 const TrainingWithBoundary = withLocalBoundary(TrainingPage, "training");
 const BillingWithBoundary = withLocalBoundary(BillingPage, "billing");
 const NotificationsWithBoundary = withLocalBoundary(NotificationsPage, "notifications");
+const GoalsWithBoundary = withLocalBoundary(GoalsPage, "goals");
 
 function RedirectToAuth() {
   const [, setLocation] = useLocation();
@@ -79,6 +81,7 @@ function Router() {
           <Route path="/training" component={TrainingWithBoundary} />
           <Route path="/decks" component={DecksPage} />
           <Route path="/community" component={CommunityPage} />
+          <Route path="/goals" component={GoalsWithBoundary} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/onboarding" component={OnboardingPage} />
@@ -93,6 +96,7 @@ function Router() {
           <Route path="/training" component={RedirectToAuth} />
           <Route path="/decks" component={RedirectToAuth} />
           <Route path="/community" component={RedirectToAuth} />
+          <Route path="/goals" component={RedirectToAuth} />
           <Route path="/settings" component={RedirectToAuth} />
           <Route path="/profile" component={RedirectToAuth} />
           <Route path="/onboarding" component={RedirectToAuth} />
