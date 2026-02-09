@@ -36,6 +36,8 @@ const codeToTranslationKey: Record<string, string> = {
   SETTINGS_FETCH_FAILED: "apiErrors.codes.settingsFetchFailed",
   NOTIFICATION_PREFERENCES_UPDATE_FAILED: "apiErrors.codes.preferencesUpdateFailed",
   FREE_PROFILE_LIMIT_REACHED: "apiErrors.codes.freeProfileLimitReached",
+  DECK_COUNTER_DAILY_LIMIT_REACHED: "apiErrors.codes.deckCounterLimitReached",
+  DECK_OPTIMIZER_DAILY_LIMIT_REACHED: "apiErrors.codes.deckOptimizerLimitReached",
 };
 
 export function getApiErrorMessage(

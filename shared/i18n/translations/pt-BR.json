@@ -31,6 +31,9 @@
     "coach": "Coach IA",
     "training": "Treinos",
     "decks": "Decks",
+    "metaDecks": "Decks do Meta",
+    "counterDeck": "Deck Contra",
+    "improveMyDeck": "Melhorar Meu Deck",
     "community": "Comunidade",
     "settings": "Configurações",
     "billing": "Assinatura",
@@ -39,6 +42,70 @@
     "login": "Entrar",
     "myProfile": "Meu Perfil",
     "notifications": "Notificações"
+  },
+  "decks": {
+    "meta": {
+      "title": "Decks do Meta",
+      "subtitle": "Decks mais usados e com maior taxa de vitória na sua faixa de troféus.",
+      "trophyRangeLabel": "Faixa de troféus",
+      "trophyRangeAll": "Todos",
+      "trophyRange5000": "5000+",
+      "trophyRange6000": "6000+",
+      "trophyRange7000": "7000+",
+      "deckFallback": "Deck do meta",
+      "avgElixir": "Elixir médio",
+      "winRate": "Taxa de vitória",
+      "sampleSize": "Amostra",
+      "copyDeck": "Copiar deck"
+    },
+    "counter": {
+      "title": "Deck Contra",
+      "subtitle": "Escolha uma carta problema e vamos sugerir um deck que se sai bem contra ela.",
+      "formTitle": "Montar",
+      "formSubtitle": "Escolha a carta e o estilo. Vamos gerar um deck contra usando meta real + IA.",
+      "cardLabel": "Carta problema",
+      "cardPlaceholder": "Selecione uma carta",
+      "styleLabel": "Estilo do deck",
+      "styleBalanced": "Balanceado",
+      "styleCycle": "Ciclo rápido",
+      "styleHeavy": "Controle pesado",
+      "generateButton": "Gerar deck contra",
+      "resultTitle": "Resultado",
+      "resultSubtitle": "Um deck sugerido vai aparecer aqui.",
+      "emptyState": "Selecione uma carta e clique em Gerar para ver um deck sugerido.",
+      "explanationTitle": "Por que este deck?",
+      "explanationMock": "Sugestão mock para responder {card} com um plano {style}.",
+      "copyCode": "Copiar link do deck",
+      "favorite": "Marcar como favorito",
+      "toastCopiedCode": "Link do deck copiado para a área de transferência."
+    },
+    "optimizer": {
+      "title": "Melhorar Meu Deck",
+      "subtitle": "Escolha um deck e um objetivo para ver sugestões de mudanças.",
+      "selectDeckTitle": "Escolha o deck que você quer melhorar",
+      "selectDeckHint": "Clique em um deck para usá-lo como base.",
+      "selected": "Selecionado",
+      "goalTitle": "O que você quer melhorar?",
+      "goalHint": "Escolha um objetivo. Alguns objetivos pedem entradas extras.",
+      "goalCycle": "Diminuir elixir médio / ciclar mais rápido",
+      "goalCounterCard": "Melhor contra uma carta específica",
+      "goalConsistency": "Mais consistência no geral",
+      "targetCardLabel": "Carta alvo",
+      "suggestionsTitle": "Mudanças sugeridas",
+      "suggestionsHint": "Gere uma sugestão com IA usando seu deck + contexto do meta.",
+      "suggestionsPlaceholder": "Selecione um deck e um objetivo para ver sugestões aqui.",
+      "improveButton": "Melhorar deck",
+      "originalDeck": "Deck original",
+      "suggestedDeck": "Deck sugerido",
+      "changesTitle": "Mudanças",
+      "noChanges": "Nenhuma mudança gerada para esta combinação ainda.",
+      "explanationTitle": "Explicação",
+      "copyNewDeck": "Copiar novo deck",
+      "importLinkTitle": "Link de importação",
+      "showImportLink": "Ver link de importação",
+      "previewTitle": "Código do deck (mock)",
+      "previewCode": "Ver código do deck"
+    }
   },
   "landing": {
     "hero": {
@@ -399,7 +466,9 @@
       "settingsUpdateFailed": "Falha ao atualizar configurações.",
       "settingsFetchFailed": "Falha ao carregar configurações.",
       "preferencesUpdateFailed": "Falha ao atualizar preferências de notificação.",
-      "freeProfileLimitReached": "No plano FREE, você pode salvar apenas 1 perfil. Faça upgrade para salvar mais."
+      "freeProfileLimitReached": "No plano FREE, você pode salvar apenas 1 perfil. Faça upgrade para salvar mais.",
+      "deckCounterLimitReached": "Você atingiu o limite diário do Deck Contra no plano FREE. Faça upgrade para PRO para uso ilimitado.",
+      "deckOptimizerLimitReached": "Você atingiu o limite diário do Melhorar Meu Deck no plano FREE. Faça upgrade para PRO para uso ilimitado."
     }
   },
   "pages": {

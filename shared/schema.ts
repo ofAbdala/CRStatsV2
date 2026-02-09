@@ -4,6 +4,7 @@ import {
   uniqueIndex,
   jsonb,
   pgTable,
+  real,
   timestamp,
   varchar,
   text,
@@ -370,9 +371,17 @@ export const metaDecksCache = pgTable("meta_decks_cache", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   deckHash: varchar("deck_hash").notNull().unique(),
   cards: jsonb("cards").notNull().$type<string[]>(),
+  // NOTE: usageCount is treated as "games" in deck/meta APIs (kept for backwards compatibility).
   usageCount: integer("usage_count").notNull().default(0),
   avgTrophies: integer("avg_trophies"),
   archetype: varchar("archetype"),
+  wins: integer("wins").notNull().default(0),
+  losses: integer("losses").notNull().default(0),
+  draws: integer("draws").notNull().default(0),
+  avgElixir: real("avg_elixir"),
+  winRateEstimate: real("win_rate_estimate"),
+  sourceRegion: varchar("source_region"),
+  sourceRange: varchar("source_range"),
   lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
 });
 
@@ -381,6 +390,34 @@ export const insertMetaDeckCacheSchema = createInsertSchema(metaDecksCache).omit
 });
 export type InsertMetaDeckCache = z.infer<typeof insertMetaDeckCacheSchema>;
 export type MetaDeckCache = typeof metaDecksCache.$inferSelect;
+
+// ============================================================================
+// DECK SUGGESTIONS USAGE (FREE LIMITS)
+// ============================================================================
+
+export const deckSuggestionsUsage = pgTable(
+  "deck_suggestions_usage",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    suggestionType: varchar("suggestion_type").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("IDX_deck_suggestions_usage_user_type_created").on(
+      table.userId,
+      table.suggestionType,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const insertDeckSuggestionsUsageSchema = createInsertSchema(deckSuggestionsUsage).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDeckSuggestionsUsage = z.infer<typeof insertDeckSuggestionsUsageSchema>;
+export type DeckSuggestionsUsage = typeof deckSuggestionsUsage.$inferSelect;
 
 // ============================================================================
 // REQUEST ZOD SCHEMAS FOR ROUTES
@@ -442,6 +479,37 @@ export const notificationPreferencesUpdateInputSchema = settingsNotificationCate
 );
 
 export const playerSyncRequestSchema = z.object({}).strict();
+
+export const counterDeckRequestSchema = z
+  .object({
+    targetCardKey: z.string().trim().min(1).max(80),
+    deckStyle: z.enum(["balanced", "cycle", "heavy"]).optional(),
+    trophyRange: z
+      .object({
+        min: z.number().int().nonnegative(),
+        max: z.number().int().nonnegative(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+export const deckOptimizerRequestSchema = z
+  .object({
+    currentDeck: z.array(z.string().trim().min(1).max(80)).length(8),
+    goal: z.enum(["cycle", "counter-card", "consistency"]),
+    targetCardKey: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict()
+  .superRefine((payload, ctx) => {
+    if (payload.goal === "counter-card" && !payload.targetCardKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["targetCardKey"],
+        message: "targetCardKey is required when goal is counter-card",
+      });
+    }
+  });
 
 export const goalCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),

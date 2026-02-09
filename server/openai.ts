@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { z } from "zod";
 
 const hasOpenAIConfig =
   Boolean(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL) &&
@@ -95,6 +96,57 @@ function safeParseJson<T>(raw: string): T | null {
   } catch {
     return null;
   }
+}
+
+function extractJsonObject(raw: string): string | null {
+  if (typeof raw !== "string") return null;
+  const start = raw.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i]!;
+
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === "\"") {
+        inString = false;
+        continue;
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return raw.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function safeParseStrictJson<T>(raw: string): T | null {
+  const extracted = extractJsonObject(raw);
+  const candidate = extracted ?? raw;
+  return safeParseJson<T>(candidate);
 }
 
 function fallbackPushAnalysis(session: PushSessionContext): PushAnalysisResult {
@@ -286,5 +338,217 @@ Sem markdown.`;
   } catch (error) {
     logOpenAIError("training_plan", error, logContext);
     return fallbackTrainingPlan(analysis);
+  }
+}
+
+// ============================================================================
+// DECKS: COUNTER + OPTIMIZER (OpenAI)
+// ============================================================================
+
+export type CounterDeckStyle = "balanced" | "cycle" | "heavy";
+
+export interface CounterDeckSuggestionContext {
+  targetCardKey: string;
+  deckStyle?: CounterDeckStyle;
+  candidateDecks: Array<{
+    cards: string[];
+    avgElixir: number;
+    winRateEstimate?: number;
+    games?: number;
+  }>;
+  language?: "pt" | "en";
+}
+
+export interface CounterDeckSuggestionResult {
+  deck: string[];
+  explanation: string;
+}
+
+const counterDeckResultSchema = z.object({
+  deck: z.array(z.string().trim().min(1)).length(8),
+  explanation: z.string().trim().min(1),
+});
+
+function fallbackCounterDeckSuggestion(context: CounterDeckSuggestionContext): CounterDeckSuggestionResult {
+  const first = context.candidateDecks[0];
+  const deck = Array.isArray(first?.cards) ? first.cards.slice(0, 8).map((c) => String(c)) : [];
+  const language = context.language === "en" ? "en" : "pt";
+  const explanation =
+    language === "en"
+      ? `Fallback suggestion based on the current meta. It should help handle ${context.targetCardKey} with a ${context.deckStyle ?? "balanced"} plan.`
+      : `Sugestao de fallback baseada no meta atual. Deve ajudar a lidar com ${context.targetCardKey} com um plano ${context.deckStyle ?? "balanced"}.`;
+
+  // Ensure we always return 8 strings (route validation may still reject and fallback again).
+  while (deck.length < 8) deck.push("Knight");
+  return { deck: deck.slice(0, 8), explanation };
+}
+
+export async function generateCounterDeckSuggestion(
+  context: CounterDeckSuggestionContext,
+  logContext?: ProviderLogContext,
+): Promise<CounterDeckSuggestionResult> {
+  const language = context.language === "en" ? "en" : "pt";
+  const systemPrompt =
+    language === "en"
+      ? `You are a Clash Royale deck expert. Return ONLY valid JSON (no markdown).
+Format: {"deck":["Card 1",...,"Card 8"],"explanation":"string"}.
+Rules:
+- Exactly 8 unique cards (by name).
+- Prefer selecting ONE of the provided candidate decks. You may change at most 2 cards.
+- Keep the playstyle: cycle (~3.0-3.3 avg elixir), balanced (~3.4-3.9), heavy (~4.2-4.8).
+- Explanation must be short and practical (2-5 sentences).`
+      : `Voce e um especialista em decks de Clash Royale. Retorne APENAS JSON valido (sem markdown).
+Formato: {"deck":["Carta 1",...,"Carta 8"],"explanation":"string"}.
+Regras:
+- Exatamente 8 cartas unicas (por nome).
+- Prefira selecionar UM dos candidateDecks. Voce pode trocar no maximo 2 cartas.
+- Respeite o estilo: cycle (~3.0-3.3), balanced (~3.4-3.9), heavy (~4.2-4.8) de elixir medio.
+- Explicacao curta e pratica (2-5 frases).`;
+
+  try {
+    const result = await createCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Context: ${JSON.stringify({
+            targetCardKey: context.targetCardKey,
+            deckStyle: context.deckStyle ?? "balanced",
+            candidateDecks: context.candidateDecks.slice(0, 10),
+          })}`,
+        },
+      ],
+      500,
+    );
+
+    const parsed = safeParseStrictJson<unknown>(result);
+    const validated = counterDeckResultSchema.safeParse(parsed);
+    if (!validated.success) {
+      return fallbackCounterDeckSuggestion(context);
+    }
+
+    return {
+      deck: validated.data.deck.map((c) => String(c).trim()),
+      explanation: validated.data.explanation,
+    };
+  } catch (error) {
+    logOpenAIError("deck_counter", error, logContext);
+    return fallbackCounterDeckSuggestion(context);
+  }
+}
+
+export interface DeckOptimizationSuggestionContext {
+  currentDeck: string[];
+  avgElixirBefore: number;
+  goal: "cycle" | "counter-card" | "consistency";
+  targetCardKey?: string;
+  winCondition?: string | null;
+  metaSimilarDecks?: Array<{
+    cards: string[];
+    avgElixir: number;
+    winRateEstimate?: number;
+    games?: number;
+  }>;
+  language?: "pt" | "en";
+}
+
+export interface DeckOptimizationSuggestionResult {
+  newDeck: string[];
+  changes: Array<{ from: string; to: string }>;
+  explanation: string;
+}
+
+const optimizerResultSchema = z.object({
+  newDeck: z.array(z.string().trim().min(1)).length(8),
+  changes: z
+    .array(
+      z.object({
+        from: z.string().trim().min(1),
+        to: z.string().trim().min(1),
+      }),
+    )
+    .optional(),
+  explanation: z.string().trim().min(1),
+});
+
+function fallbackOptimizerSuggestion(context: DeckOptimizationSuggestionContext): DeckOptimizationSuggestionResult {
+  const deck = Array.isArray(context.metaSimilarDecks) && context.metaSimilarDecks.length > 0
+    ? context.metaSimilarDecks[0]!.cards.slice(0, 8).map((c) => String(c))
+    : context.currentDeck.slice(0, 8).map((c) => String(c));
+
+  const language = context.language === "en" ? "en" : "pt";
+  const explanation =
+    language === "en"
+      ? "Fallback optimization. Try again later for a more tailored suggestion."
+      : "Otimizacao de fallback. Tente novamente mais tarde para uma sugestao mais personalizada.";
+
+  while (deck.length < 8) deck.push("Knight");
+
+  return {
+    newDeck: deck.slice(0, 8),
+    changes: [],
+    explanation,
+  };
+}
+
+export async function generateDeckOptimizationSuggestion(
+  context: DeckOptimizationSuggestionContext,
+  logContext?: ProviderLogContext,
+): Promise<DeckOptimizationSuggestionResult> {
+  const language = context.language === "en" ? "en" : "pt";
+  const systemPrompt =
+    language === "en"
+      ? `You are a Clash Royale deck coach. Return ONLY valid JSON (no markdown).
+Format: {"newDeck":["Card 1",...,"Card 8"],"changes":[{"from":"...","to":"..."}],"explanation":"string"}.
+Rules:
+- Exactly 8 unique cards by name.
+- Keep the deck's win condition if provided in context.winCondition (do not remove it).
+- For goal="cycle": reduce average elixir by replacing heavy cards with cheaper alternatives.
+- For goal="counter-card": include at least one reliable response to context.targetCardKey.
+- For goal="consistency": improve synergy and avoid clunky combinations.
+- Use metaSimilarDecks as inspiration, not a hard constraint.`
+      : `Voce e um coach de decks de Clash Royale. Retorne APENAS JSON valido (sem markdown).
+Formato: {"newDeck":["Carta 1",...,"Carta 8"],"changes":[{"from":"...","to":"..."}],"explanation":"string"}.
+Regras:
+- Exatamente 8 cartas unicas por nome.
+- Mantenha a win condition se fornecida em context.winCondition (nao remova).
+- Para goal="cycle": reduza elixir medio trocando cartas pesadas por opcoes mais baratas.
+- Para goal="counter-card": inclua pelo menos uma resposta confiavel a context.targetCardKey.
+- Para goal="consistency": melhore sinergia e evite combinacoes travadas.
+- Use metaSimilarDecks como inspiracao, nao como regra.`;
+
+  try {
+    const result = await createCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Context: ${JSON.stringify({
+            currentDeck: context.currentDeck,
+            avgElixirBefore: context.avgElixirBefore,
+            goal: context.goal,
+            targetCardKey: context.targetCardKey ?? null,
+            winCondition: context.winCondition ?? null,
+            metaSimilarDecks: (context.metaSimilarDecks ?? []).slice(0, 5),
+          })}`,
+        },
+      ],
+      650,
+    );
+
+    const parsed = safeParseStrictJson<unknown>(result);
+    const validated = optimizerResultSchema.safeParse(parsed);
+    if (!validated.success) {
+      return fallbackOptimizerSuggestion(context);
+    }
+
+    return {
+      newDeck: validated.data.newDeck.map((c) => String(c).trim()),
+      changes: validated.data.changes ?? [],
+      explanation: validated.data.explanation,
+    };
+  } catch (error) {
+    logOpenAIError("deck_optimizer", error, logContext);
+    return fallbackOptimizerSuggestion(context);
   }
 }

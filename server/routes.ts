@@ -5,7 +5,7 @@ import Stripe from "stripe";
 import { getUserStorage, serviceStorage, type IStorage } from "./storage";
 import { requireAuth } from "./supabaseAuth";
 import { getPlayerByTag, getPlayerBattles, getCards, getPlayerRankings, getClanRankings, getClanByTag, getClanMembers, getTopPlayersInLocation } from "./clashRoyaleApi";
-import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, ChatMessage, BattleContext, PushSessionContext } from "./openai";
+import { generateCoachResponse, generatePushAnalysis, generateTrainingPlan, generateCounterDeckSuggestion, generateDeckOptimizationSuggestion, ChatMessage, BattleContext, PushSessionContext } from "./openai";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey, getStripeSecretKey, getUncachableStripeClient } from "./stripeClient";
 import { z } from "zod";
@@ -20,6 +20,8 @@ import {
   profileCreateInputSchema,
   profileUpdateInputSchema,
   settingsUpdateInputSchema,
+  counterDeckRequestSchema,
+  deckOptimizerRequestSchema,
   trainingDrillUpdateInputSchema,
   trainingPlanUpdateInputSchema,
 } from "@shared/schema";
@@ -33,8 +35,11 @@ import {
 } from "./domain/syncRules";
 import { FREE_BATTLE_LIMIT, clampHistoryDays, clampHistoryLimit } from "./domain/battleHistory";
 import { validateCheckoutPriceId } from "./domain/stripeCheckout";
+import { COUNTER_MAP, buildClashDeckImportLink, computeAvgElixir, computeChanges, detectArchetype, detectWinCondition, getCardIndex } from "./domain/decks";
+import { refreshMetaDecksCacheIfStale } from "./domain/metaDecksRefresh";
 
 const FREE_DAILY_LIMIT = 5;
+const FREE_DECK_SUGGESTION_DAILY_LIMIT = 2;
 
 type ApiProvider = "internal" | "supabase-auth" | "clash-royale" | "stripe" | "openai";
 
@@ -3388,11 +3393,104 @@ export async function registerRoutes(
   });
 
   // ============================================================================
-  // META DECKS ROUTES
+  // DECKS ROUTES
   // ============================================================================
 
-  app.get('/api/meta/decks', requireAuth, async (req: any, res) => {
-    const route = "/api/meta/decks";
+  function normalizeDeckKey(value: string) {
+    return value.trim().toLowerCase();
+  }
+
+  function isValidDeckCards(cards: unknown): cards is string[] {
+    if (!Array.isArray(cards) || cards.length !== 8) return false;
+    const seen = new Set<string>();
+    for (const card of cards) {
+      if (typeof card !== "string") return false;
+      const key = normalizeDeckKey(card);
+      if (!key) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+    }
+    return true;
+  }
+
+  function createMetaDecksHandler(route: string) {
+    return async (req: any, res: any) => {
+      const userId = getUserId(req);
+
+      try {
+        if (!userId) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "supabase-auth",
+            status: 401,
+            error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+          });
+        }
+
+        const minTrophiesRaw = req.query?.minTrophies;
+        const minTrophiesParsed = typeof minTrophiesRaw === "string" ? Number.parseInt(minTrophiesRaw, 10) : NaN;
+        const minTrophies = Number.isFinite(minTrophiesParsed) ? Math.max(0, minTrophiesParsed) : undefined;
+
+        const storage = getUserStorage(req.auth!);
+        const cached = await storage.getMetaDecks({ minTrophies, limit: 50 });
+
+        const refreshStatus = await refreshMetaDecksCacheIfStale({
+          ttlMs: 4 * 60 * 60 * 1000,
+          players: 50,
+          battlesPerPlayer: 10,
+        });
+
+        const cacheStatus: "fresh" | "stale" = refreshStatus === "failed" ? "stale" : "fresh";
+        const decks = refreshStatus === "refreshed" ? await storage.getMetaDecks({ minTrophies, limit: 50 }) : cached;
+
+        const cardIndex = await getCardIndex().catch(() => null);
+
+        return res.json(
+          decks.map((deck) => {
+            const games = typeof deck.usageCount === "number" ? deck.usageCount : 0;
+            const wins = typeof (deck as any).wins === "number" ? (deck as any).wins : 0;
+            const losses = typeof (deck as any).losses === "number" ? (deck as any).losses : 0;
+            const storedAvgElixir = typeof (deck as any).avgElixir === "number" ? (deck as any).avgElixir : null;
+            const avgElixir = storedAvgElixir !== null ? storedAvgElixir : cardIndex ? computeAvgElixir(deck.cards, cardIndex) : 3.5;
+            const storedWinRate = typeof (deck as any).winRateEstimate === "number" ? (deck as any).winRateEstimate : null;
+            const winRateEstimate =
+              storedWinRate !== null ? storedWinRate : games > 0 ? Number((((wins + 1) / (games + 2)) * 100).toFixed(2)) : 50;
+
+            return {
+              deckHash: deck.deckHash,
+              cards: deck.cards,
+              avgElixir,
+              games,
+              wins,
+              losses,
+              winRateEstimate,
+              archetype: deck.archetype ?? null,
+              lastUpdatedAt: deck.lastUpdatedAt?.toISOString?.() || new Date().toISOString(),
+              cacheStatus,
+            };
+          }),
+        );
+      } catch (error) {
+        console.error("Error fetching meta decks:", error);
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 500,
+          error: { code: "META_DECKS_FETCH_FAILED", message: "Failed to fetch meta decks" },
+        });
+      }
+    };
+  }
+
+  // New endpoint
+  app.get("/api/decks/meta", requireAuth, createMetaDecksHandler("/api/decks/meta"));
+  // Backwards-compatible alias
+  app.get("/api/meta/decks", requireAuth, createMetaDecksHandler("/api/meta/decks"));
+
+  app.post("/api/decks/builder/counter", requireAuth, async (req: any, res: any) => {
+    const route = "/api/decks/builder/counter";
     const userId = getUserId(req);
 
     try {
@@ -3407,117 +3505,348 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
-      const cachedDecks = await storage.getMetaDecks();
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const toDeckResponse = (decks: any[], staleReason: "fresh" | "stale" = "fresh") =>
-        decks.map((deck) => {
-          const avgTrophies = typeof deck.avgTrophies === "number" ? deck.avgTrophies : null;
-          const estimatedWinRate = avgTrophies === null
-            ? 50
-            : Math.max(45, Math.min(72, 45 + (avgTrophies - 6000) / 120));
+      const isPro = await storage.isPro(userId);
 
-          return {
-            ...deck,
-            sampleSize: deck.usageCount ?? 0,
-            estimatedWinRate: Number(estimatedWinRate.toFixed(1)),
-            cacheStatus: staleReason,
-          };
+      const payload = parseRequestBody(counterDeckRequestSchema, req.body);
+      if (!payload.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid counter deck payload",
+            details: payload.details,
+          },
         });
-      
-      const needsRefresh = cachedDecks.length === 0 || 
-        cachedDecks.every(d => new Date(d.lastUpdatedAt || 0) < oneHourAgo);
-      
-      if (needsRefresh) {
-        try {
-          const topPlayersResult = await getTopPlayersInLocation('global', 50);
-          if (topPlayersResult.data) {
-            const items = (topPlayersResult.data as any).items || [];
-            const deckMap = new Map<string, { cards: string[]; count: number; totalTrophies: number }>();
-            
-            for (const player of items) {
-              if (player.currentDeck) {
-                const cardNames = player.currentDeck.map((c: any) => c.name).sort();
-                const deckHash = cardNames.join('|');
-                
-                if (deckMap.has(deckHash)) {
-                  const existing = deckMap.get(deckHash)!;
-                  existing.count++;
-                  existing.totalTrophies += player.trophies || 0;
-                } else {
-                  deckMap.set(deckHash, {
-                    cards: cardNames,
-                    count: 1,
-                    totalTrophies: player.trophies || 0,
-                  });
-                }
-              }
-            }
-            
-            const sortedDecks = Array.from(deckMap.entries())
-              .sort((a, b) => b[1].count - a[1].count)
-              .slice(0, 20);
-            
-            await serviceStorage.clearMetaDecks();
-            
-            for (const [deckHash, data] of sortedDecks) {
-              await serviceStorage.createMetaDeck({
-                deckHash,
-                cards: data.cards,
-                usageCount: data.count,
-                avgTrophies: Math.round(data.totalTrophies / data.count),
-                archetype: detectArchetype(data.cards),
-              });
-            }
-            
-            const newDecks = await storage.getMetaDecks();
-            return res.json(toDeckResponse(newDecks, "fresh"));
-          }
-        } catch (refreshError) {
-          console.error("Error refreshing meta decks:", refreshError);
-          if (cachedDecks.length > 0) {
-            return res.json(toDeckResponse(cachedDecks, "stale"));
-          }
-          return res.json([]);
+      }
+
+      if (!isPro) {
+        const used = await storage.countDeckSuggestionsToday(userId, "counter");
+        if (used >= FREE_DECK_SUGGESTION_DAILY_LIMIT) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 403,
+            error: {
+              code: "DECK_COUNTER_DAILY_LIMIT_REACHED",
+              message: "Daily FREE counter deck limit reached. Upgrade to PRO for unlimited usage.",
+              details: { limit: FREE_DECK_SUGGESTION_DAILY_LIMIT },
+            },
+          });
         }
       }
-      
-      res.json(toDeckResponse(cachedDecks, "fresh"));
+
+      const deckStyle = payload.data.deckStyle ?? "balanced";
+      const targetCardKey = payload.data.targetCardKey;
+      const trophyRange = payload.data.trophyRange ?? null;
+
+      await refreshMetaDecksCacheIfStale({ ttlMs: 4 * 60 * 60 * 1000, players: 50, battlesPerPlayer: 10 });
+
+      const metaDecks = await storage.getMetaDecks({
+        minTrophies: trophyRange?.min ?? undefined,
+        limit: 50,
+      });
+      const metaFiltered =
+        trophyRange?.max != null
+          ? metaDecks.filter((deck) => deck.avgTrophies === null || deck.avgTrophies === undefined || deck.avgTrophies <= trophyRange.max)
+          : metaDecks;
+
+      const settings = await storage.getUserSettings(userId);
+      const language = settings?.preferredLanguage === "en" ? "en" : "pt";
+
+      const cardIndex = await getCardIndex();
+
+      const targetKey = normalizeDeckKey(targetCardKey);
+      const counterCards = COUNTER_MAP[targetKey] ?? ["The Log", "Arrows", "Fireball", "Poison", "Tornado"];
+      const counterKeys = new Set(counterCards.map((c) => normalizeDeckKey(c)));
+
+      type Candidate = {
+        cards: string[];
+        avgElixir: number;
+        winRateEstimate: number;
+        games: number;
+      };
+
+      const candidates: Candidate[] = metaFiltered
+        .map((deck) => {
+          const games = typeof deck.usageCount === "number" ? deck.usageCount : 0;
+          const wins = typeof (deck as any).wins === "number" ? (deck as any).wins : 0;
+          const storedAvgElixir = typeof (deck as any).avgElixir === "number" ? (deck as any).avgElixir : null;
+          const avgElixir = storedAvgElixir !== null ? storedAvgElixir : computeAvgElixir(deck.cards, cardIndex);
+          const storedWinRate = typeof (deck as any).winRateEstimate === "number" ? (deck as any).winRateEstimate : null;
+          const winRateEstimate =
+            storedWinRate !== null
+              ? storedWinRate
+              : games > 0
+                ? Number((((wins + 1) / (games + 2)) * 100).toFixed(2))
+                : 50;
+          return {
+            cards: deck.cards,
+            avgElixir,
+            winRateEstimate,
+            games,
+          } satisfies Candidate;
+        })
+        .filter((deck) => deck.cards.length === 8);
+
+      const styleTarget = deckStyle === "cycle" ? 3.15 : deckStyle === "heavy" ? 4.45 : 3.65;
+
+      const scored = candidates
+        .map((deck) => {
+          const deckCardKeys = new Set(deck.cards.map((c) => normalizeDeckKey(c)));
+          const counterHits = Array.from(counterKeys).filter((c) => deckCardKeys.has(c)).length;
+
+          // If we have a specific counter mapping, require at least one hit.
+          if ((COUNTER_MAP[targetKey]?.length ?? 0) > 0 && counterHits === 0) {
+            return null;
+          }
+
+          const stylePenalty = Math.abs(deck.avgElixir - styleTarget) * 6;
+          const sampleBonus = Math.log10(deck.games + 1) * 3;
+          const counterBonus = counterHits * 4;
+          const score = deck.winRateEstimate + sampleBonus + counterBonus - stylePenalty;
+
+          return { deck, score };
+        })
+        .filter((value): value is { deck: Candidate; score: number } => value !== null)
+        .sort((a, b) => b.score - a.score);
+
+      const top = scored.slice(0, 10).map((s) => s.deck);
+      const fallbackDeck = top[0] ?? candidates[0];
+
+      const ai = await generateCounterDeckSuggestion(
+        {
+          targetCardKey,
+          deckStyle,
+          candidateDecks: top.map((d) => ({
+            cards: d.cards,
+            avgElixir: d.avgElixir,
+            winRateEstimate: d.winRateEstimate,
+            games: d.games,
+          })),
+          language,
+        },
+        { provider: "openai", route, userId, requestId: getResponseRequestId(res) },
+      );
+
+      let finalCards = ai.deck;
+      const validAiDeck =
+        isValidDeckCards(finalCards) &&
+        finalCards.every((card) => cardIndex.byNameLower.has(normalizeDeckKey(card)));
+
+      if (!validAiDeck && fallbackDeck) {
+        finalCards = fallbackDeck.cards.slice(0, 8);
+      }
+
+      // Hard fallback if we still don't have a valid deck.
+      if (!isValidDeckCards(finalCards)) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 500,
+          error: { code: "DECK_COUNTER_FAILED", message: "Failed to generate a valid counter deck" },
+        });
+      }
+
+      const avgElixir = computeAvgElixir(finalCards, cardIndex);
+      const importLink = buildClashDeckImportLink(finalCards, cardIndex, language) ?? "";
+
+      if (!isPro) {
+        await storage.incrementDeckSuggestionUsage(userId, "counter");
+      }
+
+      return res.json({
+        deck: { cards: finalCards, avgElixir },
+        explanation: ai.explanation,
+        importLink,
+      });
     } catch (error) {
-      console.error("Error fetching meta decks:", error);
+      console.error("Error generating counter deck:", error);
       return sendApiError(res, {
         route,
         userId,
         provider: "internal",
         status: 500,
-        error: { code: "META_DECKS_FETCH_FAILED", message: "Failed to fetch meta decks" },
+        error: { code: "DECK_COUNTER_FAILED", message: "Failed to generate counter deck" },
+      });
+    }
+  });
+
+  app.post("/api/decks/optimizer", requireAuth, async (req: any, res: any) => {
+    const route = "/api/decks/optimizer";
+    const userId = getUserId(req);
+
+    try {
+      if (!userId) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "supabase-auth",
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        });
+      }
+
+      const storage = getUserStorage(req.auth!);
+      const isPro = await storage.isPro(userId);
+
+      const payload = parseRequestBody(deckOptimizerRequestSchema, req.body);
+      if (!payload.ok) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid deck optimizer payload",
+            details: payload.details,
+          },
+        });
+      }
+
+      if (!isPro) {
+        const used = await storage.countDeckSuggestionsToday(userId, "optimizer");
+        if (used >= FREE_DECK_SUGGESTION_DAILY_LIMIT) {
+          return sendApiError(res, {
+            route,
+            userId,
+            provider: "internal",
+            status: 403,
+            error: {
+              code: "DECK_OPTIMIZER_DAILY_LIMIT_REACHED",
+              message: "Daily FREE deck optimizer limit reached. Upgrade to PRO for unlimited usage.",
+              details: { limit: FREE_DECK_SUGGESTION_DAILY_LIMIT },
+            },
+          });
+        }
+      }
+
+      const { currentDeck, goal, targetCardKey } = payload.data;
+
+      await refreshMetaDecksCacheIfStale({ ttlMs: 4 * 60 * 60 * 1000, players: 50, battlesPerPlayer: 10 });
+
+      const settings = await storage.getUserSettings(userId);
+      const language = settings?.preferredLanguage === "en" ? "en" : "pt";
+
+      const cardIndex = await getCardIndex();
+
+      if (!isValidDeckCards(currentDeck) || !currentDeck.every((card) => cardIndex.byNameLower.has(normalizeDeckKey(card)))) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 400,
+          error: { code: "INVALID_DECK", message: "currentDeck must be 8 unique valid card names" },
+        });
+      }
+
+      const avgElixirBefore = computeAvgElixir(currentDeck, cardIndex);
+      const winCondition = detectWinCondition(currentDeck);
+
+      const metaDecks = await storage.getMetaDecks({ limit: 50 });
+      const currentSet = new Set(currentDeck.map((c) => normalizeDeckKey(c)));
+
+      const metaSimilarDecks = metaDecks
+        .map((deck) => {
+          const deckSet = new Set(deck.cards.map((c) => normalizeDeckKey(c)));
+          const shared = Array.from(currentSet).filter((c) => deckSet.has(c)).length;
+
+          const games = typeof deck.usageCount === "number" ? deck.usageCount : 0;
+          const wins = typeof (deck as any).wins === "number" ? (deck as any).wins : 0;
+          const storedAvgElixir = typeof (deck as any).avgElixir === "number" ? (deck as any).avgElixir : null;
+          const avgElixir = storedAvgElixir !== null ? storedAvgElixir : computeAvgElixir(deck.cards, cardIndex);
+          const storedWinRate = typeof (deck as any).winRateEstimate === "number" ? (deck as any).winRateEstimate : null;
+          const winRateEstimate =
+            storedWinRate !== null
+              ? storedWinRate
+              : games > 0
+                ? Number((((wins + 1) / (games + 2)) * 100).toFixed(2))
+                : 50;
+
+          return {
+            cards: deck.cards,
+            shared,
+            avgElixir,
+            winRateEstimate,
+            games,
+          };
+        })
+        .filter((deck) => deck.shared >= 4)
+        .sort((a, b) => {
+          if (b.shared !== a.shared) return b.shared - a.shared;
+          if ((b.winRateEstimate ?? 0) !== (a.winRateEstimate ?? 0)) return (b.winRateEstimate ?? 0) - (a.winRateEstimate ?? 0);
+          return (b.games ?? 0) - (a.games ?? 0);
+        })
+        .slice(0, 5);
+
+      const ai = await generateDeckOptimizationSuggestion(
+        {
+          currentDeck,
+          avgElixirBefore,
+          goal,
+          targetCardKey,
+          winCondition,
+          metaSimilarDecks: metaSimilarDecks.map((d) => ({
+            cards: d.cards,
+            avgElixir: d.avgElixir,
+            winRateEstimate: d.winRateEstimate,
+            games: d.games,
+          })),
+          language,
+        },
+        { provider: "openai", route, userId, requestId: getResponseRequestId(res) },
+      );
+
+      let newDeck = ai.newDeck;
+      const validAiDeck =
+        isValidDeckCards(newDeck) &&
+        newDeck.every((card) => cardIndex.byNameLower.has(normalizeDeckKey(card))) &&
+        (!winCondition || newDeck.map((c) => normalizeDeckKey(c)).includes(normalizeDeckKey(winCondition)));
+
+      if (!validAiDeck) {
+        newDeck = metaSimilarDecks[0]?.cards?.slice(0, 8) ?? currentDeck;
+      }
+
+      if (!isValidDeckCards(newDeck)) {
+        return sendApiError(res, {
+          route,
+          userId,
+          provider: "internal",
+          status: 500,
+          error: { code: "DECK_OPTIMIZER_FAILED", message: "Failed to generate a valid optimized deck" },
+        });
+      }
+
+      const avgElixirAfter = computeAvgElixir(newDeck, cardIndex);
+      const importLink = buildClashDeckImportLink(newDeck, cardIndex, language) ?? "";
+
+      if (!isPro) {
+        await storage.incrementDeckSuggestionUsage(userId, "optimizer");
+      }
+
+      return res.json({
+        originalDeck: { cards: currentDeck, avgElixir: avgElixirBefore },
+        suggestedDeck: { cards: newDeck, avgElixir: avgElixirAfter },
+        changes: computeChanges(currentDeck, newDeck),
+        explanation: ai.explanation,
+        importLink,
+      });
+    } catch (error) {
+      console.error("Error optimizing deck:", error);
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 500,
+        error: { code: "DECK_OPTIMIZER_FAILED", message: "Failed to optimize deck" },
       });
     }
   });
 
   return httpServer;
-}
-
-function detectArchetype(cards: string[]): string {
-  const cardSet = new Set(cards.map(c => c.toLowerCase()));
-  
-  if (cardSet.has('golem')) return 'Golem Beatdown';
-  if (cardSet.has('lava hound')) return 'LavaLoon';
-  if (cardSet.has('giant skeleton')) return 'Giant Skeleton';
-  if (cardSet.has('x-bow')) return 'X-Bow Cycle';
-  if (cardSet.has('mortar')) return 'Mortar Cycle';
-  if (cardSet.has('hog rider')) return 'Hog Cycle';
-  if (cardSet.has('royal giant')) return 'Royal Giant';
-  if (cardSet.has('giant')) return 'Giant Beatdown';
-  if (cardSet.has('p.e.k.k.a')) return 'P.E.K.K.A Bridge Spam';
-  if (cardSet.has('elixir golem')) return 'Elixir Golem';
-  if (cardSet.has('three musketeers')) return '3M Split';
-  if (cardSet.has('graveyard')) return 'Graveyard Control';
-  if (cardSet.has('mega knight')) return 'Mega Knight';
-  if (cardSet.has('royal hogs')) return 'Royal Hogs';
-  if (cardSet.has('miner') && cardSet.has('wall breakers')) return 'Miner WallBreakers';
-  if (cardSet.has('balloon')) return 'Balloon Cycle';
-  if (cardSet.has('goblin barrel')) return 'Log Bait';
-  if (cardSet.has('sparky')) return 'Sparky';
-  
-  return 'Custom';
 }

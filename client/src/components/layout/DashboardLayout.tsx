@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
   CheckCheck,
   CreditCard,
   Crown,
+  ChevronDown,
+  ChevronRight,
   Globe,
   Layers,
   LayoutDashboard,
@@ -19,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -36,10 +39,29 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
+type DecksTab = "meta" | "counter" | "optimizer";
+
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const pathname = location.split("?")[0];
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { t } = useLocale();
+
+  const decksTabParam = new URLSearchParams(search).get("tab");
+  const decksTab: DecksTab =
+    decksTabParam === "meta" || decksTabParam === "counter" || decksTabParam === "optimizer" ? decksTabParam : "meta";
+
+  const [isDecksOpen, setIsDecksOpen] = useState(() => pathname === "/decks");
+
+  useEffect(() => {
+    if (pathname === "/decks") {
+      setIsDecksOpen(true);
+      return;
+    }
+
+    setIsDecksOpen(false);
+  }, [pathname]);
 
   const { data: subscription } = useQuery({
     queryKey: ["subscription"],
@@ -78,7 +100,94 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         <nav className="space-y-2">
           {navigation.map((item) => {
-            const isActive = location === item.href;
+            if (item.href === "/decks") {
+              const isActive = pathname === item.href;
+
+              return (
+                <Collapsible key={item.href} open={isDecksOpen} onOpenChange={setIsDecksOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 w-full",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground translate-x-1"
+                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 hover:translate-x-1",
+                      )}
+                      onClick={(event) => {
+                        // We'll manage open state + navigation ourselves; avoid double-toggling from Radix.
+                        event.preventDefault();
+
+                        if (pathname !== "/decks") {
+                          setLocation("/decks?tab=meta");
+                          setIsDecksOpen(true);
+                          return;
+                        }
+
+                        setIsDecksOpen((open) => !open);
+                      }}
+                      aria-current={isActive ? "page" : undefined}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      <span className="flex-1 text-left">{t(item.key)}</span>
+                      {isDecksOpen ? (
+                        <ChevronDown className="w-4 h-4 opacity-70" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 opacity-70" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent>
+                    <div className="mt-1 space-y-1">
+                      <Link
+                        href="/decks?tab=meta"
+                        onClick={() => setIsDecksOpen(true)}
+                        className={cn(
+                          "flex items-center gap-3 pr-3 pl-10 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                          isActive && decksTab === "meta"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground translate-x-1"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 hover:translate-x-1",
+                        )}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" aria-hidden="true" />
+                        {t("nav.metaDecks")}
+                      </Link>
+
+                      <Link
+                        href="/decks?tab=counter"
+                        onClick={() => setIsDecksOpen(true)}
+                        className={cn(
+                          "flex items-center gap-3 pr-3 pl-10 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                          isActive && decksTab === "counter"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground translate-x-1"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 hover:translate-x-1",
+                        )}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" aria-hidden="true" />
+                        {t("nav.counterDeck")}
+                      </Link>
+
+                      <Link
+                        href="/decks?tab=optimizer"
+                        onClick={() => setIsDecksOpen(true)}
+                        className={cn(
+                          "flex items-center gap-3 pr-3 pl-10 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                          isActive && decksTab === "optimizer"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground translate-x-1"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 hover:translate-x-1",
+                        )}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" aria-hidden="true" />
+                        {t("nav.improveMyDeck")}
+                      </Link>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            }
+
+            const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}

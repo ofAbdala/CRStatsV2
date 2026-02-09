@@ -277,7 +277,40 @@ export const api = {
   },
 
   meta: {
+    // Backwards-compatible alias (preferred: api.decks.getMetaDecks)
     getDecks: () => fetchAPI<any[]>("/meta/decks"),
+  },
+
+  decks: {
+    getMetaDecks: (options?: { minTrophies?: number }) => {
+      const params = new URLSearchParams();
+      if (typeof options?.minTrophies === "number" && Number.isFinite(options.minTrophies)) {
+        params.set("minTrophies", String(Math.floor(options.minTrophies)));
+      }
+      const query = params.toString();
+      return fetchAPI<any[]>(`/decks/meta${query ? `?${query}` : ""}`);
+    },
+    generateCounter: (data: {
+      targetCardKey: string;
+      deckStyle?: "balanced" | "cycle" | "heavy";
+      trophyRange?: { min: number; max: number } | null;
+    }) =>
+      fetchAPI<{ deck: { cards: string[]; avgElixir: number }; explanation: string; importLink: string }>(
+        "/decks/builder/counter",
+        { method: "POST", body: JSON.stringify(data) },
+      ),
+    optimize: (data: {
+      currentDeck: string[];
+      goal: "cycle" | "counter-card" | "consistency";
+      targetCardKey?: string;
+    }) =>
+      fetchAPI<{
+        originalDeck: { cards: string[]; avgElixir: number };
+        suggestedDeck: { cards: string[]; avgElixir: number };
+        changes: { from: string; to: string }[];
+        explanation: string;
+        importLink: string;
+      }>("/decks/optimizer", { method: "POST", body: JSON.stringify(data) }),
   },
 
   community: {

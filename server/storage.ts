@@ -14,6 +14,7 @@ import {
   trainingPlans,
   trainingDrills,
   metaDecksCache,
+  deckSuggestionsUsage,
   type User,
   type UpsertUser,
   type Profile,
@@ -42,6 +43,7 @@ import {
   type TrainingDrill,
   type InsertTrainingDrill,
   type MetaDeckCache,
+  type InsertMetaDeckCache,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, lt, notInArray, sql } from "drizzle-orm";
@@ -61,6 +63,13 @@ interface MetaDeckWriteInput {
   usageCount?: number;
   avgTrophies?: number | null;
   archetype?: string | null;
+  wins?: number;
+  losses?: number;
+  draws?: number;
+  avgElixir?: number | null;
+  winRateEstimate?: number | null;
+  sourceRegion?: string | null;
+  sourceRange?: string | null;
   lastUpdatedAt?: Date | null;
 }
 
@@ -196,9 +205,15 @@ export interface IStorage {
   countActiveDrills(planId: string): Promise<number>;
 
   // Meta Decks Cache operations
-  getMetaDecks(): Promise<MetaDeckCache[]>;
+  getMetaDecks(options?: { minTrophies?: number; limit?: number }): Promise<MetaDeckCache[]>;
+  getMetaDecksLastUpdated(options?: { sourceRange?: string | null }): Promise<Date | null>;
+  replaceMetaDecks(decks: InsertMetaDeckCache[]): Promise<void>;
   createMetaDeck(deck: Partial<MetaDeckWriteInput>): Promise<MetaDeckCache>;
   clearMetaDecks(): Promise<void>;
+
+  // Deck suggestions usage (FREE limits)
+  countDeckSuggestionsToday(userId: string, type: "counter" | "optimizer"): Promise<number>;
+  incrementDeckSuggestionUsage(userId: string, type: "counter" | "optimizer"): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1075,8 +1090,57 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getMetaDecks(): Promise<MetaDeckCache[]> {
-    return this.runAsUser((conn) => conn.select().from(metaDecksCache).orderBy(desc(metaDecksCache.usageCount)));
+  async getMetaDecks(options?: { minTrophies?: number; limit?: number }): Promise<MetaDeckCache[]> {
+    const limit = typeof options?.limit === "number" && Number.isFinite(options.limit) ? Math.max(1, Math.min(200, Math.floor(options.limit))) : 50;
+    const minTrophies =
+      typeof options?.minTrophies === "number" && Number.isFinite(options.minTrophies)
+        ? Math.max(0, Math.floor(options.minTrophies))
+        : null;
+
+    return this.runAsUser((conn) => {
+      const base = conn.select().from(metaDecksCache);
+      const filtered = minTrophies !== null ? base.where(gte(metaDecksCache.avgTrophies, minTrophies)) : base;
+      return filtered.orderBy(desc(metaDecksCache.usageCount)).limit(limit);
+    });
+  }
+
+  async getMetaDecksLastUpdated(options?: { sourceRange?: string | null }): Promise<Date | null> {
+    return this.runAsUser(async (conn) => {
+      const base = conn
+        .select({
+          max: sql<Date | null>`max(${metaDecksCache.lastUpdatedAt})`,
+        })
+        .from(metaDecksCache);
+
+      const scoped =
+        options?.sourceRange && typeof options.sourceRange === "string"
+          ? base.where(eq(metaDecksCache.sourceRange, options.sourceRange))
+          : base;
+
+      const result = await scoped;
+      return result[0]?.max ?? null;
+    });
+  }
+
+  async replaceMetaDecks(decks: InsertMetaDeckCache[]): Promise<void> {
+    const normalizedDecks = Array.isArray(decks) ? decks : [];
+
+    const exec = async (conn: any) => {
+      await conn.delete(metaDecksCache);
+      if (normalizedDecks.length > 0) {
+        await conn.insert(metaDecksCache).values(normalizedDecks);
+      }
+    };
+
+    // When called as the service storage (no auth), wrap in an explicit transaction
+    // to prevent empty-window reads.
+    if (!this.auth) {
+      await db.transaction(async (tx) => exec(tx));
+      return;
+    }
+
+    // When called with user auth, runAsUser already executes inside a transaction.
+    await this.runAsUser(exec);
   }
 
   async createMetaDeck(deckData: Partial<MetaDeckWriteInput>): Promise<MetaDeckCache> {
@@ -1091,6 +1155,13 @@ export class DatabaseStorage implements IStorage {
       usageCount: deckData.usageCount ?? 0,
       avgTrophies: deckData.avgTrophies ?? null,
       archetype: deckData.archetype ?? null,
+      wins: deckData.wins ?? 0,
+      losses: deckData.losses ?? 0,
+      draws: deckData.draws ?? 0,
+      avgElixir: deckData.avgElixir ?? null,
+      winRateEstimate: deckData.winRateEstimate ?? null,
+      sourceRegion: deckData.sourceRegion ?? null,
+      sourceRange: deckData.sourceRange ?? null,
       lastUpdatedAt: deckData.lastUpdatedAt ?? new Date(),
     };
 
@@ -1105,6 +1176,13 @@ export class DatabaseStorage implements IStorage {
             usageCount: deckData.usageCount ?? 0,
             avgTrophies: deckData.avgTrophies ?? null,
             archetype: deckData.archetype ?? null,
+            wins: deckData.wins ?? 0,
+            losses: deckData.losses ?? 0,
+            draws: deckData.draws ?? 0,
+            avgElixir: deckData.avgElixir ?? null,
+            winRateEstimate: deckData.winRateEstimate ?? null,
+            sourceRegion: deckData.sourceRegion ?? null,
+            sourceRange: deckData.sourceRange ?? null,
             lastUpdatedAt: new Date(),
           },
         })
@@ -1116,6 +1194,35 @@ export class DatabaseStorage implements IStorage {
 
   async clearMetaDecks(): Promise<void> {
     await this.runAsUser((conn) => conn.delete(metaDecksCache));
+  }
+
+  async countDeckSuggestionsToday(userId: string, type: "counter" | "optimizer"): Promise<number> {
+    return this.runAsUser(async (conn) => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const result = await conn
+        .select({ count: sql<number>`count(*)::int` })
+        .from(deckSuggestionsUsage)
+        .where(
+          and(
+            eq(deckSuggestionsUsage.userId, userId),
+            eq(deckSuggestionsUsage.suggestionType, type),
+            gte(deckSuggestionsUsage.createdAt, todayStart),
+          ),
+        );
+
+      return result[0]?.count ?? 0;
+    });
+  }
+
+  async incrementDeckSuggestionUsage(userId: string, type: "counter" | "optimizer"): Promise<void> {
+    await this.runAsUser(async (conn) => {
+      await conn.insert(deckSuggestionsUsage).values({
+        userId,
+        suggestionType: type,
+      });
+    });
   }
 }
 

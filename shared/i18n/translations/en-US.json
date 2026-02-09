@@ -31,6 +31,9 @@
     "coach": "AI Coach",
     "training": "Training",
     "decks": "Decks",
+    "metaDecks": "Meta Decks",
+    "counterDeck": "Counter Deck",
+    "improveMyDeck": "Improve My Deck",
     "community": "Community",
     "settings": "Settings",
     "billing": "Subscription",
@@ -39,6 +42,70 @@
     "login": "Login",
     "myProfile": "My Profile",
     "notifications": "Notifications"
+  },
+  "decks": {
+    "meta": {
+      "title": "Meta Decks",
+      "subtitle": "Most used and highest win rate decks in your trophy range.",
+      "trophyRangeLabel": "Trophy range",
+      "trophyRangeAll": "All",
+      "trophyRange5000": "5000+",
+      "trophyRange6000": "6000+",
+      "trophyRange7000": "7000+",
+      "deckFallback": "Meta deck",
+      "avgElixir": "Avg elixir",
+      "winRate": "Win rate",
+      "sampleSize": "Sample size",
+      "copyDeck": "Copy deck"
+    },
+    "counter": {
+      "title": "Counter Deck",
+      "subtitle": "Choose a problem card and let us suggest a deck that performs well against it.",
+      "formTitle": "Build",
+      "formSubtitle": "Pick a card and a playstyle. We'll generate a counter deck using real meta data + AI.",
+      "cardLabel": "Problem card",
+      "cardPlaceholder": "Select a card",
+      "styleLabel": "Deck style",
+      "styleBalanced": "Balanced",
+      "styleCycle": "Fast cycle",
+      "styleHeavy": "Heavy control",
+      "generateButton": "Generate counter deck",
+      "resultTitle": "Result",
+      "resultSubtitle": "A suggested deck will appear here.",
+      "emptyState": "Select a card and click Generate to see a suggested deck.",
+      "explanationTitle": "Why this deck?",
+      "explanationMock": "Mock suggestion tuned to answer {card} with a {style} game plan.",
+      "copyCode": "Copy deck link",
+      "favorite": "Mark as favorite",
+      "toastCopiedCode": "Deck link copied to clipboard."
+    },
+    "optimizer": {
+      "title": "Improve My Deck",
+      "subtitle": "Pick a deck and a goal to see suggested changes.",
+      "selectDeckTitle": "Choose the deck you want to improve",
+      "selectDeckHint": "Click a deck to use it as the baseline.",
+      "selected": "Selected",
+      "goalTitle": "What do you want to improve?",
+      "goalHint": "Choose one goal. Some goals may ask for extra input.",
+      "goalCycle": "Lower average elixir / faster cycle",
+      "goalCounterCard": "Better against a specific card",
+      "goalConsistency": "More consistent overall",
+      "targetCardLabel": "Target card",
+      "suggestionsTitle": "Suggested changes",
+      "suggestionsHint": "Generate an AI suggestion using your deck + real meta context.",
+      "suggestionsPlaceholder": "Select a deck and an improvement goal to see suggestions here.",
+      "improveButton": "Improve deck",
+      "originalDeck": "Original deck",
+      "suggestedDeck": "Suggested deck",
+      "changesTitle": "Changes",
+      "noChanges": "No changes generated for this combination yet.",
+      "explanationTitle": "Explanation",
+      "copyNewDeck": "Copy new deck",
+      "importLinkTitle": "Deck import link",
+      "showImportLink": "Show import link",
+      "previewTitle": "Deck code (mock)",
+      "previewCode": "Preview deck code"
+    }
   },
   "landing": {
     "hero": {
@@ -399,7 +466,9 @@
       "settingsUpdateFailed": "Failed to update settings.",
       "settingsFetchFailed": "Failed to load settings.",
       "preferencesUpdateFailed": "Failed to update notification preferences.",
-      "freeProfileLimitReached": "On the FREE plan, you can save only 1 profile. Upgrade to save more."
+      "freeProfileLimitReached": "On the FREE plan, you can save only 1 profile. Upgrade to save more.",
+      "deckCounterLimitReached": "You reached the FREE daily Counter Deck limit. Upgrade to PRO for unlimited usage.",
+      "deckOptimizerLimitReached": "You reached the FREE daily Deck Optimizer limit. Upgrade to PRO for unlimited usage."
     }
   },
   "pages": {
