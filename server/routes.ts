@@ -3461,8 +3461,10 @@ export async function registerRoutes(
         const cacheStatus: "fresh" | "stale" = refreshStatus === "failed" ? "stale" : "fresh";
         // If cache was empty, always re-read after a refresh attempt (even if another request holds the lock),
         // so the first user doesn't get an empty response unnecessarily.
-        const decks =
-          refreshStatus === "refreshed" || cached.length === 0 ? await storage.getMetaDecks({ minTrophies, limit: 50 }) : cached;
+        let decks = cached;
+        if (refreshStatus === "refreshed" || cached.length === 0) {
+          decks = await storage.getMetaDecks({ minTrophies, limit: 50 });
+        }
 
         const cardIndex = await getCardIndex().catch(() => null);
 
