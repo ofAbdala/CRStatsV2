@@ -56,7 +56,29 @@
       "avgElixir": "Avg elixir",
       "winRate": "Win rate",
       "sampleSize": "Sample size",
-      "copyDeck": "Copy deck"
+      "copyDeck": "Copy deck",
+      "avgCrowns": "Avg crowns",
+      "usageRate": "Usage rate",
+      "topPlayers": "Top players",
+      "tabs": {
+        "decks": "Popular Decks",
+        "cards": "Cards",
+        "evolutions": "Evolutions",
+        "heroes": "Heroes",
+        "tower": "Tower Troops"
+      },
+      "filters": {
+        "mode": "Mode",
+        "sort": "Sort",
+        "modes": {
+          "pathOfLegends": "Path of Legends",
+          "trophyRoad": "Trophy Road"
+        },
+        "sortByPopularity": "By popularity",
+        "sortByWinRate": "By win rate",
+        "sortByAvgCrowns": "By avg. crowns",
+        "sortByUsageRate": "By usage rate"
+      }
     },
     "counter": {
       "title": "Counter Deck",

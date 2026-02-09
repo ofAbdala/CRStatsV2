@@ -56,7 +56,29 @@
       "avgElixir": "Elixir médio",
       "winRate": "Taxa de vitória",
       "sampleSize": "Amostra",
-      "copyDeck": "Copiar deck"
+      "copyDeck": "Copiar deck",
+      "avgCrowns": "Coroas médias",
+      "usageRate": "Taxa de uso",
+      "topPlayers": "Melhores jogadores",
+      "tabs": {
+        "decks": "Decks populares",
+        "cards": "Cartas",
+        "evolutions": "Evoluções",
+        "heroes": "Campeões",
+        "tower": "Tropas de Torre"
+      },
+      "filters": {
+        "mode": "Modo",
+        "sort": "Ordenar",
+        "modes": {
+          "pathOfLegends": "Caminho das Lendas",
+          "trophyRoad": "Estrada de Troféus"
+        },
+        "sortByPopularity": "Por popularidade",
+        "sortByWinRate": "Por taxa de vitória",
+        "sortByAvgCrowns": "Por coroas médias",
+        "sortByUsageRate": "Por taxa de uso"
+      }
     },
     "counter": {
       "title": "Deck Contra",
