@@ -4,6 +4,7 @@ import {
   computeConsecutiveLosses,
   computeGoalAutoProgress,
   computePushSessions,
+  computeTiltState,
   computeTiltLevel,
   evaluateFreeCoachLimit,
 } from "./syncRules";
@@ -66,6 +67,66 @@ test("tilt detection: medium com WR entre 40 e 50 e troféu líquido negativo", 
   ];
 
   assert.equal(computeTiltLevel(battles), "medium");
+});
+
+test("tilt decay: risco diminui com horas sem batalhas (2h/6h/12h)", () => {
+  const baseBattles = [
+    battle({ battleTime: "2026-02-09T12:00:00.000Z", myCrowns: 0, oppCrowns: 1, trophyChange: -30 }),
+    battle({ battleTime: "2026-02-09T11:50:00.000Z", myCrowns: 0, oppCrowns: 1, trophyChange: -32 }),
+    battle({ battleTime: "2026-02-09T11:40:00.000Z", myCrowns: 0, oppCrowns: 1, trophyChange: -35 }),
+  ];
+
+  {
+    const tilt = computeTiltState(baseBattles, new Date("2026-02-09T12:00:00.000Z"));
+    assert.equal(tilt.baseLevel, "high");
+    assert.equal(tilt.baseRisk, 100);
+    assert.equal(tilt.decayStage, "none");
+    assert.equal(tilt.risk, 100);
+    assert.equal(tilt.level, "high");
+    assert.equal(tilt.alert, true);
+    assert.equal(tilt.lastBattleAt?.toISOString(), "2026-02-09T12:00:00.000Z");
+  }
+
+  {
+    const tilt = computeTiltState(baseBattles, new Date("2026-02-09T14:00:00.000Z"));
+    assert.equal(tilt.decayStage, "2h");
+    assert.equal(tilt.risk, 70);
+    assert.equal(tilt.level, "high");
+    assert.equal(tilt.alert, true);
+  }
+
+  {
+    const tilt = computeTiltState(baseBattles, new Date("2026-02-09T18:00:00.000Z"));
+    assert.equal(tilt.decayStage, "6h");
+    assert.equal(tilt.risk, 40);
+    assert.equal(tilt.level, "medium");
+    assert.equal(tilt.alert, false);
+  }
+
+  {
+    const tilt = computeTiltState(baseBattles, new Date("2026-02-10T00:00:00.000Z"));
+    assert.equal(tilt.decayStage, "12h");
+    assert.equal(tilt.risk, 0);
+    assert.equal(tilt.level, "none");
+    assert.equal(tilt.alert, false);
+  }
+});
+
+test("tilt decay: medium vira none apos 6h sem batalhas", () => {
+  const battles = [
+    battle({ battleTime: "2026-02-09T12:30:00.000Z", myCrowns: 1, oppCrowns: 0, trophyChange: 30 }),
+    battle({ battleTime: "2026-02-09T12:20:00.000Z", myCrowns: 0, oppCrowns: 1, trophyChange: -31 }),
+    battle({ battleTime: "2026-02-09T12:10:00.000Z", myCrowns: 0, oppCrowns: 1, trophyChange: -31 }),
+    battle({ battleTime: "2026-02-09T12:00:00.000Z", myCrowns: 1, oppCrowns: 0, trophyChange: 28 }),
+  ];
+
+  const tilt = computeTiltState(battles, new Date("2026-02-09T18:30:00.000Z"));
+  assert.equal(tilt.baseLevel, "medium");
+  assert.equal(tilt.baseRisk, 60);
+  assert.equal(tilt.decayStage, "6h");
+  assert.equal(tilt.risk, 24);
+  assert.equal(tilt.level, "none");
+  assert.equal(tilt.alert, false);
 });
 
 test("limite coach FREE: bloqueia ao atingir limite", () => {

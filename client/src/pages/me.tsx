@@ -1832,7 +1832,7 @@ export default function MePage() {
                   <Target className="w-5 h-5 text-primary" />
                   Metas Ativas
                 </CardTitle>
-                <Link href="/profile">
+                <Link href="/goals">
                   <Button variant="outline" size="sm" data-testid="link-manage-goals">
                     Gerenciar Metas
                   </Button>
@@ -1878,7 +1878,7 @@ export default function MePage() {
                   <div className="text-center py-8 text-muted-foreground">
                     <Target className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p className="mb-2">Nenhuma meta ativa</p>
-                    <Link href="/profile">
+                    <Link href="/goals">
                       <Button variant="outline" size="sm">
                         Criar Meta
                       </Button>

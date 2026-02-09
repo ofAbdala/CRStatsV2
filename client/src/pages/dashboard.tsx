@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { enUS, ptBR } from "date-fns/locale";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import ClashCardImage from "@/components/clash/ClashCardImage";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +16,13 @@ import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/errorMessages";
 import { useLocale } from "@/hooks/use-locale";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useGoals } from "@/hooks/useGoals";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
+import { computeTiltState } from "@shared/domain/tilt";
 import {
+  AlertTriangle,
   AlertCircle,
+  BellOff,
   ChevronRight,
   Clock,
   Crown,
@@ -52,14 +56,50 @@ function getTiltClass(tiltLevel?: "high" | "medium" | "none") {
   return "border-green-500/50 text-green-500";
 }
 
+const TILT_ALERT_SNOOZE_KEY = "tilt_alert_snoozed_until";
+
 export default function DashboardPage() {
   const { t, locale } = useLocale();
   const { sync, derivedStatus, isLoading, isFetching, refresh, error } = usePlayerSync();
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
+  const goalsQuery = useGoals();
 
   const player = sync?.player ?? null;
   const battles = sync?.battles ?? [];
-  const goals = sync?.goals ?? [];
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [tiltDismissed, setTiltDismissed] = useState(false);
+  const [tiltSnoozedUntilMs, setTiltSnoozedUntilMs] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const raw = window.localStorage.getItem(TILT_ALERT_SNOOZE_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 60 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const tilt = useMemo(() => computeTiltState(battles, new Date(nowMs)), [battles, nowMs]);
+  const isTiltSnoozed = tiltSnoozedUntilMs > nowMs;
+
+  useEffect(() => {
+    if (!tilt.alert) {
+      setTiltDismissed(false);
+    }
+  }, [tilt.alert]);
+
+  useEffect(() => {
+    if (!isTiltSnoozed && tiltSnoozedUntilMs) {
+      window.localStorage.removeItem(TILT_ALERT_SNOOZE_KEY);
+      setTiltSnoozedUntilMs(0);
+    }
+  }, [isTiltSnoozed, tiltSnoozedUntilMs]);
+  const goalsFromApi = Array.isArray(goalsQuery.data) ? goalsQuery.data : null;
+  const goalsFallback = sync?.goals ?? [];
+  const goals = goalsFromApi ?? goalsFallback;
+  const activeGoals = goals.filter((goal: any) => !goal?.completed);
+  const isGoalsLoading = goalsQuery.isLoading && !goalsFromApi && goalsFallback.length === 0;
   const stats = sync?.stats;
   const latestFive = battles.slice(0, 5);
   const chartData = buildTrophyChartData({
@@ -106,8 +146,8 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <Badge variant="outline" className={getTiltClass(stats?.tiltLevel)}>
-              {getTiltLabel(stats?.tiltLevel, t)}
+            <Badge variant="outline" className={getTiltClass(tilt.level)}>
+              {getTiltLabel(tilt.level, t)}
             </Badge>
 
             <Badge variant="outline">{t("pages.dashboard.lastUpdate", { time: updatedAtText })}</Badge>
@@ -134,6 +174,42 @@ export default function DashboardPage() {
             <AlertDescription>
               {t("pages.dashboard.partialSync")}
             </AlertDescription>
+          </Alert>
+        )}
+
+        {tilt.alert && !tiltDismissed && !isTiltSnoozed && (
+          <Alert variant="destructive" data-testid="tilt-alert">
+            <AlertTriangle className="h-4 w-4" />
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+              <div>
+                <AlertTitle>{t("pages.dashboard.tiltAlert.title")}</AlertTitle>
+                <AlertDescription>
+                  {t("pages.dashboard.tiltAlert.description", {
+                    risk: tilt.risk,
+                    time: tilt.lastBattleAt
+                      ? format(tilt.lastBattleAt, "Pp", { locale: locale === "pt-BR" ? ptBR : enUS })
+                      : updatedAtText,
+                  })}
+                </AlertDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const until = Date.now() + 6 * 60 * 60 * 1000;
+                    window.localStorage.setItem(TILT_ALERT_SNOOZE_KEY, String(until));
+                    setTiltSnoozedUntilMs(until);
+                  }}
+                >
+                  <BellOff className="w-4 h-4 mr-2" />
+                  {t("pages.dashboard.tiltAlert.snooze6h")}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setTiltDismissed(true)}>
+                  {t("pages.dashboard.tiltAlert.dismiss")}
+                </Button>
+              </div>
+            </div>
           </Alert>
         )}
 
@@ -246,17 +322,22 @@ export default function DashboardPage() {
                       <Target className="w-5 h-5 text-primary" />
                       {t("pages.dashboard.goalsTitle")}
                     </CardTitle>
-                    <Link href="/profile">
+                    <Link href="/goals">
                       <Button variant="ghost" size="sm" className="h-8 text-xs">
                         {t("pages.dashboard.manageGoals")}
                       </Button>
                     </Link>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {goals.length === 0 ? (
+                    {isGoalsLoading ? (
+                      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        {t("common.loading")}
+                      </div>
+                    ) : activeGoals.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">{t("pages.dashboard.emptyGoals")}</p>
                     ) : (
-                      goals.slice(0, 3).map((goal: any) => {
+                      activeGoals.slice(0, 3).map((goal: any) => {
                         const currentValue = goal.currentValue || 0;
                         const targetValue = goal.targetValue || 0;
                         const progress = targetValue > 0 ? Math.min(100, (currentValue / targetValue) * 100) : 0;

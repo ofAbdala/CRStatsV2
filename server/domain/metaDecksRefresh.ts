@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
-import { getPlayerBattles, getTopPlayersInLocation } from "../clashRoyaleApi";
+import { getClanMembers, getClanRankings, getPlayerBattles, getTopPlayersInLocation } from "../clashRoyaleApi";
 import { serviceStorage } from "../storage";
 import type { InsertMetaDeckCache } from "@shared/schema";
 import { computeAvgElixir, detectArchetype, getCardIndex, normalizeDeckHash } from "./decks";
@@ -17,6 +17,18 @@ const META_REFRESH_LOCK_ID = 82_003_771; // arbitrary constant, stable across de
 
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
+}
+
+function logRefreshEvent(level: "info" | "warning" | "error", payload: Record<string, unknown>) {
+  const entry = {
+    provider: "clash-royale",
+    route: "meta_refresh",
+    at: new Date().toISOString(),
+    ...payload,
+  };
+  if (level === "error") console.error(JSON.stringify(entry));
+  else if (level === "warning") console.warn(JSON.stringify(entry));
+  else console.info(JSON.stringify(entry));
 }
 
 function extractDeckCards(teamEntry: any): string[] | null {
@@ -99,21 +111,95 @@ export async function refreshMetaDecksCacheIfStale(options: RefreshOptions): Pro
 
       const cardIndex = await getCardIndex().catch(() => ({ byNameLower: new Map() }));
 
-      const topPlayers = await getTopPlayersInLocation("global", options.players);
-      const items = Array.isArray((topPlayers.data as any)?.items) ? ((topPlayers.data as any).items as any[]) : [];
-      if (!topPlayers.data || items.length === 0) {
-        return "failed";
-      }
-
       const trophiesByTag = new Map<string, number>();
       const tags: string[] = [];
-      for (const player of items) {
+
+      // Primary source: top ladder players. Some providers/proxies may return empty items.
+      const topPlayers = await getTopPlayersInLocation("global", options.players);
+      const topItems = Array.isArray((topPlayers.data as any)?.items) ? ((topPlayers.data as any).items as any[]) : [];
+      for (const player of topItems) {
         const tag = typeof player?.tag === "string" ? player.tag : null;
         if (!tag) continue;
         tags.push(tag);
         if (typeof player?.trophies === "number" && Number.isFinite(player.trophies)) {
           trophiesByTag.set(normalizeKey(tag), player.trophies);
         }
+      }
+
+      // Fallback: use top clans and sample members to get competitive player tags.
+      let sourceRangeBase = `global_top_${options.players}`;
+      if (tags.length === 0) {
+        logRefreshEvent("warning", {
+          message: "Player rankings returned empty items; falling back to clan members",
+          playersRequested: options.players,
+          rankingsStatus: topPlayers.status,
+          rankingsHasData: Boolean(topPlayers.data),
+        });
+
+        const clansRes = await getClanRankings("global");
+        const clanItems = Array.isArray((clansRes.data as any)?.items) ? ((clansRes.data as any).items as any[]) : [];
+
+        if (!clansRes.data || clanItems.length === 0) {
+          logRefreshEvent("error", {
+            message: "Clan rankings failed or returned empty items; cannot refresh meta cache",
+            clansStatus: clansRes.status,
+            clansError: clansRes.error ?? null,
+          });
+          return "failed";
+        }
+
+        const membersPerClan = 5;
+        const clansToFetch = Math.max(1, Math.min(20, Math.ceil(options.players / membersPerClan)));
+        sourceRangeBase = `global_top_clans_${clansToFetch}_members_${membersPerClan}`;
+
+        const clanTags = clanItems
+          .slice(0, clansToFetch)
+          .map((clan) => (typeof clan?.tag === "string" ? clan.tag : null))
+          .filter((tag): tag is string => Boolean(tag));
+
+        const membersByClan = await mapWithConcurrency(
+          clanTags,
+          4,
+          async (clanTag) => {
+            const res = await getClanMembers(clanTag);
+            const members = Array.isArray((res.data as any)?.items) ? ((res.data as any).items as any[]) : [];
+            return { clanTag, members, status: res.status, error: res.error ?? null };
+          },
+        );
+
+        const seen = new Set<string>();
+        for (const { clanTag, members, status, error } of membersByClan) {
+          if ((!members || members.length === 0) && error) {
+            logRefreshEvent("warning", {
+              message: "Failed to fetch clan members during meta refresh fallback",
+              clanTag,
+              status,
+              error,
+            });
+          }
+
+          const sample = (Array.isArray(members) ? members : []).slice(0, membersPerClan);
+          for (const member of sample) {
+            const playerTag = typeof member?.tag === "string" ? member.tag : null;
+            if (!playerTag) continue;
+            const key = normalizeKey(playerTag);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            tags.push(playerTag);
+
+            if (typeof member?.trophies === "number" && Number.isFinite(member.trophies)) {
+              trophiesByTag.set(key, member.trophies);
+            }
+
+            if (tags.length >= options.players) break;
+          }
+          if (tags.length >= options.players) break;
+        }
+      }
+
+      if (tags.length === 0) {
+        logRefreshEvent("error", { message: "No player tags available; meta refresh aborted" });
+        return "failed";
       }
 
       type Agg = {
@@ -204,7 +290,7 @@ export async function refreshMetaDecksCacheIfStale(options: RefreshOptions): Pro
       }
 
       const sourceRegion = "global";
-      const sourceRange = `global_top_${options.players}_last_${options.battlesPerPlayer}`;
+      const sourceRange = `${sourceRangeBase}_last_${options.battlesPerPlayer}`;
 
       const rows: InsertMetaDeckCache[] = aggregates
         .map((agg) => {
@@ -239,6 +325,13 @@ export async function refreshMetaDecksCacheIfStale(options: RefreshOptions): Pro
       }
 
       await serviceStorage.replaceMetaDecks(rows);
+      logRefreshEvent("info", {
+        message: "Meta decks cache refreshed",
+        decks: rows.length,
+        players: tags.length,
+        battlesPerPlayer: options.battlesPerPlayer,
+        sourceRange,
+      });
       return "refreshed";
     } finally {
       await db.execute(sql`select pg_advisory_unlock(${META_REFRESH_LOCK_ID})`).catch(() => undefined);

@@ -30,6 +30,7 @@ import {
   computeConsecutiveLosses,
   computeGoalAutoProgress,
   computePushSessions,
+  computeTiltState,
   computeTiltLevel,
   evaluateFreeCoachLimit,
 } from "./domain/syncRules";
@@ -228,6 +229,9 @@ function buildPushModeBreakdown(battles: any[]) {
 }
 
 function computeBattleStats(battles: any[]) {
+  const tilt = computeTiltState(battles);
+  const lastBattleAt = tilt.lastBattleAt ? tilt.lastBattleAt.toISOString() : null;
+
   if (!battles || battles.length === 0) {
     return {
       totalMatches: 0,
@@ -235,7 +239,10 @@ function computeBattleStats(battles: any[]) {
       losses: 0,
       winRate: 0,
       streak: { type: 'none' as const, count: 0 },
-      tiltLevel: 'none' as const,
+      tiltLevel: tilt.level,
+      tiltRisk: tilt.risk,
+      tiltAlert: tilt.alert,
+      lastBattleAt,
     };
   }
   
@@ -305,7 +312,10 @@ function computeBattleStats(battles: any[]) {
     losses,
     winRate: battles.length > 0 ? (wins / battles.length) * 100 : 0,
     streak: { type: currentType, count: currentStreak },
-    tiltLevel: computeTiltLevel(battles),
+    tiltLevel: tilt.level,
+    tiltRisk: tilt.risk,
+    tiltAlert: tilt.alert,
+    lastBattleAt,
   };
 }
 
@@ -1575,6 +1585,7 @@ export async function registerRoutes(
           wins: player.wins,
           losses: player.losses,
           battleCount: player.battleCount,
+          lastBattleAt: stats.lastBattleAt,
         },
         battles,
         pushSessions,
@@ -2403,13 +2414,16 @@ export async function registerRoutes(
               const battles = battlesResult.data as any[];
               playerContext.recentBattles = battles.slice(0, 5);
               
-              const tiltLevel = computeTiltLevel(battles);
               const stats = computeBattleStats(battles);
+              const tiltLevel = stats.tiltLevel;
+              const consecutiveLosses = stats.streak.type === 'loss' ? stats.streak.count : 0;
+              playerContext.lastBattleAt = stats.lastBattleAt;
               playerContext.tiltStatus = {
                 level: tiltLevel,
+                risk: stats.tiltRisk,
                 recentWinRate: stats.winRate,
                 currentStreak: stats.streak,
-                consecutiveLosses: tiltLevel === 'high' ? stats.streak.type === 'loss' ? stats.streak.count : 0 : 0,
+                consecutiveLosses: tiltLevel === 'high' ? consecutiveLosses : 0,
               };
               
               if (activeGoals.length > 0) {
@@ -2469,13 +2483,16 @@ export async function registerRoutes(
                 const battles = battlesResult.data as any[];
                 playerContext.recentBattles = battles.slice(0, 5);
                 
-                const tiltLevel = computeTiltLevel(battles);
                 const stats = computeBattleStats(battles);
+                const tiltLevel = stats.tiltLevel;
+                const consecutiveLosses = stats.streak.type === 'loss' ? stats.streak.count : 0;
+                playerContext.lastBattleAt = stats.lastBattleAt;
                 playerContext.tiltStatus = {
                   level: tiltLevel,
+                  risk: stats.tiltRisk,
                   recentWinRate: stats.winRate,
                   currentStreak: stats.streak,
-                  consecutiveLosses: tiltLevel === 'high' ? stats.streak.type === 'loss' ? stats.streak.count : 0 : 0,
+                  consecutiveLosses: tiltLevel === 'high' ? consecutiveLosses : 0,
                 };
                 
                 if (activeGoals.length > 0) {
@@ -3442,7 +3459,10 @@ export async function registerRoutes(
         });
 
         const cacheStatus: "fresh" | "stale" = refreshStatus === "failed" ? "stale" : "fresh";
-        const decks = refreshStatus === "refreshed" ? await storage.getMetaDecks({ minTrophies, limit: 50 }) : cached;
+        // If cache was empty, always re-read after a refresh attempt (even if another request holds the lock),
+        // so the first user doesn't get an empty response unnecessarily.
+        const decks =
+          refreshStatus === "refreshed" || cached.length === 0 ? await storage.getMetaDecks({ minTrophies, limit: 50 }) : cached;
 
         const cardIndex = await getCardIndex().catch(() => null);
 
