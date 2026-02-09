@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
-import { getPlayerBattles, getTopPlayersInLocation } from "../clashRoyaleApi";
+import { getClanMembers, getClanRankings, getPlayerBattles, getTopPlayersInLocation } from "../clashRoyaleApi";
 import { serviceStorage } from "../storage";
 import type { InsertMetaDeckCache } from "@shared/schema";
 import { computeAvgElixir, detectArchetype, getCardIndex, normalizeDeckHash } from "./decks";
@@ -17,6 +17,156 @@ const META_REFRESH_LOCK_ID = 82_003_771; // arbitrary constant, stable across de
 
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
+}
+
+type PlayerSeed = {
+  tag: string;
+  trophies: number | null;
+};
+
+async function getPlayerSeeds({ players }: { players: number }): Promise<{ seeds: PlayerSeed[]; sourceRange: string } | null> {
+  const topPlayers = await getTopPlayersInLocation("global", players);
+  const items = Array.isArray((topPlayers.data as any)?.items) ? ((topPlayers.data as any).items as any[]) : [];
+
+  if (topPlayers.data && items.length > 0) {
+    const seeds: PlayerSeed[] = items
+      .map((player) => {
+        const tag = typeof player?.tag === "string" ? player.tag : null;
+        if (!tag) return null;
+        const trophies =
+          typeof player?.trophies === "number" && Number.isFinite(player.trophies) ? (player.trophies as number) : null;
+        return { tag, trophies } satisfies PlayerSeed;
+      })
+      .filter(Boolean) as PlayerSeed[];
+
+    return {
+      seeds: seeds.slice(0, players),
+      sourceRange: `global_top_${Math.min(players, seeds.length)}`,
+    };
+  }
+
+  // Fallback: player rankings may return an empty list in some environments. Use top clans, then sample members.
+  console.warn(
+    JSON.stringify({
+      provider: "clash-royale",
+      route: "meta-decks-refresh",
+      message: "Player rankings empty. Falling back to clan rankings.",
+      at: new Date().toISOString(),
+    }),
+  );
+
+  const clans = await getClanRankings("global");
+  const clanItems = Array.isArray((clans.data as any)?.items) ? ((clans.data as any).items as any[]) : [];
+  if (!clans.data || clanItems.length === 0) {
+    console.error(
+      JSON.stringify({
+        provider: "clash-royale",
+        route: "meta-decks-refresh",
+        message: "Clan rankings unavailable for fallback.",
+        status: clans.status,
+        error: clans.error,
+        at: new Date().toISOString(),
+      }),
+    );
+    return null;
+  }
+
+  const perClan = 5;
+  const clansToFetch = Math.max(10, Math.ceil(players / perClan));
+  const clanTags: string[] = clanItems
+    .map((clan) => (typeof clan?.tag === "string" ? clan.tag : null))
+    .filter(Boolean)
+    .slice(0, Math.min(50, clansToFetch)) as string[];
+
+  if (clanTags.length === 0) {
+    return null;
+  }
+
+  const membersByClan = await mapWithConcurrency(
+    clanTags,
+    3,
+    async (clanTag) => {
+      const res = await getClanMembers(clanTag);
+      const items = Array.isArray((res.data as any)?.items) ? ((res.data as any).items as any[]) : [];
+      return {
+        clanTag,
+        ok: Boolean(res.data),
+        status: res.status,
+        error: res.error,
+        members: items,
+      };
+    },
+  );
+
+  const seeds: PlayerSeed[] = [];
+  const seen = new Set<string>();
+
+  for (const clan of membersByClan) {
+    if (!clan.ok) {
+      console.warn(
+        JSON.stringify({
+          provider: "clash-royale",
+          route: "meta-decks-refresh",
+          message: "Failed to fetch clan members for fallback.",
+          clanTag: clan.clanTag,
+          status: clan.status,
+          error: clan.error,
+          at: new Date().toISOString(),
+        }),
+      );
+      continue;
+    }
+
+    const sortedMembers = (Array.isArray(clan.members) ? clan.members : [])
+      .map((m) => {
+        const tag = typeof m?.tag === "string" ? m.tag : null;
+        if (!tag) return null;
+        const trophies = typeof m?.trophies === "number" && Number.isFinite(m.trophies) ? (m.trophies as number) : null;
+        return { tag, trophies } satisfies PlayerSeed;
+      })
+      .filter(Boolean) as PlayerSeed[];
+
+    sortedMembers.sort((a, b) => (b.trophies ?? 0) - (a.trophies ?? 0));
+
+    for (const member of sortedMembers.slice(0, perClan)) {
+      const key = normalizeKey(member.tag);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      seeds.push(member);
+      if (seeds.length >= players) break;
+    }
+
+    if (seeds.length >= players) break;
+  }
+
+  if (seeds.length === 0) {
+    console.error(
+      JSON.stringify({
+        provider: "clash-royale",
+        route: "meta-decks-refresh",
+        message: "Fallback failed to find any player tags from clans.",
+        clansTried: clanTags.length,
+        at: new Date().toISOString(),
+      }),
+    );
+    return null;
+  }
+
+  console.info(
+    JSON.stringify({
+      provider: "clash-royale",
+      route: "meta-decks-refresh",
+      message: "Using clan fallback for meta decks refresh.",
+      clansTried: clanTags.length,
+      players: seeds.length,
+      at: new Date().toISOString(),
+    }),
+  );
+
+  return {
+    seeds: seeds.slice(0, players),
+    sourceRange: `global_clan_top_${clanTags.length}_members_${seeds.length}`,
+  };
 }
 
 function extractDeckCards(teamEntry: any): string[] | null {
@@ -99,20 +249,17 @@ export async function refreshMetaDecksCacheIfStale(options: RefreshOptions): Pro
 
       const cardIndex = await getCardIndex().catch(() => ({ byNameLower: new Map() }));
 
-      const topPlayers = await getTopPlayersInLocation("global", options.players);
-      const items = Array.isArray((topPlayers.data as any)?.items) ? ((topPlayers.data as any).items as any[]) : [];
-      if (!topPlayers.data || items.length === 0) {
+      const playerSeedResult = await getPlayerSeeds({ players: options.players });
+      if (!playerSeedResult) {
         return "failed";
       }
 
       const trophiesByTag = new Map<string, number>();
       const tags: string[] = [];
-      for (const player of items) {
-        const tag = typeof player?.tag === "string" ? player.tag : null;
-        if (!tag) continue;
-        tags.push(tag);
-        if (typeof player?.trophies === "number" && Number.isFinite(player.trophies)) {
-          trophiesByTag.set(normalizeKey(tag), player.trophies);
+      for (const seed of playerSeedResult.seeds) {
+        tags.push(seed.tag);
+        if (typeof seed.trophies === "number" && Number.isFinite(seed.trophies)) {
+          trophiesByTag.set(normalizeKey(seed.tag), seed.trophies);
         }
       }
 
@@ -204,7 +351,7 @@ export async function refreshMetaDecksCacheIfStale(options: RefreshOptions): Pro
       }
 
       const sourceRegion = "global";
-      const sourceRange = `global_top_${options.players}_last_${options.battlesPerPlayer}`;
+      const sourceRange = `${playerSeedResult.sourceRange}_last_${options.battlesPerPlayer}`;
 
       const rows: InsertMetaDeckCache[] = aggregates
         .map((agg) => {

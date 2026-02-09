@@ -3442,7 +3442,12 @@ export async function registerRoutes(
         });
 
         const cacheStatus: "fresh" | "stale" = refreshStatus === "failed" ? "stale" : "fresh";
-        const decks = refreshStatus === "refreshed" ? await storage.getMetaDecks({ minTrophies, limit: 50 }) : cached;
+        // If cache was empty, re-read after the refresh attempt even if we skipped due to a lock.
+        // This avoids returning empty during concurrent refreshes.
+        let decks = cached;
+        if (refreshStatus === "refreshed" || cached.length === 0) {
+          decks = await storage.getMetaDecks({ minTrophies, limit: 50 });
+        }
 
         const cardIndex = await getCardIndex().catch(() => null);
 
