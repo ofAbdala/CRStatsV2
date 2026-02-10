@@ -57,9 +57,7 @@
       "winRate": "Taxa de vitória",
       "sampleSize": "Amostra",
       "copyDeck": "Copiar deck",
-      "avgCrowns": "Coroas médias",
       "usageRate": "Taxa de uso",
-      "topPlayers": "Melhores jogadores",
       "tabs": {
         "decks": "Decks populares",
         "cards": "Cartas",
@@ -76,7 +74,6 @@
         },
         "sortByPopularity": "Por popularidade",
         "sortByWinRate": "Por taxa de vitória",
-        "sortByAvgCrowns": "Por coroas médias",
         "sortByUsageRate": "Por taxa de uso"
       }
     },
@@ -431,6 +428,20 @@
       "markAllReadErrorTitle": "Falha ao marcar todas como lidas",
       "clearSuccessTitle": "Notificações removidas",
       "clearErrorTitle": "Falha ao limpar notificações"
+    },
+    "billing": {
+      "activated": {
+        "title": "Bem-vindo ao PRO!",
+        "description": "Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!"
+      },
+      "canceled": {
+        "title": "Assinatura cancelada",
+        "description": "Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito."
+      },
+      "paymentFailed": {
+        "title": "Falha no pagamento",
+        "description": "O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento."
+      }
     }
   },
   "components": {
@@ -565,49 +576,49 @@
         "profileSaveErrorTitle": "Falha ao salvar perfil"
       }
     },
-  "dashboard": {
-    "title": "Dashboard",
-    "subtitle": "Visão consolidada da sua performance recente.",
-    "syncNow": "Dados sincronizados agora",
-    "syncPartial": "Sincronização parcial",
-    "syncError": "Falha na sincronização",
-    "sync": "Sincronizar",
-    "noSync": "Sem sincronização",
-    "lastUpdate": "Atualizado em {time}",
-    "partialSync": "Parte dos dados não pôde ser atualizada nesta sincronização.",
-    "trophyProgressTitle": "Progresso de Troféus",
-    "currentDeckTitle": "Deck Atual",
-    "recentBattlesTitle": "Últimas batalhas",
-    "viewFullHistory": "Ver histórico completo",
-    "opponentFallback": "Oponente",
-    "goalsTitle": "Metas",
-    "manageGoals": "Gerenciar metas",
-    "favoritesTitle": "Favoritos",
-    "exploreCommunity": "Explorar Comunidade",
-    "emptyBattles": "Sem batalhas recentes.",
-    "emptyGoals": "Nenhuma meta ativa.",
-    "emptyFavorites": "Nenhum favorito cadastrado.",
-    "stats": {
-      "trophies": "Troféus",
-      "bestSeason": "Melhor Temporada",
-      "personalBest": "Recorde pessoal",
-      "arenaLabel": "Arena: {name}",
-      "winRate": "Win rate",
-      "lastBattles": "Últimas {count} batalhas",
-      "wins": "Vitórias",
-      "losses": "Derrotas",
-      "lossesLine": "{count} derrotas"
-    },
-    "tiltAlert": {
-      "title": "Alerta de tilt",
-      "description": "Risco de tilt: {risk}%. Última batalha: {time}.",
-      "snooze6h": "Silenciar por 6h",
-      "dismiss": "Dispensar"
-    },
-    "tilt": {
-      "high": "Tilt alto",
-      "medium": "Tilt moderado",
-      "none": "Tilt controlado"
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Visão consolidada da sua performance recente.",
+      "syncNow": "Dados sincronizados agora",
+      "syncPartial": "Sincronização parcial",
+      "syncError": "Falha na sincronização",
+      "sync": "Sincronizar",
+      "noSync": "Sem sincronização",
+      "lastUpdate": "Atualizado em {time}",
+      "partialSync": "Parte dos dados não pôde ser atualizada nesta sincronização.",
+      "trophyProgressTitle": "Progresso de Troféus",
+      "currentDeckTitle": "Deck Atual",
+      "recentBattlesTitle": "Últimas batalhas",
+      "viewFullHistory": "Ver histórico completo",
+      "opponentFallback": "Oponente",
+      "goalsTitle": "Metas",
+      "manageGoals": "Gerenciar metas",
+      "favoritesTitle": "Favoritos",
+      "exploreCommunity": "Explorar Comunidade",
+      "emptyBattles": "Sem batalhas recentes.",
+      "emptyGoals": "Nenhuma meta ativa.",
+      "emptyFavorites": "Nenhum favorito cadastrado.",
+      "stats": {
+        "trophies": "Troféus",
+        "bestSeason": "Melhor Temporada",
+        "personalBest": "Recorde pessoal",
+        "arenaLabel": "Arena: {name}",
+        "winRate": "Win rate",
+        "lastBattles": "Últimas {count} batalhas",
+        "wins": "Vitórias",
+        "losses": "Derrotas",
+        "lossesLine": "{count} derrotas"
+      },
+      "tiltAlert": {
+        "title": "Alerta de tilt",
+        "description": "Risco de tilt: {risk}%. Última batalha: {time}.",
+        "snooze6h": "Silenciar por 6h",
+        "dismiss": "Dispensar"
+      },
+      "tilt": {
+        "high": "Tilt alto",
+        "medium": "Tilt moderado",
+        "none": "Tilt controlado"
       }
     },
     "me": {
@@ -630,11 +641,16 @@
       "activeGoals": "Metas ativas",
       "viewPro": "Ver recursos PRO",
       "tabs": {
+        "overview": "Visão Geral",
         "history": "Histórico",
-        "goals": "Metas"
+        "decks": "Decks & Meta",
+        "progress": "Progresso"
       },
       "filters": {
         "today": "Hoje",
+        "7days": "7 Dias",
+        "30days": "30 Dias",
+        "60days": "60 Dias",
         "season": "Temporada"
       },
       "stats": {
@@ -647,7 +663,44 @@
         "high": "Tilt alto",
         "medium": "Tilt moderado",
         "none": "Tilt controlado"
-      }
+      },
+      "battleType": {
+        "ladder": "Ladder",
+        "challenge": "Desafio",
+        "tournament": "Torneio",
+        "war": "Guerra",
+        "friendly": "Amistoso",
+        "party": "Festa",
+        "unknown": "Batalha"
+      },
+      "deck": {
+        "primary": "Deck Principal",
+        "secondary": "Deck Secundário",
+        "other": "Outros Decks"
+      },
+      "archetype": {
+        "beatdown": "Beatdown",
+        "cycle": "Ciclo",
+        "control": "Controle",
+        "siege": "Cerco",
+        "hybrid": "Híbrido"
+      },
+      "chart": {
+        "trophies": "Troféus",
+        "matches": "Partidas"
+      },
+      "analysis": {
+        "atRisk": "Em risco de tilt",
+        "onFire": "Em alta!",
+        "consistent": "Consistente"
+      },
+      "errors": {
+        "loadFailed": "Falha ao carregar perfil"
+      },
+      "loading": "Carregando perfil...",
+      "playerFallback": "Jogador",
+      "arenaFallback": "Arena",
+      "opponentFallback": "Oponente"
     },
     "coach": {
       "subtitle": "Converse com o Coach IA com contexto real das suas batalhas.",
@@ -821,40 +874,40 @@
         "portalErrorTitle": "Falha ao abrir portal"
       }
     },
-  "decks": {
-    "title": "Decks e meta",
-    "subtitle": "Seus decks reais do sync + meta decks com cache previsível.",
-    "refreshSync": "Atualizar sync",
-    "tabs": {
-      "myDecks": "Meus decks",
-      "metaDecks": "Meta decks"
-    },
-    "actions": {
-      "copyLink": "Copiar link",
-      "viewDetails": "Ver detalhes"
-    },
-    "toast": {
-      "copiedTitle": "Copiado!",
-      "copiedLink": "Link do deck copiado para a área de transferência.",
-      "copiedList": "Lista de cartas copiada para a área de transferência.",
-      "copyErrorTitle": "Falha ao copiar",
-      "detailsTitle": "Detalhes",
-      "detailsDescription": "Em breve."
-    },
-    "loadingMyDecks": "Carregando decks do jogador...",
-    "emptyMyDecks": "Nenhum deck encontrado no histórico recente.",
-    "deckIndex": "Deck #{index}",
-    "mainDeckBadge": "Principal",
-    "matches": "{count} partidas",
-    "netTrophies": "{value} troféus",
-    "avgElixir": "{value} elixir",
-    "staleCache": "Exibindo cache antigo de meta decks por falha no refresh externo.",
-    "staleBadge": "cache antigo",
-    "loadingMetaDecks": "Carregando meta decks...",
-    "metaErrorTitle": "Falha ao carregar meta decks",
-    "metaErrorDescription": "Não foi possível carregar os meta decks.",
-    "emptyMetaDecks": "Sem dados de meta no momento.",
-    "metaDeckFallback": "Deck meta",
+    "decks": {
+      "title": "Decks e meta",
+      "subtitle": "Seus decks reais do sync + meta decks com cache previsível.",
+      "refreshSync": "Atualizar sync",
+      "tabs": {
+        "myDecks": "Meus decks",
+        "metaDecks": "Meta decks"
+      },
+      "actions": {
+        "copyLink": "Copiar link",
+        "viewDetails": "Ver detalhes"
+      },
+      "toast": {
+        "copiedTitle": "Copiado!",
+        "copiedLink": "Link do deck copiado para a área de transferência.",
+        "copiedList": "Lista de cartas copiada para a área de transferência.",
+        "copyErrorTitle": "Falha ao copiar",
+        "detailsTitle": "Detalhes",
+        "detailsDescription": "Em breve."
+      },
+      "loadingMyDecks": "Carregando decks do jogador...",
+      "emptyMyDecks": "Nenhum deck encontrado no histórico recente.",
+      "deckIndex": "Deck #{index}",
+      "mainDeckBadge": "Principal",
+      "matches": "{count} partidas",
+      "netTrophies": "{value} troféus",
+      "avgElixir": "{value} elixir",
+      "staleCache": "Exibindo cache antigo de meta decks por falha no refresh externo.",
+      "staleBadge": "cache antigo",
+      "loadingMetaDecks": "Carregando meta decks...",
+      "metaErrorTitle": "Falha ao carregar meta decks",
+      "metaErrorDescription": "Não foi possível carregar os meta decks.",
+      "emptyMetaDecks": "Sem dados de meta no momento.",
+      "metaDeckFallback": "Deck meta",
       "estimatedWr": "{value}% WR estimado",
       "sampleSize": "sample {value}",
       "usageCount": "uso {value}",

@@ -29,7 +29,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
-  Users,
+
 } from "lucide-react";
 
 interface MetaDeck {
@@ -53,16 +53,11 @@ type MetaInnerTab = "decks" | "cards" | "evolutions" | "heroes" | "tower";
 
 type MetaMode = "path-of-legends" | "trophy-road";
 
-type MetaDeckSort = "popularity" | "win-rate" | "avg-crowns";
+type MetaDeckSort = "popularity" | "win-rate";
 
 type MetaCardSort = "win-rate" | "usage-rate";
 
 type MetaCardGroup = "cards" | "evolutions" | "heroes" | "tower";
-
-type MetaTopPlayer = {
-  name: string;
-  score: number;
-};
 
 type DeckStyle = "balanced" | "cycle" | "heavy";
 
@@ -102,28 +97,7 @@ const PROBLEM_CARDS = [
   "Lava Hound",
 ] as const;
 
-const MOCK_TOP_PLAYER_NAMES = [
-  "Luna",
-  "Kaiser",
-  "Bruno",
-  "Nova",
-  "Rafa",
-  "Mika",
-  "Sol",
-  "Yuki",
-  "Zed",
-  "Astra",
-  "Theo",
-  "Nina",
-  "Vini",
-  "Gaia",
-  "Iris",
-  "Dante",
-  "Cora",
-  "Noah",
-  "Sage",
-  "Jade",
-] as const;
+
 
 // These sets are a temporary, client-only classifier so we can build the Meta Hub UI
 // without new backend fields. Replace with real card type metadata when available.
@@ -198,7 +172,7 @@ function isMetaMode(value: string): value is MetaMode {
 }
 
 function isMetaDeckSort(value: string): value is MetaDeckSort {
-  return value === "popularity" || value === "win-rate" || value === "avg-crowns";
+  return value === "popularity" || value === "win-rate";
 }
 
 function isMetaCardSort(value: string): value is MetaCardSort {
@@ -245,46 +219,7 @@ function formatPercent100(value0to100: number): string {
   return `${value0to100.toFixed(1)}%`;
 }
 
-function hashStringToSeed(input: string): number {
-  // FNV-1a 32-bit hash
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i += 1) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
 
-function mulberry32(seed: number): () => number {
-  return () => {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function buildMockAvgCrowns(deckHash: string): number {
-  const rand = mulberry32(hashStringToSeed(`${deckHash}:avgCrowns`));
-  // Roughly 0.7 - 1.3 crowns per match; stable per deck.
-  return clamp(0.7 + rand() * 0.6, 0.7, 1.3);
-}
-
-function buildMockTopPlayers(deckHash: string): MetaTopPlayer[] {
-  const rand = mulberry32(hashStringToSeed(`${deckHash}:topPlayers`));
-  const names = [...MOCK_TOP_PLAYER_NAMES];
-  const players: MetaTopPlayer[] = [];
-
-  for (let i = 0; i < 3; i += 1) {
-    if (names.length === 0) break;
-    const idx = Math.floor(rand() * names.length);
-    const name = names.splice(idx, 1)[0] ?? "Player";
-    const score = Math.floor(6500 + rand() * 2500); // mock trophy / rating
-    players.push({ name, score });
-  }
-
-  return players;
-}
 
 function getDeckWinRatePercent(deck: MetaDeck): number | null {
   const games = toFiniteNumber(deck.games, 0);
@@ -297,8 +232,6 @@ function getDeckWinRatePercent(deck: MetaDeck): number | null {
 }
 
 type MetaDeckExtended = MetaDeck & {
-  avgCrowns: number;
-  topPlayers: MetaTopPlayer[];
   winRatePercent: number | null;
 };
 
@@ -315,8 +248,6 @@ type MetaCardRow = {
 function buildMetaDeckExtended(deck: MetaDeck): MetaDeckExtended {
   return {
     ...deck,
-    avgCrowns: buildMockAvgCrowns(deck.deckHash),
-    topPlayers: buildMockTopPlayers(deck.deckHash),
     winRatePercent: getDeckWinRatePercent(deck),
   };
 }
@@ -490,10 +421,6 @@ function MetaPopularDecksView({
         return (b.winRatePercent ?? -1) - (a.winRatePercent ?? -1);
       }
 
-      if (sort === "avg-crowns") {
-        return b.avgCrowns - a.avgCrowns;
-      }
-
       // popularity (fallback): highest sample size first
       return toFiniteNumber(b.games, 0) - toFiniteNumber(a.games, 0);
     });
@@ -538,7 +465,6 @@ function MetaPopularDecksView({
                 <SelectContent>
                   <SelectItem value="popularity">{t("decks.meta.filters.sortByPopularity")}</SelectItem>
                   <SelectItem value="win-rate">{t("decks.meta.filters.sortByWinRate")}</SelectItem>
-                  <SelectItem value="avg-crowns">{t("decks.meta.filters.sortByAvgCrowns")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -585,7 +511,6 @@ function MetaPopularDecksView({
             typeof deck.winRatePercent === "number" && Number.isFinite(deck.winRatePercent)
               ? formatPercent100(deck.winRatePercent)
               : UNKNOWN_VALUE;
-          const crownsText = Number.isFinite(deck.avgCrowns) ? deck.avgCrowns.toFixed(2) : UNKNOWN_VALUE;
 
           return (
             <Card
@@ -606,7 +531,7 @@ function MetaPopularDecksView({
                       ) : null}
                     </CardTitle>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                       <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                         <p className="text-muted-foreground">{t("decks.meta.avgElixir")}</p>
                         <p className="font-medium">{avgElixirText}</p>
@@ -614,10 +539,6 @@ function MetaPopularDecksView({
                       <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                         <p className="text-muted-foreground">{t("decks.meta.winRate")}</p>
                         <p className="font-medium text-green-500">{winRateText}</p>
-                      </div>
-                      <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
-                        <p className="text-muted-foreground">{t("decks.meta.avgCrowns")}</p>
-                        <p className="font-medium">{crownsText}</p>
                       </div>
                       <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                         <p className="text-muted-foreground">{t("decks.meta.sampleSize")}</p>
@@ -647,22 +568,7 @@ function MetaPopularDecksView({
                   ))}
                 </div>
 
-                <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
-                  <div className="flex items-center gap-2 text-xs font-medium mb-2">
-                    <Users className="w-4 h-4" />
-                    <span>{t("decks.meta.topPlayers")}</span>
-                  </div>
-                  <ul className="space-y-1 text-sm">
-                    {deck.topPlayers.slice(0, 3).map((player) => (
-                      <li key={`${deck.deckHash}-${player.name}`} className="flex items-center justify-between gap-3">
-                        <span className="truncate">{player.name}</span>
-                        <Badge variant="outline" className="text-muted-foreground">
-                          {player.score}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+
               </CardContent>
             </Card>
           );
@@ -936,13 +842,13 @@ function CounterDeckBuilderView() {
                   }}
                   className="justify-start flex-wrap"
                 >
-                  <ToggleGroupItem value="balanced" aria-label={t("decks.counter.styleBalanced")}> 
+                  <ToggleGroupItem value="balanced" aria-label={t("decks.counter.styleBalanced")}>
                     {t("decks.counter.styleBalanced")}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="cycle" aria-label={t("decks.counter.styleCycle")}> 
+                  <ToggleGroupItem value="cycle" aria-label={t("decks.counter.styleCycle")}>
                     {t("decks.counter.styleCycle")}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="heavy" aria-label={t("decks.counter.styleHeavy")}> 
+                  <ToggleGroupItem value="heavy" aria-label={t("decks.counter.styleHeavy")}>
                     {t("decks.counter.styleHeavy")}
                   </ToggleGroupItem>
                 </ToggleGroup>

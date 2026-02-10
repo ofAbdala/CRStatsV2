@@ -245,17 +245,17 @@ function computeBattleStats(battles: any[]) {
       lastBattleAt,
     };
   }
-  
+
   let wins = 0;
   let losses = 0;
   let streakType: 'win' | 'loss' | 'none' = 'none';
   let streakCount = 0;
   let currentStreakType: 'win' | 'loss' | null = null;
-  
+
   for (let i = 0; i < battles.length; i++) {
     const battle = battles[i];
     const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
-    
+
     if (isVictory) {
       wins++;
       if (currentStreakType === 'win') {
@@ -273,7 +273,7 @@ function computeBattleStats(battles: any[]) {
         streakCount = 1;
       }
     }
-    
+
     if (i === 0) {
       streakType = isVictory ? 'win' : 'loss';
       streakCount = 1;
@@ -289,13 +289,13 @@ function computeBattleStats(battles: any[]) {
       }
     }
   }
-  
+
   let currentStreak = 0;
   let currentType: 'win' | 'loss' | 'none' = 'none';
   for (const battle of battles) {
     const isVictory = battle.team?.[0]?.crowns > battle.opponent?.[0]?.crowns;
     const battleType = isVictory ? 'win' : 'loss';
-    
+
     if (currentType === 'none') {
       currentType = battleType;
       currentStreak = 1;
@@ -305,7 +305,7 @@ function computeBattleStats(battles: any[]) {
       break;
     }
   }
-  
+
   return {
     totalMatches: battles.length,
     wins,
@@ -326,7 +326,7 @@ export async function registerRoutes(
   // ============================================================================
   // AUTH ROUTES
   // ============================================================================
-  
+
   app.get('/api/auth/user', requireAuth, async (req: any, res) => {
     const route = "/api/auth/user";
     const userId = getUserId(req);
@@ -352,7 +352,7 @@ export async function registerRoutes(
         await serviceStorage.upsertUser({ id: userId, email });
         user = await storage.getUser(userId);
       }
-      
+
       if (!user) {
         return sendApiError(res, {
           route,
@@ -391,7 +391,7 @@ export async function registerRoutes(
   // ============================================================================
   // PROFILE ROUTES
   // ============================================================================
-  
+
   app.get('/api/profile', requireAuth, async (req: any, res) => {
     const route = "/api/profile";
     const userId = getUserId(req);
@@ -538,7 +538,7 @@ export async function registerRoutes(
   // ============================================================================
   // SUBSCRIPTION ROUTES
   // ============================================================================
-  
+
   app.get('/api/subscription', requireAuth, async (req: any, res) => {
     const route = "/api/subscription";
     const userId = getUserId(req);
@@ -574,7 +574,7 @@ export async function registerRoutes(
   // ============================================================================
   // GOALS ROUTES
   // ============================================================================
-  
+
   app.get('/api/goals', requireAuth, async (req: any, res) => {
     const route = "/api/goals";
     const userId = getUserId(req);
@@ -763,7 +763,7 @@ export async function registerRoutes(
   // ============================================================================
   // FAVORITE PLAYERS ROUTES
   // ============================================================================
-  
+
   app.get('/api/favorites', requireAuth, async (req: any, res) => {
     const route = "/api/favorites";
     const userId = getUserId(req);
@@ -920,7 +920,7 @@ export async function registerRoutes(
   // ============================================================================
   // NOTIFICATIONS ROUTES
   // ============================================================================
-  
+
   app.get('/api/notifications', requireAuth, async (req: any, res) => {
     const route = "/api/notifications";
     const userId = getUserId(req);
@@ -1056,7 +1056,7 @@ export async function registerRoutes(
   // ============================================================================
   // USER SETTINGS ROUTES
   // ============================================================================
-  
+
   app.get('/api/settings', requireAuth, async (req: any, res) => {
     const route = "/api/settings";
     const userId = getUserId(req);
@@ -1302,7 +1302,7 @@ export async function registerRoutes(
   // ============================================================================
   // CLASH ROYALE API ROUTES
   // ============================================================================
-  
+
   app.get('/api/clash/player/:tag', async (req: any, res) => {
     const route = "/api/clash/player/:tag";
     const userId = getUserId(req);
@@ -1310,7 +1310,7 @@ export async function registerRoutes(
     try {
       const { tag } = req.params;
       const result = await getPlayerByTag(tag);
-      
+
       if (result.error) {
         return sendApiError(res, {
           route,
@@ -1344,7 +1344,7 @@ export async function registerRoutes(
     try {
       const { tag } = req.params;
       const result = await getPlayerBattles(tag);
-      
+
       if (result.error) {
         return sendApiError(res, {
           route,
@@ -1377,7 +1377,7 @@ export async function registerRoutes(
 
     try {
       const result = await getCards();
-      
+
       if (result.error) {
         return sendApiError(res, {
           route,
@@ -1407,7 +1407,7 @@ export async function registerRoutes(
   // ============================================================================
   // PLAYER SYNC ROUTES
   // ============================================================================
-  
+
   app.post('/api/player/sync', requireAuth, async (req: any, res) => {
     const route = "/api/player/sync";
     const userId = getUserId(req);
@@ -2059,7 +2059,7 @@ export async function registerRoutes(
   // ============================================================================
   // STRIPE WEBHOOK ROUTES (for subscription activation)
   // ============================================================================
-  
+
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: any, res) => {
     const route = "/api/stripe/webhook";
     const userId = getUserId(req);
@@ -2148,7 +2148,7 @@ export async function registerRoutes(
             } catch (subscriptionFetchError) {
               console.warn("Failed to retrieve Stripe subscription on checkout completion:", subscriptionFetchError);
             }
-            
+
             if (subscription) {
               await storage.updateSubscription(subscription.id, {
                 stripeSubscriptionId,
@@ -2161,10 +2161,10 @@ export async function registerRoutes(
                 cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
               });
               console.log(`PRO activated for user: ${userId}`);
-              
+
               await createNotificationIfAllowed(storage, userId, "billing", {
-                title: 'Bem-vindo ao PRO!',
-                description: 'Sua assinatura PRO foi ativada com sucesso. Aproveite todos os recursos premium!',
+                title: 'notifications.billing.activated.title',
+                description: 'notifications.billing.activated.description',
                 type: 'success',
               });
             } else {
@@ -2182,15 +2182,15 @@ export async function registerRoutes(
           }
           break;
         }
-        
+
         case 'customer.subscription.updated': {
           const subscriptionData = event.data.object as Stripe.Subscription;
           if (subscriptionData?.id) {
             const existing = await storage.getSubscriptionByStripeId(subscriptionData.id);
             if (existing) {
-              const status = subscriptionData.status === 'active' ? 'active' : 
-                            subscriptionData.status === 'canceled' ? 'canceled' : 
-                            subscriptionData.status;
+              const status = subscriptionData.status === 'active' ? 'active' :
+                subscriptionData.status === 'canceled' ? 'canceled' :
+                  subscriptionData.status;
               await storage.updateSubscription(existing.id, {
                 status: status,
                 plan: status === "active" ? "pro" : existing.plan,
@@ -2205,7 +2205,7 @@ export async function registerRoutes(
           }
           break;
         }
-        
+
         case 'customer.subscription.deleted': {
           const subscriptionData = event.data.object as Stripe.Subscription;
           if (subscriptionData?.id) {
@@ -2221,10 +2221,10 @@ export async function registerRoutes(
                 cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
               });
               console.log(`Subscription ${subscriptionData.id} canceled`);
-              
+
               await createNotificationIfAllowed(storage, existing.userId, "billing", {
-                title: 'Assinatura cancelada',
-                description: 'Sua assinatura PRO foi cancelada. Você voltou para o plano gratuito.',
+                title: 'notifications.billing.canceled.title',
+                description: 'notifications.billing.canceled.description',
                 type: 'warning',
               });
             }
@@ -2257,7 +2257,7 @@ export async function registerRoutes(
           }
           break;
         }
-        
+
         case 'invoice.payment_failed': {
           const invoice = event.data.object as Stripe.Invoice & {
             subscription?: string | Stripe.Subscription | null;
@@ -2274,17 +2274,17 @@ export async function registerRoutes(
                 status: 'past_due',
               });
               console.log(`Subscription ${subscriptionId} marked as past_due due to payment failure`);
-              
+
               await createNotificationIfAllowed(storage, existing.userId, "billing", {
-                title: 'Falha no pagamento',
-                description: 'O pagamento da sua assinatura PRO falhou. Por favor, atualize seu método de pagamento.',
+                title: 'notifications.billing.paymentFailed.title',
+                description: 'notifications.billing.paymentFailed.description',
                 type: 'error',
               });
             }
           }
           break;
         }
-        
+
         default:
           console.log(`Unhandled webhook event type: ${event.type}`);
       }
@@ -2305,7 +2305,7 @@ export async function registerRoutes(
   // ============================================================================
   // AI COACH ROUTES
   // ============================================================================
-  
+
   app.post('/api/coach/chat', requireAuth, async (req: any, res) => {
     const route = "/api/coach/chat";
     const userId = getUserId(req);
@@ -2322,9 +2322,9 @@ export async function registerRoutes(
       }
 
       const storage = getUserStorage(req.auth!);
-      
+
       const isPro = await storage.isPro(userId);
-      
+
       if (!isPro) {
         const messagesToday = await storage.countCoachMessagesToday(userId);
         const limitState = evaluateFreeCoachLimit(messagesToday, FREE_DAILY_LIMIT);
@@ -2388,7 +2388,7 @@ export async function registerRoutes(
         /analyze\s*(my\s*)?(last\s*)?loss/i,
         /what\s*went\s*wrong/i,
       ];
-      
+
       const shouldInjectLastBattle = lossPatterns.some(p => p.test(lastUserMessage.content));
 
       let playerContext: any = {};
@@ -2413,7 +2413,7 @@ export async function registerRoutes(
             if (battlesResult.data) {
               const battles = battlesResult.data as any[];
               playerContext.recentBattles = battles.slice(0, 5);
-              
+
               const stats = computeBattleStats(battles);
               const tiltLevel = stats.tiltLevel;
               const consecutiveLosses = stats.streak.type === 'loss' ? stats.streak.count : 0;
@@ -2425,7 +2425,7 @@ export async function registerRoutes(
                 currentStreak: stats.streak,
                 consecutiveLosses: tiltLevel === 'high' ? consecutiveLosses : 0,
               };
-              
+
               if (activeGoals.length > 0) {
                 playerContext.activeGoals = activeGoals.map(g => ({
                   title: g.title,
@@ -2435,18 +2435,18 @@ export async function registerRoutes(
                   progress: Math.round(((g.currentValue || 0) / g.targetValue) * 100),
                 }));
               }
-              
+
               if (shouldInjectLastBattle) {
                 const lastLoss = battles.find((b: any) => {
                   const teamCrowns = b.team?.[0]?.crowns || 0;
                   const opponentCrowns = b.opponent?.[0]?.crowns || 0;
                   return teamCrowns < opponentCrowns;
                 });
-                
+
                 if (lastLoss) {
                   const playerTeam = lastLoss.team?.[0];
                   const opponent = lastLoss.opponent?.[0];
-                  
+
                   lastBattleContext = {
                     result: 'loss',
                     gameMode: lastLoss.gameMode?.name || lastLoss.type || 'Unknown',
@@ -2477,12 +2477,12 @@ export async function registerRoutes(
                 arena: player.arena?.name,
                 currentDeck: player.currentDeck?.map((c: any) => c.name),
               };
-              
+
               const battlesResult = await getPlayerBattles(profileTag);
               if (battlesResult.data) {
                 const battles = battlesResult.data as any[];
                 playerContext.recentBattles = battles.slice(0, 5);
-                
+
                 const stats = computeBattleStats(battles);
                 const tiltLevel = stats.tiltLevel;
                 const consecutiveLosses = stats.streak.type === 'loss' ? stats.streak.count : 0;
@@ -2494,7 +2494,7 @@ export async function registerRoutes(
                   currentStreak: stats.streak,
                   consecutiveLosses: tiltLevel === 'high' ? consecutiveLosses : 0,
                 };
-                
+
                 if (activeGoals.length > 0) {
                   playerContext.activeGoals = activeGoals.map(g => ({
                     title: g.title,
@@ -2504,18 +2504,18 @@ export async function registerRoutes(
                     progress: Math.round(((g.currentValue || 0) / g.targetValue) * 100),
                   }));
                 }
-                
+
                 if (shouldInjectLastBattle) {
                   const lastLoss = battles.find((b: any) => {
                     const teamCrowns = b.team?.[0]?.crowns || 0;
                     const opponentCrowns = b.opponent?.[0]?.crowns || 0;
                     return teamCrowns < opponentCrowns;
                   });
-                  
+
                   if (lastLoss) {
                     const playerTeam = lastLoss.team?.[0];
                     const opponent = lastLoss.opponent?.[0];
-                    
+
                     lastBattleContext = {
                       result: 'loss',
                       gameMode: lastLoss.gameMode?.name || lastLoss.type || 'Unknown',
@@ -2545,26 +2545,26 @@ export async function registerRoutes(
         userId,
         requestId: getResponseRequestId(res),
       });
-      
+
       await storage.createCoachMessage({
         userId,
         role: 'user',
         content: lastUserMessage.content,
         contextType: contextType || null,
       });
-      
+
       await storage.createCoachMessage({
         userId,
         role: 'assistant',
         content: aiResponse,
         contextType: contextType || null,
       });
-      
+
       const remainingMessages = isPro
         ? null
         : evaluateFreeCoachLimit(await storage.countCoachMessagesToday(userId), FREE_DAILY_LIMIT).remaining;
-      
-      res.json({ 
+
+      res.json({
         message: aiResponse,
         timestamp: new Date().toISOString(),
         remainingMessages,
@@ -2627,7 +2627,7 @@ export async function registerRoutes(
   // ============================================================================
   // PUSH ANALYSIS ROUTE (PRO-only)
   // ============================================================================
-  
+
   app.post('/api/coach/push-analysis', requireAuth, async (req: any, res) => {
     const route = "/api/coach/push-analysis";
     const userId = getUserId(req);
@@ -2744,7 +2744,7 @@ export async function registerRoutes(
       const avgElixirLeaked =
         latestPush.battles.length > 0
           ? latestPush.battles.reduce((acc, battle) => acc + (battle?.team?.[0]?.elixirLeaked || 0), 0) /
-            latestPush.battles.length
+          latestPush.battles.length
           : 0;
       const modeBreakdown = buildPushModeBreakdown(latestPush.battles);
 
@@ -3031,11 +3031,11 @@ export async function registerRoutes(
           },
         });
       }
-      
+
       const { pushAnalysisId } = req.body as { pushAnalysisId?: string };
-      
+
       let analysisResult;
-      
+
       if (pushAnalysisId) {
         const analysis = await storage.getPushAnalysis(pushAnalysisId);
         if (!analysis) {
@@ -3045,17 +3045,17 @@ export async function registerRoutes(
       } else {
         const latestAnalysis = await storage.getLatestPushAnalysis(userId);
         if (!latestAnalysis) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: "Nenhuma análise de push encontrada. Execute uma análise de push primeiro.",
             code: "NO_PUSH_ANALYSIS",
           });
         }
         analysisResult = latestAnalysis.resultJson;
       }
-      
+
       const profile = await storage.getProfile(userId);
       let playerContext;
-      
+
       const profileTag = getCanonicalProfileTag(profile);
       if (profileTag) {
         const playerResult = await getPlayerByTag(profileTag);
@@ -3068,16 +3068,16 @@ export async function registerRoutes(
           };
         }
       }
-      
+
       const generatedPlan = await generateTrainingPlan(analysisResult as any, playerContext, {
         provider: "openai",
         route: "/api/training/plan/generate",
         userId,
         requestId: getResponseRequestId(res),
       });
-      
+
       await storage.archiveOldPlans(userId);
-      
+
       const plan = await storage.createTrainingPlan({
         userId,
         title: generatedPlan.title,
@@ -3085,7 +3085,7 @@ export async function registerRoutes(
         status: 'active',
         pushAnalysisId: pushAnalysisId || undefined,
       });
-      
+
       const drills = await Promise.all(
         generatedPlan.drills.map((drill) =>
           storage.createTrainingDrill({
@@ -3100,13 +3100,13 @@ export async function registerRoutes(
           })
         )
       );
-      
+
       await createNotificationIfAllowed(storage, userId, "training", {
         title: 'Novo plano de treinamento criado!',
         description: `"${generatedPlan.title}" está pronto com ${drills.length} exercícios para você praticar.`,
         type: 'success',
       });
-      
+
       return res.json({
         ...plan,
         drills,
@@ -3191,13 +3191,13 @@ export async function registerRoutes(
           error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
         });
       }
-      
+
       const updateData: any = {};
       if (completedGames !== undefined) updateData.completedGames = completedGames;
       if (status) updateData.status = status;
-      
+
       const drill = await storage.updateTrainingDrill(drillId, updateData);
-      
+
       if (!drill) {
         return sendApiError(res, {
           route,
@@ -3207,7 +3207,7 @@ export async function registerRoutes(
           error: { code: "DRILL_NOT_FOUND", message: "Drill não encontrado" },
         });
       }
-      
+
       res.json(drill);
     } catch (error) {
       console.error("Error updating drill:", error);
@@ -3278,9 +3278,9 @@ export async function registerRoutes(
           error: { code: "TRAINING_PLAN_NOT_FOUND", message: "Plano não encontrado" },
         });
       }
-      
+
       const plan = await storage.updateTrainingPlan(planId, { status });
-      
+
       if (!plan) {
         return sendApiError(res, {
           route,
@@ -3298,7 +3298,7 @@ export async function registerRoutes(
           type: "success",
         });
       }
-      
+
       res.json(plan);
     } catch (error) {
       console.error("Error updating training plan:", error);
@@ -3320,11 +3320,11 @@ export async function registerRoutes(
     try {
       const locationId = (req.query.locationId as string) || 'global';
       const result = await getPlayerRankings(locationId);
-      
+
       if (result.error) {
         return res.status(result.status).json({ error: result.error });
       }
-      
+
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching player rankings:", error);
@@ -3336,11 +3336,11 @@ export async function registerRoutes(
     try {
       const locationId = (req.query.locationId as string) || 'global';
       const result = await getClanRankings(locationId);
-      
+
       if (result.error) {
         return res.status(result.status).json({ error: result.error });
       }
-      
+
       res.json(result.data);
     } catch (error) {
       console.error("Error fetching clan rankings:", error);
@@ -3356,18 +3356,18 @@ export async function registerRoutes(
     try {
       const { tag } = req.params;
       const playerResult = await getPlayerByTag(tag);
-      
+
       if (playerResult.error) {
         return res.status(playerResult.status).json({ error: playerResult.error });
       }
-      
+
       const battlesResult = await getPlayerBattles(tag);
       if (battlesResult.error) {
         return res.status(battlesResult.status).json({ error: battlesResult.error });
       }
 
       const battles = battlesResult.data || [];
-      
+
       res.json({
         player: playerResult.data,
         recentBattles: (battles as any[]).slice(0, 10),
@@ -3382,7 +3382,7 @@ export async function registerRoutes(
     try {
       const { tag } = req.params;
       const clanResult = await getClanByTag(tag);
-      
+
       if (clanResult.error) {
         return res.status(clanResult.status).json({ error: clanResult.error });
       }

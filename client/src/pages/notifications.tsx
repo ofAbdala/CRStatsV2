@@ -114,15 +114,14 @@ export default function NotificationsPage() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`border rounded-lg p-3 transition-colors ${
-                    notification.read ? "border-border/40 bg-background/30" : "border-primary/40 bg-primary/5"
-                  }`}
+                  className={`border rounded-lg p-3 transition-colors ${notification.read ? "border-border/40 bg-background/30" : "border-primary/40 bg-primary/5"
+                    }`}
                 >
                   <div className="flex justify-between gap-3">
                     <div>
-                      <p className="font-medium text-sm">{notification.title}</p>
+                      <p className="font-medium text-sm">{t(notification.title)}</p>
                       {notification.description ? (
-                        <p className="text-sm text-muted-foreground mt-1">{notification.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{t(notification.description)}</p>
                       ) : null}
                       <p className="text-xs text-muted-foreground mt-2">
                         {formatNotificationDate(notification.createdAt, locale)}

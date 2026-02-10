@@ -4,21 +4,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { 
-  Trophy, 
-  Crown, 
-  TrendingUp, 
+import {
+  Trophy,
+  Crown,
+  TrendingUp,
   TrendingDown,
-  Clock, 
-  Target, 
-  Swords, 
-  Loader2, 
+  Clock,
+  Target,
+  Swords,
+  Loader2,
   AlertCircle,
   Flame,
   Shield,
@@ -30,7 +30,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Lock,
-  Layers
+  Layers,
+  Minus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/useProfile";
@@ -55,7 +56,7 @@ import { formatDistanceToNow, differenceInDays, startOfDay, format, getDay } fro
 import { useGoals } from "@/hooks/useGoals";
 import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
-import { ptBR } from "date-fns/locale";
+import { ptBR, enUS } from "date-fns/locale";
 import { useLocale } from "@/hooks/use-locale";
 import { buildTrophyChartData } from "@/lib/analytics/trophyChart";
 import ClashCardImage from "@/components/clash/ClashCardImage";
@@ -67,16 +68,18 @@ function parseBattleTime(battleTime: string): Date {
   return new Date(battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6'));
 }
 
-function formatGameMode(type: string | undefined): string {
-  if (!type) return 'Batalha';
+function formatGameMode(type: string | undefined, t: (key: string) => string): string {
+  if (!type) return t('me.battleType.unknown');
   const lowerType = type.toLowerCase();
-  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return 'Ladder';
-  if (lowerType.includes('challenge')) return 'Desafio';
-  if (lowerType.includes('tournament')) return 'Torneio';
+
+  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return t('me.battleType.ladder');
+  if (lowerType.includes('challenge')) return t('me.battleType.challenge');
+  if (lowerType.includes('tournament')) return t('me.battleType.tournament');
   if (lowerType.includes('2v2')) return '2v2';
-  if (lowerType.includes('war')) return 'Guerra';
-  if (lowerType.includes('friendly')) return 'Amistoso';
-  if (lowerType.includes('party')) return 'Festa';
+  if (lowerType.includes('war')) return t('me.battleType.war');
+  if (lowerType.includes('friendly')) return t('me.battleType.friendly');
+  if (lowerType.includes('party')) return t('me.battleType.party');
+
   return type.replace(/([A-Z])/g, ' $1').trim();
 }
 
@@ -124,7 +127,7 @@ function groupBattlesIntoPushes(
   for (let i = 1; i < sortedBattles.length; i++) {
     const prevBattle = sortedBattles[i - 1];
     const currBattle = sortedBattles[i];
-    
+
     const prevTime = parseBattleTime(prevBattle.battleTime);
     const currTime = parseBattleTime(currBattle.battleTime);
     const gapMinutes = (currTime.getTime() - prevTime.getTime()) / (1000 * 60);
@@ -159,7 +162,7 @@ function createPushSession(battles: any[]): PushSession {
 
     const isWin = teamCrowns > opponentCrowns;
     const isLoss = teamCrowns < opponentCrowns;
-    
+
     if (isWin) wins++;
     else if (isLoss) losses++;
     else draws++;
@@ -172,7 +175,7 @@ function createPushSession(battles: any[]): PushSession {
       const prevBattle = index > 0 ? battles[index - 1] : null;
       const prevTrophies = prevBattle?.team?.[0]?.startingTrophies || prevBattle?.team?.[0]?.trophies;
       const currentStartTrophies = battle.team?.[0]?.startingTrophies;
-      
+
       if (typeof prevTrophies === 'number' && typeof currentStartTrophies === 'number') {
         // Delta = current starting - previous starting (adjusted for previous result)
         const computedDelta = currentStartTrophies - prevTrophies;
@@ -217,20 +220,20 @@ function groupBattlesIntoSessions(battles: any[], maxGapMinutes: number = 30): P
 /**
  * PushSummaryRow - Compact summary for a push session in the battle history
  */
-function PushSummaryRow({ 
-  session, 
-  t 
-}: { 
-  session: PushSession; 
+function PushSummaryRow({
+  session,
+  t
+}: {
+  session: PushSession;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const durationMin = Math.round(session.durationMs / (1000 * 60));
   const isSingleBattle = session.battles.length === 1;
-  
-  const trophiesText = session.netTrophies > 0 
-    ? `+${session.netTrophies}` 
+
+  const trophiesText = session.netTrophies > 0
+    ? `+${session.netTrophies}`
     : `${session.netTrophies}`;
-  
+
   return (
     <div className="flex items-center gap-2 py-2 px-3 bg-muted/30 rounded-lg border border-border/30" data-testid="push-summary-row">
       <Layers className="w-4 h-4 text-primary shrink-0" />
@@ -261,7 +264,7 @@ export default function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const clashTag = (profile as any)?.clashTag;
   const { data: playerData, isLoading: playerLoading, error: playerError } = useClashPlayer(clashTag);
-  
+
   const { data: subscription } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => api.subscription.get(),
@@ -300,15 +303,15 @@ export default function MePage() {
 
   const filteredBattles = React.useMemo(() => {
     if (!battles.length) return [];
-    
+
     const now = new Date();
     const todayStart = startOfDay(now);
-    
+
     return battles.filter((battle: any) => {
       if (!battle.battleTime) return false;
       const battleDate = parseBattleTime(battle.battleTime);
       const daysDiff = differenceInDays(now, battleDate);
-      
+
       switch (periodFilter) {
         case 'today':
           return battleDate >= todayStart;
@@ -330,17 +333,17 @@ export default function MePage() {
     const recent = filteredBattles.slice(0, 10);
     let wins = 0;
     let losses = 0;
-    
+
     recent.forEach((battle: any) => {
       const teamCrowns = battle.team?.[0]?.crowns || 0;
       const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
       if (teamCrowns > opponentCrowns) wins++;
       else if (teamCrowns < opponentCrowns) losses++;
     });
-    
+
     const total = wins + losses;
     const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
-    
+
     return { wins, losses, total: recent.length, winRate };
   }, [filteredBattles]);
 
@@ -390,7 +393,7 @@ export default function MePage() {
       const opponentCrowns = b.opponent?.[0]?.crowns || 0;
       const isWin = teamCrowns > opponentCrowns;
       const isLoss = teamCrowns < opponentCrowns;
-      
+
       if (isWin) wins++;
       else if (isLoss) losses++;
 
@@ -417,9 +420,9 @@ export default function MePage() {
 
     const totalMatches = wins + losses;
     const winRate = totalMatches > 0 ? ((wins / totalMatches) * 100) : 0;
-    
+
     const lastBattle = battles[0];
-    const lastPlayed = lastBattle?.battleTime 
+    const lastPlayed = lastBattle?.battleTime
       ? formatDistanceToNow(new Date(lastBattle.battleTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')), { addSuffix: true, locale: ptBR })
       : null;
 
@@ -433,30 +436,30 @@ export default function MePage() {
       totalMatches,
       streak: { type: streakType, count: streakCount },
       lastPlayed,
-      ladderStats: { 
-        wins: ladderWins, 
-        losses: ladderLosses, 
+      ladderStats: {
+        wins: ladderWins,
+        losses: ladderLosses,
         matches: ladderMatches,
         winRate: ladderMatches > 0 ? ((ladderWins / ladderMatches) * 100).toFixed(1) : 0
       },
-      challengeStats: { 
-        wins: challengeWins, 
-        losses: challengeLosses, 
+      challengeStats: {
+        wins: challengeWins,
+        losses: challengeLosses,
         matches: challengeMatches,
         winRate: challengeMatches > 0 ? ((challengeWins / challengeMatches) * 100).toFixed(1) : 0
       },
     };
   }, [battles]);
 
-  const tiltStatus = React.useMemo(() => {
+  const tiltAnalysis = React.useMemo(() => {
     if (stats.streak.type === 'loss' && stats.streak.count >= 3) {
-      return { label: 'Em risco de tilt', variant: 'destructive' as const };
+      return { trend: 'at-risk' as const, label: t('me.analysis.atRisk') };
     }
     if (stats.streak.type === 'win' && stats.streak.count >= 3) {
-      return { label: 'Em alta!', variant: 'default' as const };
+      return { trend: 'improving' as const, label: t('me.analysis.onFire') };
     }
-    return { label: 'Consistente', variant: 'secondary' as const };
-  }, [stats.streak]);
+    return { trend: 'consistent' as const, label: t('me.analysis.consistent') };
+  }, [stats.streak, t]);
 
   const chartData = React.useMemo(() => {
     const points = buildTrophyChartData({
@@ -475,37 +478,37 @@ export default function MePage() {
 
   const deckUsage = React.useMemo(() => {
     if (!battles.length) return [];
-    
+
     const deckMap: Record<string, { cards: any[]; wins: number; losses: number; total: number }> = {};
-    
+
     battles.forEach((battle: any) => {
       const cards = battle.team?.[0]?.cards;
       if (!cards || cards.length === 0) return;
-      
+
       const deckKey = cards.map((c: any) => c.id).sort().join('-');
-      
+
       if (!deckMap[deckKey]) {
         deckMap[deckKey] = { cards, wins: 0, losses: 0, total: 0 };
       }
-      
+
       const teamCrowns = battle.team?.[0]?.crowns || 0;
       const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
       const isWin = teamCrowns > opponentCrowns;
-      
+
       deckMap[deckKey].total++;
       if (isWin) deckMap[deckKey].wins++;
       else deckMap[deckKey].losses++;
     });
-    
+
     return Object.values(deckMap)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5)
-      .map((deck, idx) => ({
+      .map((deck, index) => ({
         ...deck,
-        name: idx === 0 ? 'Deck Principal' : idx === 1 ? 'Deck Secundário' : `Deck ${idx + 1}`,
+        name: index === 0 ? t('me.deck.primary') : index === 1 ? t('me.deck.secondary') : t('me.deck.other'),
         winRate: deck.total > 0 ? Math.round((deck.wins / deck.total) * 100) : 0,
       }));
-  }, [battles]);
+  }, [battles, t]);
 
   function formatSigned(value: number) {
     if (!Number.isFinite(value)) return "N/A";
@@ -593,11 +596,11 @@ export default function MePage() {
     battles.forEach((battle: any) => {
       const opponentCards = battle.opponent?.[0]?.cards || [];
       const cardNames = opponentCards.map((c: any) => (c.name || '').toLowerCase());
-      
+
       const teamCrowns = battle.team?.[0]?.crowns || 0;
       const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
       const isWin = teamCrowns > opponentCrowns;
-      
+
       if (cardNames.some((name: string) => beatdownCards.some(bc => name.includes(bc)))) {
         if (isWin) archetypeStats['Beatdown'].wins++;
         else archetypeStats['Beatdown'].losses++;
@@ -622,10 +625,10 @@ export default function MePage() {
     Object.entries(archetypeStats).forEach(([archetype, stats]) => {
       const total = stats.wins + stats.losses;
       if (total < 3) return;
-      
+
       const winRate = Math.round((stats.wins / total) * 100);
       const entry = { archetype, winRate, matches: total };
-      
+
       if (winRate >= 55) {
         strengths.push(entry);
       } else if (winRate <= 45) {
@@ -644,7 +647,7 @@ export default function MePage() {
       return null;
     }
 
-    const battlesWithTrophyChange = battles.filter((battle: any) => 
+    const battlesWithTrophyChange = battles.filter((battle: any) =>
       battle.battleTime && typeof battle.team?.[0]?.trophyChange === 'number'
     );
 
@@ -659,7 +662,7 @@ export default function MePage() {
       const battleDate = parseBattleTime(battle.battleTime);
       const dateKey = format(battleDate, 'yyyy-MM-dd');
       const trophyChange = battle.team[0].trophyChange;
-      
+
       if (!dataByDate[dateKey]) {
         dataByDate[dateKey] = { trophiesAtEnd: runningTrophies, totalChange: 0 };
       }
@@ -668,13 +671,13 @@ export default function MePage() {
     });
 
     const sortedDates = Object.keys(dataByDate).sort();
-    
+
     if (sortedDates.length === 0) {
       return null;
     }
 
     let trophiesAtEndOfDay = player.trophies;
-    
+
     return sortedDates.slice(-14).map(dateKey => {
       const data = dataByDate[dateKey];
       const result = {
@@ -729,10 +732,10 @@ export default function MePage() {
     const totalMatchesLast14 = Object.values(matchesByDay).reduce((a, b) => a + b, 0);
     const avgMatchesPerDay = totalMatchesLast14 > 0 ? (totalMatchesLast14 / 14).toFixed(1) : 0;
 
-    const mostActiveDay = Object.entries(matchesByDayOfWeek).reduce((max, [day, count]) => 
+    const mostActiveDay = Object.entries(matchesByDayOfWeek).reduce((max, [day, count]) =>
       count > max.count ? { day: parseInt(day), count } : max, { day: 0, count: 0 });
 
-    const peakHour = Object.entries(matchesByHour).reduce((max, [hour, count]) => 
+    const peakHour = Object.entries(matchesByHour).reduce((max, [hour, count]) =>
       count > max.count ? { hour: parseInt(hour), count } : max, { hour: 12, count: 0 });
 
     return {
@@ -755,9 +758,9 @@ export default function MePage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Carregando perfil...</p>
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">{t('me.loading')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -771,9 +774,9 @@ export default function MePage() {
           <Alert data-testid="alert-player-error">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {clashTag 
-                ? `Não foi possível carregar os dados do jogador ${clashTag}. Verifique se a tag está correta.`
-                : 'Configure sua Clash Royale tag no perfil para ver seus dados.'}
+              {clashTag
+                ? t('me.errors.playerNotFound', { tag: clashTag })
+                : t('me.errors.noTag')}
             </AlertDescription>
           </Alert>
         )}
@@ -790,13 +793,13 @@ export default function MePage() {
                     <Swords className="w-8 h-8 text-primary" />
                   </div>
                   <div>
-                    <h1 
+                    <h1
                       className="text-2xl md:text-3xl font-display font-bold text-foreground"
                       data-testid="header-player-name"
                     >
-                      {player?.name || 'Jogador'}
+                      {player?.name || t('me.playerFallback')}
                     </h1>
-                    <p 
+                    <p
                       className="text-muted-foreground font-mono text-sm"
                       data-testid="header-player-tag"
                     >
@@ -812,7 +815,7 @@ export default function MePage() {
                       {player.clan.name}
                     </span>
                     {player.clan.badgeId && (
-                      <img 
+                      <img
                         src={`https://cdn.royaleapi.com/static/img/badge/${player.clan.badgeId}.png`}
                         alt="Clan Badge"
                         className="w-5 h-5"
@@ -826,14 +829,14 @@ export default function MePage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="bg-background/50" data-testid="stat-winrate">
                     <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
-                    {stats.winRate}% Win Rate
+                    {stats.winRate}% {t('me.winRate')}
                   </Badge>
                   <Badge variant="outline" className="bg-background/50">
                     <Swords className="w-3 h-3 mr-1" />
-                    {stats.totalMatches} partidas
+                    {stats.totalMatches} {t('me.matches')}
                   </Badge>
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className={cn(
                       "bg-background/50",
                       stats.streak.type === 'win' && "border-green-500/50 text-green-500",
@@ -842,26 +845,42 @@ export default function MePage() {
                     data-testid="stat-streak"
                   >
                     <Flame className="w-3 h-3 mr-1" />
-                    {stats.streak.count > 0 
-                      ? `${stats.streak.count} ${stats.streak.type === 'win' ? 'vitórias' : 'derrotas'} seguidas`
-                      : 'Sem sequência'}
+                    {stats.streak.count > 0
+                      ? `${stats.streak.count} ${stats.streak.type === 'win' ? t('me.wins') : t('me.losses')} ${t('me.streak')}`
+                      : t('me.noStreak')}
                   </Badge>
                   {stats.lastPlayed && (
                     <Badge variant="outline" className="bg-background/50">
                       <Clock className="w-3 h-3 mr-1" />
-                      Jogou {stats.lastPlayed}
+                      {t('me.lastPlayed', { time: stats.lastPlayed })}
+                    </Badge>
+                  )}
+                  {tiltAnalysis.trend === "at-risk" ? (
+                    <Badge variant="outline" className="border-red-500/50 text-red-500 gap-1 bg-red-500/10">
+                      <TrendingDown className="w-3 h-3" />
+                      {t('me.analysis.atRisk')}
+                    </Badge>
+                  ) : tiltAnalysis.trend === "improving" ? (
+                    <Badge variant="outline" className="border-green-500/50 text-green-500 gap-1 bg-green-500/10">
+                      <TrendingUp className="w-3 h-3" />
+                      {t('me.analysis.onFire')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-blue-500/50 text-blue-500 gap-1 bg-blue-500/10">
+                      <Minus className="w-3 h-3" />
+                      {t('me.analysis.consistent')}
                     </Badge>
                   )}
                 </div>
               </div>
 
               {/* Right: Arena & Trophies */}
-              <div 
+              <div
                 className="flex items-center gap-4 p-4 rounded-xl bg-background/50 border border-border/50"
                 data-testid="header-arena"
               >
                 {player?.arena?.id && (
-                  <img 
+                  <img
                     src={getArenaImageUrl(player.arena.id)}
                     alt={player.arena.name}
                     className="w-16 h-16 md:w-20 md:h-20 object-contain"
@@ -870,9 +889,9 @@ export default function MePage() {
                 )}
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                    {player?.arena?.name || 'Arena'}
+                    {player?.arena?.name || t('me.arenaFallback')}
                   </p>
-                  <div 
+                  <div
                     className="text-3xl md:text-4xl font-display font-bold text-primary flex items-center gap-2"
                     data-testid="header-trophies"
                   >
@@ -882,7 +901,7 @@ export default function MePage() {
                   <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Award className="w-3 h-3 text-yellow-500" />
-                      Melhor: {player?.bestTrophies?.toLocaleString() || 0}
+                      {t('me.best')}: {player?.bestTrophies?.toLocaleString() || 0}
                     </span>
                   </div>
                 </div>
@@ -895,16 +914,16 @@ export default function MePage() {
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto bg-card/50 border border-border/50 p-1 h-auto flex-wrap md:flex-nowrap">
             <TabsTrigger value="overview" data-testid="tab-overview" className="flex-1 min-w-[100px]">
-              Visão Geral
+              {t('me.tabs.overview')}
             </TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-history" className="flex-1 min-w-[100px]">
-              Histórico
+              {t('me.tabs.history')}
             </TabsTrigger>
             <TabsTrigger value="decks" data-testid="tab-decks" className="flex-1 min-w-[100px]">
-              Decks & Meta
+              {t('me.tabs.decks')}
             </TabsTrigger>
             <TabsTrigger value="progress" data-testid="tab-progress" className="flex-1 min-w-[100px]">
-              Progresso
+              {t('me.tabs.progress')}
             </TabsTrigger>
           </TabsList>
 
@@ -916,24 +935,24 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Trophy className="w-4 h-4 text-primary" />
-                    Resumo da Temporada
+                    {t('me.seasonSummary.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Troféus Atuais</span>
+                    <span className="text-sm text-muted-foreground">{t('me.seasonSummary.currentTrophies')}</span>
                     <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Melhor Temporada</span>
+                    <span className="text-sm text-muted-foreground">{t('me.seasonSummary.bestSeason')}</span>
                     <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Win Rate</span>
+                    <span className="text-sm text-muted-foreground">{t('me.winRate')}</span>
                     <span className="font-bold text-green-500">{stats.winRate}%</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Partidas</span>
+                    <span className="text-sm text-muted-foreground">{t('me.matches')}</span>
                     <span className="font-bold">{stats.totalMatches}</span>
                   </div>
                 </CardContent>
@@ -944,32 +963,32 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Target className="w-4 h-4 text-primary" />
-                    Performance Recente
+                    {t('me.recentPerformance.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Últimas {battles.length} batalhas</span>
+                    <span className="text-sm text-muted-foreground">{t('me.recentPerformance.lastBattles', { count: battles.length })}</span>
                     <span className="font-bold">{stats.winRate}% WR</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Sequência Atual</span>
+                    <span className="text-sm text-muted-foreground">{t('me.recentPerformance.currentStreak')}</span>
                     <span className={cn(
                       "font-bold",
                       stats.streak.type === 'win' && "text-green-500",
                       stats.streak.type === 'loss' && "text-red-500"
                     )}>
-                      {stats.streak.count > 0 
-                        ? `${stats.streak.count}${stats.streak.type === 'win' ? 'W' : 'L'}`
+                      {stats.streak.count > 0
+                        ? `${stats.streak.count}${stats.streak.type === 'win' ? 'V' : 'D'}`
                         : '-'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <Badge variant={tiltStatus.variant}>{tiltStatus.label}</Badge>
+                    <span className="text-sm text-muted-foreground">{t('me.recentPerformance.status')}</span>
+                    <Badge variant={tiltAnalysis.trend === 'at-risk' ? 'destructive' : tiltAnalysis.trend === 'improving' ? 'default' : 'secondary'}>{tiltAnalysis.label}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">V/D</span>
+                    <span className="text-sm text-muted-foreground">{t('me.recentPerformance.winsLosses')}</span>
                     <span className="font-bold">
                       <span className="text-green-500">{stats.wins}</span>
                       {' / '}
@@ -982,29 +1001,29 @@ export default function MePage() {
               {/* PRO Status */}
               <Card className={cn(
                 "border-border/50 backdrop-blur-sm",
-                isPro 
+                isPro
                   ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30"
                   : "bg-card/50"
               )}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Crown className={cn("w-4 h-4", isPro ? "text-yellow-500" : "text-muted-foreground")} />
-                    Status da Conta
+                    {t('me.accountStatus.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Plano</span>
+                    <span className="text-sm text-muted-foreground">{t('me.accountStatus.plan')}</span>
                     <Badge variant={isPro ? "default" : "secondary"}>
                       {isPro ? 'PRO' : 'Free'}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Total de Vitórias</span>
+                    <span className="text-sm text-muted-foreground">{t('me.accountStatus.totalWins')}</span>
                     <span className="font-bold">{player?.wins?.toLocaleString() || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Cartas Coletadas</span>
+                    <span className="text-sm text-muted-foreground">{t('me.accountStatus.cardsCollected')}</span>
                     <span className="font-bold">{player?.cards?.length || 0}</span>
                   </div>
                 </CardContent>
@@ -1016,7 +1035,7 @@ export default function MePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  Progressão de Troféus
+                  {t('me.trophyProgression.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1030,35 +1049,39 @@ export default function MePage() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="hsl(var(--muted-foreground))" 
+                      <XAxis
+                        dataKey="date"
+                        stroke="hsl(var(--muted-foreground))"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
+                        tickFormatter={(date) => {
+                          const d = new Date(date);
+                          return format(d, 'EEE', { locale: locale === 'pt-BR' ? ptBR : enUS });
+                        }}
                       />
-                      <YAxis 
-                        stroke="hsl(var(--muted-foreground))" 
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
                         domain={['dataMin - 50', 'dataMax + 50']}
                       />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--popover))', 
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
                           borderColor: 'hsl(var(--border))',
                           borderRadius: '8px',
                           color: 'hsl(var(--popover-foreground))'
                         }}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="trophies" 
-                        stroke="hsl(var(--primary))" 
+                      <Area
+                        type="monotone"
+                        dataKey="trophies"
+                        stroke="hsl(var(--primary))"
                         strokeWidth={3}
-                        fillOpacity={1} 
-                        fill="url(#colorTrophiesMe)" 
+                        fillOpacity={1}
+                        fill="url(#colorTrophiesMe)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1068,14 +1091,14 @@ export default function MePage() {
 
             {/* Game Mode Stats */}
             <div className="grid md:grid-cols-2 gap-6">
-              <GameModeCard 
-                title="Ladder / Ranqueada"
+              <GameModeCard
+                title={t('me.gameModes.ladder')}
                 icon={<Shield className="w-5 h-5" />}
                 stats={stats.ladderStats}
                 color="primary"
               />
-              <GameModeCard 
-                title="Desafios"
+              <GameModeCard
+                title={t('me.gameModes.challenges')}
                 icon={<Zap className="w-5 h-5" />}
                 stats={stats.challengeStats}
                 color="yellow"
@@ -1083,79 +1106,79 @@ export default function MePage() {
             </div>
           </TabsContent>
 
-	          {/* History Tab */}
-	          <TabsContent value="history" className="mt-6 space-y-4">
-	            {/* Filter Buttons */}
-	            <div className="flex flex-wrap items-center justify-between gap-2">
-	              <div className="flex flex-wrap gap-2">
-	                <Button
-	                  variant={periodFilter === 'today' ? 'default' : 'outline'}
-	                  size="sm"
-	                  onClick={() => setPeriodFilter('today')}
-	                  data-testid="filter-today"
-	                >
-	                  Hoje
-	                </Button>
-	                <Button
-	                  variant={periodFilter === '7days' ? 'default' : 'outline'}
-	                  size="sm"
-	                  onClick={() => setPeriodFilter('7days')}
-	                  data-testid="filter-7days"
-	                >
-	                  7 dias
-	                </Button>
-	                <Button
-	                  variant={periodFilter === '30days' ? 'default' : 'outline'}
-	                  size="sm"
-	                  onClick={() => setPeriodFilter('30days')}
-	                  data-testid="filter-30days"
-	                >
-	                  30 dias
-	                </Button>
-	                <Button
-	                  variant={periodFilter === 'season' ? 'default' : 'outline'}
-	                  size="sm"
-	                  onClick={() => setPeriodFilter('season')}
-	                  data-testid="filter-season"
-	                >
-	                  Temporada
-	                </Button>
+          {/* History Tab */}
+          <TabsContent value="history" className="mt-6 space-y-4">
+            {/* Filter Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={periodFilter === 'today' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodFilter('today')}
+                  data-testid="filter-today"
+                >
+                  {t('me.filters.today')}
+                </Button>
+                <Button
+                  variant={periodFilter === '7days' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodFilter('7days')}
+                  data-testid="filter-7days"
+                >
+                  {t('me.filters.7days')}
+                </Button>
+                <Button
+                  variant={periodFilter === '30days' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodFilter('30days')}
+                  data-testid="filter-30days"
+                >
+                  {t('me.filters.30days')}
+                </Button>
+                <Button
+                  variant={periodFilter === 'season' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodFilter('season')}
+                  data-testid="filter-season"
+                >
+                  {t('me.filters.season')}
+                </Button>
 
-	                {isPro ? (
-	                  <Button
-	                    variant={periodFilter === '60days' ? 'default' : 'outline'}
-	                    size="sm"
-	                    onClick={() => setPeriodFilter('60days')}
-	                    data-testid="filter-60days"
-	                  >
-	                    60 dias
-	                  </Button>
-	                ) : (
-	                  <Link href="/billing">
-	                    <Button variant="outline" size="sm" data-testid="filter-60days-locked">
-	                      <Lock className="w-4 h-4 mr-2" />
-	                      60 dias
-	                    </Button>
-	                  </Link>
-	                )}
-	              </div>
+                {isPro ? (
+                  <Button
+                    variant={periodFilter === '60days' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setPeriodFilter('60days')}
+                    data-testid="filter-60days"
+                  >
+                    {t('me.filters.60days')}
+                  </Button>
+                ) : (
+                  <Link href="/billing">
+                    <Button variant="outline" size="sm" data-testid="filter-60days-locked">
+                      <Lock className="w-4 h-4 mr-2" />
+                      {t('me.filters.60days')}
+                    </Button>
+                  </Link>
+                )}
+              </div>
 
-	              <Button
-	                type="button"
-	                variant="outline"
-	                size="sm"
-	                onClick={() => syncMutation.mutate()}
-	                disabled={syncMutation.isPending || !clashTag}
-	                data-testid="button-refresh-history"
-	              >
-	                {syncMutation.isPending ? (
-	                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-	                ) : (
-	                  <RotateCcw className="w-4 h-4 mr-2" />
-	                )}
-	                {t("pages.dashboard.sync")}
-	              </Button>
-	            </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending || !clashTag}
+                data-testid="button-refresh-history"
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
+                {t("pages.dashboard.sync")}
+              </Button>
+            </div>
 
             {/* Summary - Shows last push if valid (2+ games within 30min gaps), otherwise shows recent stats */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
@@ -1165,34 +1188,26 @@ export default function MePage() {
                     <Target className="w-5 h-5 text-primary" />
                     {lastPush ? (
                       <span className="font-medium" data-testid="push-summary">
-                        Último push: {lastPush.battles.length} partidas,{' '}
-                        <span className="text-green-500">{lastPush.wins}V</span>
-                        {' / '}
-                        <span className="text-red-500">{lastPush.losses}D</span>
-                        {', '}
-                        <span className={cn(
-                          lastPush.netTrophies > 0 ? "text-green-500" : 
-                          lastPush.netTrophies < 0 ? "text-red-500" : "text-muted-foreground"
-                        )}>
-                          {lastPush.netTrophies > 0 ? '+' : ''}{lastPush.netTrophies} troféus
-                        </span>
-                        {', '}
-                        <span className="text-muted-foreground">
-                          {Math.round(lastPush.durationMs / (1000 * 60))} min de push
-                        </span>
+                        {t('me.history.lastPush', {
+                          count: lastPush.battles.length,
+                          wins: lastPush.wins,
+                          losses: lastPush.losses,
+                          trophies: lastPush.netTrophies > 0 ? `+${lastPush.netTrophies}` : lastPush.netTrophies,
+                          duration: Math.round(lastPush.durationMs / (1000 * 60))
+                        })}
                       </span>
                     ) : (
                       <span className="font-medium" data-testid="recent-stats-summary">
-                        Últimas {recentSeriesStats.total} partidas:{' '}
-                        <span className="text-green-500">{recentSeriesStats.wins}V</span>
-                        {' / '}
-                        <span className="text-red-500">{recentSeriesStats.losses}D</span>
-                        {' '}
-                        <span className="text-muted-foreground">({recentSeriesStats.winRate}% winrate)</span>
+                        {t('me.history.recentMatches', {
+                          count: recentSeriesStats.total,
+                          wins: recentSeriesStats.wins,
+                          losses: recentSeriesStats.losses,
+                          winrate: recentSeriesStats.winRate
+                        })}
                       </span>
                     )}
                   </div>
-                  <Badge variant="outline">{filteredBattles.length} batalhas</Badge>
+                  <Badge variant="outline">{t('me.history.totalBattles', { count: filteredBattles.length })}</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -1201,15 +1216,15 @@ export default function MePage() {
             <div className="space-y-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <Swords className="w-5 h-5 text-primary" />
-                Histórico de Batalhas
+                {t('me.history.battleHistory')}
               </h3>
-              
+
               {battlesLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
               ) : sessions.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">Nenhuma batalha encontrada neste período</p>
+                <p className="text-center text-muted-foreground py-8">{t('me.history.noBattlesFound')}</p>
               ) : (
                 <div className="space-y-6">
                   {sessions.map((session, sessionIdx) => (
@@ -1218,203 +1233,203 @@ export default function MePage() {
                       <div className="mt-2 space-y-2">
                         <Accordion type="single" collapsible className="space-y-2">
                           {session.battles.map((battle: any, idx: number) => {
-                      const teamCrowns = battle.team?.[0]?.crowns || 0;
-                      const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
-                      const isWin = teamCrowns > opponentCrowns;
-                      const isDraw = teamCrowns === opponentCrowns;
-                      const trophyChange = battle.team?.[0]?.trophyChange;
-                      const battleTime = battle.battleTime ? parseBattleTime(battle.battleTime) : null;
-                      const playerCards = battle.team?.[0]?.cards || [];
-                      const opponentCards = battle.opponent?.[0]?.cards || [];
-                      const opponent = battle.opponent?.[0];
-                      const gameMode = formatGameMode(battle.type);
-                      
-                      return (
-                        <AccordionItem 
-                          key={idx} 
-                          value={`match-${idx}`}
-                          className={cn(
-                            "border rounded-lg overflow-hidden transition-colors",
-                            isWin && !isDraw 
-                              ? "bg-green-500/5 border-green-500/20 hover:bg-green-500/10" 
-                              : isDraw 
-                              ? "bg-muted/50 border-border/50 hover:bg-muted/70"
-                              : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
-                          )}
-                          data-testid={`match-row-${idx}`}
-                        >
-                          <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                            <div className="flex items-center justify-between w-full pr-4">
-                              {/* Left side - Result & Info */}
-                              <div className="flex items-center gap-3">
-                                <Badge 
-                                  variant={isWin && !isDraw ? "default" : isDraw ? "secondary" : "destructive"}
-                                  className={cn(
-                                    "min-w-[70px] justify-center",
-                                    isWin && !isDraw && "bg-green-600 hover:bg-green-700"
-                                  )}
-                                >
-                                  {isWin && !isDraw ? "Vitória" : isDraw ? "Empate" : "Derrota"}
-                                </Badge>
-                                
-                                {/* Desktop info */}
-                                <div className="hidden md:flex items-center gap-4">
-                                  <div className="flex items-center gap-1">
-                                    <Crown className="w-4 h-4 text-yellow-500" />
-                                    <span className="font-bold">{teamCrowns} × {opponentCrowns}</span>
+                            const teamCrowns = battle.team?.[0]?.crowns || 0;
+                            const opponentCrowns = battle.opponent?.[0]?.crowns || 0;
+                            const isWin = teamCrowns > opponentCrowns;
+                            const isDraw = teamCrowns === opponentCrowns;
+                            const trophyChange = battle.team?.[0]?.trophyChange;
+                            const battleTime = battle.battleTime ? parseBattleTime(battle.battleTime) : null;
+                            const playerCards = battle.team?.[0]?.cards || [];
+                            const opponentCards = battle.opponent?.[0]?.cards || [];
+                            const opponent = battle.opponent?.[0];
+                            const gameMode = formatGameMode(battle.type, t);
+
+                            return (
+                              <AccordionItem
+                                key={idx}
+                                value={`match-${idx}`}
+                                className={cn(
+                                  "border rounded-lg overflow-hidden transition-colors",
+                                  isWin && !isDraw
+                                    ? "bg-green-500/5 border-green-500/20 hover:bg-green-500/10"
+                                    : isDraw
+                                      ? "bg-muted/50 border-border/50 hover:bg-muted/70"
+                                      : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                                )}
+                                data-testid={`match-row-${idx}`}
+                              >
+                                <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                                  <div className="flex items-center justify-between w-full pr-4">
+                                    {/* Left side - Result & Info */}
+                                    <div className="flex items-center gap-3">
+                                      <Badge
+                                        variant={isWin && !isDraw ? "default" : isDraw ? "secondary" : "destructive"}
+                                        className={cn(
+                                          "min-w-[70px] justify-center",
+                                          isWin && !isDraw && "bg-green-600 hover:bg-green-700"
+                                        )}
+                                      >
+                                        {isWin && !isDraw ? t('me.result.win') : isDraw ? t('me.result.draw') : t('me.result.loss')}
+                                      </Badge>
+
+                                      {/* Desktop info */}
+                                      <div className="hidden md:flex items-center gap-4">
+                                        <div className="flex items-center gap-1">
+                                          <Crown className="w-4 h-4 text-yellow-500" />
+                                          <span className="font-bold">{teamCrowns} × {opponentCrowns}</span>
+                                        </div>
+
+                                        <Badge variant="outline" className="font-normal">
+                                          {gameMode}
+                                        </Badge>
+
+                                        {trophyChange !== undefined && trophyChange !== null && (
+                                          <span className={cn(
+                                            "font-medium text-sm flex items-center gap-1",
+                                            trophyChange > 0 ? "text-green-500" : trophyChange < 0 ? "text-red-500" : "text-muted-foreground"
+                                          )}>
+                                            {trophyChange > 0 ? <TrendingUp className="w-3 h-3" /> : trophyChange < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                                            {trophyChange > 0 ? '+' : ''}{trophyChange}
+                                          </span>
+                                        )}
+
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{opponent?.name || t('me.opponentFallback')}</span>
+                                          {opponent?.tag && (
+                                            <span className="text-xs text-muted-foreground font-mono">{opponent.tag}</span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Mobile info */}
+                                      <div className="flex md:hidden flex-col">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold">{teamCrowns} × {opponentCrowns}</span>
+                                          {trophyChange !== undefined && trophyChange !== null && (
+                                            <span className={cn(
+                                              "text-xs font-medium",
+                                              trophyChange > 0 ? "text-green-500" : trophyChange < 0 ? "text-red-500" : "text-muted-foreground"
+                                            )}>
+                                              ({trophyChange > 0 ? '+' : ''}{trophyChange})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="text-xs text-muted-foreground">{t('me.vs')} {opponent?.name || t('me.opponentFallback')}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Right side - Time */}
+                                    <div className="text-right text-xs text-muted-foreground hidden sm:block">
+                                      {battleTime && (
+                                        <span>{formatDistanceToNow(battleTime, { addSuffix: true, locale: locale === 'pt-BR' ? ptBR : enUS })}</span>
+                                      )}
+                                    </div>
                                   </div>
-                                  
-                                  <Badge variant="outline" className="font-normal">
-                                    {gameMode}
-                                  </Badge>
-                                  
-                                  {trophyChange !== undefined && trophyChange !== null && (
-                                    <span className={cn(
-                                      "font-medium text-sm flex items-center gap-1",
-                                      trophyChange > 0 ? "text-green-500" : trophyChange < 0 ? "text-red-500" : "text-muted-foreground"
-                                    )}>
-                                      {trophyChange > 0 ? <TrendingUp className="w-3 h-3" /> : trophyChange < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                                      {trophyChange > 0 ? '+' : ''}{trophyChange}
-                                    </span>
-                                  )}
-                                  
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-medium">{opponent?.name || 'Oponente'}</span>
-                                    {opponent?.tag && (
-                                      <span className="text-xs text-muted-foreground font-mono">{opponent.tag}</span>
+                                </AccordionTrigger>
+
+                                <AccordionContent data-testid={`match-details-${idx}`}>
+                                  <div className="px-4 pb-4 pt-2 space-y-4">
+                                    {/* Battle Time on Mobile */}
+                                    <div className="sm:hidden text-xs text-muted-foreground">
+                                      {battleTime && (
+                                        <div className="flex items-center gap-1">
+                                          <Clock className="w-3 h-3" />
+                                          {formatDistanceToNow(battleTime, { addSuffix: true, locale: locale === 'pt-BR' ? ptBR : enUS })}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Match Info Summary */}
+                                    <div className="flex flex-wrap gap-3 text-sm">
+                                      <Badge variant="outline">{gameMode}</Badge>
+                                      {opponent?.tag && (
+                                        <span className="text-muted-foreground">
+                                          {t('me.opponent')}: <span className="font-mono">{opponent.tag}</span>
+                                        </span>
+                                      )}
+                                      {battle.deckSelection && (
+                                        <span className="text-muted-foreground">
+                                          {t('me.deckSelection')}: {battle.deckSelection}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Player Deck */}
+                                    {playerCards.length > 0 && (
+                                      <div>
+                                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                                          <Swords className="w-4 h-4 text-primary" />
+                                          {t('me.yourDeck')}
+                                        </h4>
+                                        <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+                                          {playerCards.map((card: any, cardIdx: number) => (
+                                            <div key={card?.id || cardIdx} className="flex flex-col items-center">
+                                              <ClashCardImage
+                                                name={card?.name || "Card"}
+                                                iconUrls={card?.iconUrls}
+                                                size="md"
+                                                showLevel={false}
+                                                className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
+                                              />
+                                              <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
+                                                {card?.name}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Opponent Deck */}
+                                    {opponentCards.length > 0 && (
+                                      <div>
+                                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                                          <Shield className="w-4 h-4 text-red-500" />
+                                          {t('me.opponentDeck')}
+                                        </h4>
+                                        <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+                                          {opponentCards.map((card: any, cardIdx: number) => (
+                                            <div key={card?.id || cardIdx} className="flex flex-col items-center">
+                                              <ClashCardImage
+                                                name={card?.name || "Card"}
+                                                iconUrls={card?.iconUrls}
+                                                size="md"
+                                                showLevel={false}
+                                                className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
+                                              />
+                                              <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
+                                                {card?.name}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
-                                </div>
-
-                                {/* Mobile info */}
-                                <div className="flex md:hidden flex-col">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold">{teamCrowns} × {opponentCrowns}</span>
-                                    {trophyChange !== undefined && trophyChange !== null && (
-                                      <span className={cn(
-                                        "text-xs font-medium",
-                                        trophyChange > 0 ? "text-green-500" : trophyChange < 0 ? "text-red-500" : "text-muted-foreground"
-                                      )}>
-                                        ({trophyChange > 0 ? '+' : ''}{trophyChange})
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-xs text-muted-foreground">vs {opponent?.name || 'Oponente'}</span>
-                                </div>
-                              </div>
-
-                              {/* Right side - Time */}
-                              <div className="text-right text-xs text-muted-foreground hidden sm:block">
-                                {battleTime && (
-                                  <span>{formatDistanceToNow(battleTime, { addSuffix: true, locale: ptBR })}</span>
-                                )}
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          
-                          <AccordionContent data-testid={`match-details-${idx}`}>
-                            <div className="px-4 pb-4 pt-2 space-y-4">
-                              {/* Battle Time on Mobile */}
-                              <div className="sm:hidden text-xs text-muted-foreground">
-                                {battleTime && (
-                                  <div className="flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
-                                    {formatDistanceToNow(battleTime, { addSuffix: true, locale: ptBR })}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Match Info Summary */}
-                              <div className="flex flex-wrap gap-3 text-sm">
-                                <Badge variant="outline">{gameMode}</Badge>
-                                {opponent?.tag && (
-                                  <span className="text-muted-foreground">
-                                    Oponente: <span className="font-mono">{opponent.tag}</span>
-                                  </span>
-                                )}
-                                {battle.deckSelection && (
-                                  <span className="text-muted-foreground">
-                                    Seleção: {battle.deckSelection}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {/* Player Deck */}
-                              {playerCards.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                                    <Swords className="w-4 h-4 text-primary" />
-                                    Seu Deck
-                                  </h4>
-                                  <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
-                                    {playerCards.map((card: any, cardIdx: number) => (
-                                      <div key={card?.id || cardIdx} className="flex flex-col items-center">
-                                        <ClashCardImage
-                                          name={card?.name || "Card"}
-                                          iconUrls={card?.iconUrls}
-                                          size="md"
-                                          showLevel={false}
-                                          className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
-                                        />
-                                        <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
-                                          {card?.name}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              {/* Opponent Deck */}
-                              {opponentCards.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                                    <Shield className="w-4 h-4 text-red-500" />
-                                    Deck do Oponente
-                                  </h4>
-                                  <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
-                                    {opponentCards.map((card: any, cardIdx: number) => (
-                                      <div key={card?.id || cardIdx} className="flex flex-col items-center">
-                                        <ClashCardImage
-                                          name={card?.name || "Card"}
-                                          iconUrls={card?.iconUrls}
-                                          size="md"
-                                          showLevel={false}
-                                          className="w-12 h-14 md:w-14 md:h-16 rounded bg-background/50 border-0"
-                                        />
-                                        <span className="text-[10px] text-muted-foreground mt-0.5 text-center truncate w-full">
-                                          {card?.name}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                          );
-                        })}
-                      </Accordion>
-                    </div>
-                  </section>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+                                </AccordionContent>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           {/* Decks Tab */}
           <TabsContent value="decks" className="mt-6 space-y-6">
             {/* Current Deck - Prominent Display */}
-            <Card 
+            <Card
               className="border-border/50 bg-gradient-to-br from-card via-card/95 to-primary/5 backdrop-blur-sm"
               data-testid="deck-current"
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Layers className="w-5 h-5 text-primary" />
-                  Deck Atual
+                  {t('me.currentDeck.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1436,7 +1451,7 @@ export default function MePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-8">Nenhum deck equipado</p>
+                  <p className="text-center text-muted-foreground py-8">{t('me.currentDeck.noDeckEquipped')}</p>
                 )}
               </CardContent>
             </Card>
@@ -1445,12 +1460,12 @@ export default function MePage() {
             <div>
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <Swords className="w-5 h-5 text-primary" />
-                Decks Mais Usados
+                {t('me.mostUsedDecks.title')}
               </h3>
               {deckUsage.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {deckUsage.map((deck, idx) => (
-                    <Card 
+                    <Card
                       key={idx}
                       className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-colors"
                       data-testid={`deck-most-used-${idx}`}
@@ -1458,11 +1473,11 @@ export default function MePage() {
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-base">{deck.name}</CardTitle>
-                          <Badge 
+                          <Badge
                             variant="outline"
                             className={cn(
-                              deck.winRate >= 50 
-                                ? "border-green-500/50 text-green-500" 
+                              deck.winRate >= 50
+                                ? "border-green-500/50 text-green-500"
                                 : "border-red-500/50 text-red-500"
                             )}
                           >
@@ -1487,7 +1502,7 @@ export default function MePage() {
                         <div className="flex items-center justify-between text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Swords className="w-3 h-3" />
-                            {deck.total} partidas
+                            {t('me.mostUsedDecks.matches', { count: deck.total })}
                           </span>
                           <span>
                             <span className="text-green-500">{deck.wins}V</span>
@@ -1505,10 +1520,10 @@ export default function MePage() {
                     {battlesLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Analisando batalhas...
+                        {t('me.mostUsedDecks.analyzingBattles')}
                       </div>
                     ) : (
-                      'Nenhuma batalha encontrada para analisar decks'
+                      t('me.mostUsedDecks.noBattlesForAnalysis')
                     )}
                   </CardContent>
                 </Card>
@@ -1518,26 +1533,26 @@ export default function MePage() {
             {/* Strengths & Weaknesses */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* Strengths */}
-              <Card 
+              <Card
                 className="border-border/50 bg-card/50 backdrop-blur-sm"
                 data-testid="analysis-strengths"
               >
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <ThumbsUp className="w-5 h-5 text-green-500" />
-                    Forças
+                    {t('me.strengthsWeaknesses.strengths')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {archetypeAnalysis.strengths.length > 0 ? (
                     archetypeAnalysis.strengths.map((strength, idx) => (
-                      <div 
+                      <div
                         key={idx}
                         className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/20"
                       >
                         <div>
-                          <p className="font-medium text-green-500">Bom contra: {strength.archetype}</p>
-                          <p className="text-xs text-muted-foreground">{strength.matches} partidas</p>
+                          <p className="font-medium text-green-500">{t('me.strengthsWeaknesses.goodAgainst', { archetype: strength.archetype })}</p>
+                          <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.matches', { count: strength.matches })}</p>
                         </div>
                         <Badge variant="outline" className="border-green-500/50 text-green-500">
                           {strength.winRate}% WR
@@ -1550,8 +1565,8 @@ export default function MePage() {
                         "p-3 rounded-lg bg-muted/50 border border-border/50",
                         !isPro && "blur-sm"
                       )}>
-                        <p className="font-medium text-green-500">Bom contra: Decks de ciclo</p>
-                        <p className="text-xs text-muted-foreground">Análise baseada em batalhas</p>
+                        <p className="font-medium text-green-500">{t('me.strengthsWeaknesses.goodAgainst', { archetype: t('me.archetype.cycle') })}</p>
+                        <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
                       </div>
                       {!isPro && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1565,33 +1580,33 @@ export default function MePage() {
                   )}
                   {archetypeAnalysis.strengths.length === 0 && isPro && (
                     <p className="text-sm text-muted-foreground text-center py-2">
-                      Jogue mais partidas para ver suas forças
+                      {t('me.strengthsWeaknesses.playMoreForStrengths')}
                     </p>
                   )}
                 </CardContent>
               </Card>
 
               {/* Weaknesses */}
-              <Card 
+              <Card
                 className="border-border/50 bg-card/50 backdrop-blur-sm"
                 data-testid="analysis-weaknesses"
               >
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <ThumbsDown className="w-5 h-5 text-red-500" />
-                    Fraquezas
+                    {t('me.strengthsWeaknesses.weaknesses')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {archetypeAnalysis.weaknesses.length > 0 ? (
                     archetypeAnalysis.weaknesses.map((weakness, idx) => (
-                      <div 
+                      <div
                         key={idx}
                         className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20"
                       >
                         <div>
-                          <p className="font-medium text-red-500">Dificuldade contra: {weakness.archetype}</p>
-                          <p className="text-xs text-muted-foreground">{weakness.matches} partidas</p>
+                          <p className="font-medium text-red-500">{t('me.strengthsWeaknesses.difficultyAgainst', { archetype: weakness.archetype })}</p>
+                          <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.matches', { count: weakness.matches })}</p>
                         </div>
                         <Badge variant="outline" className="border-red-500/50 text-red-500">
                           {weakness.winRate}% WR
@@ -1604,8 +1619,8 @@ export default function MePage() {
                         "p-3 rounded-lg bg-muted/50 border border-border/50",
                         !isPro && "blur-sm"
                       )}>
-                        <p className="font-medium text-red-500">Dificuldade contra: Beatdown</p>
-                        <p className="text-xs text-muted-foreground">Análise baseada em batalhas</p>
+                        <p className="font-medium text-red-500">{t('me.strengthsWeaknesses.difficultyAgainst', { archetype: t('me.archetype.beatdown') })}</p>
+                        <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
                       </div>
                       {!isPro && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1619,7 +1634,7 @@ export default function MePage() {
                   )}
                   {archetypeAnalysis.weaknesses.length === 0 && isPro && (
                     <p className="text-sm text-muted-foreground text-center py-2">
-                      Jogue mais partidas para ver suas fraquezas
+                      {t('me.strengthsWeaknesses.playMoreForWeaknesses')}
                     </p>
                   )}
                 </CardContent>
@@ -1635,7 +1650,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    Evolução de Troféus
+                    {t('me.trophyEvolution.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1649,41 +1664,41 @@ export default function MePage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="hsl(var(--muted-foreground))" 
+                        <XAxis
+                          dataKey="date"
+                          stroke="hsl(var(--muted-foreground))"
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
                         />
-                        <YAxis 
-                          stroke="hsl(var(--muted-foreground))" 
+                        <YAxis
+                          stroke="hsl(var(--muted-foreground))"
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
                           domain={['dataMin - 100', 'dataMax + 100']}
                           tickFormatter={(value) => value.toLocaleString()}
                         />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--popover))', 
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
                             borderColor: 'hsl(var(--border))',
                             borderRadius: '8px',
                             color: 'hsl(var(--popover-foreground))'
                           }}
                           formatter={(value: number, name: string) => [
-                            value.toLocaleString(), 
-                            name === 'trophies' ? 'Troféus' : name
+                            value.toLocaleString(),
+                            name === 'trophies' ? t('me.trophies') : name
                           ]}
-                          labelFormatter={(label) => `Data: ${label}`}
+                          labelFormatter={(label) => `${t('me.date')}: ${label}`}
                         />
-                        <Area 
-                          type="monotone" 
-                          dataKey="trophies" 
-                          stroke="hsl(var(--primary))" 
+                        <Area
+                          type="monotone"
+                          dataKey="trophies"
+                          stroke="hsl(var(--primary))"
                           strokeWidth={3}
-                          fillOpacity={1} 
-                          fill="url(#colorTrophiesProgress)" 
+                          fillOpacity={1}
+                          fill="url(#colorTrophiesProgress)"
                           dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
                           activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
                         />
@@ -1693,12 +1708,12 @@ export default function MePage() {
                   <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
                     <div className="flex items-center gap-2">
                       <Trophy className="w-4 h-4 text-primary" />
-                      <span className="text-muted-foreground">Atual:</span>
+                      <span className="text-muted-foreground">{t('me.current')}:</span>
                       <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Award className="w-4 h-4 text-yellow-500" />
-                      <span className="text-muted-foreground">Melhor:</span>
+                      <span className="text-muted-foreground">{t('me.best')}:</span>
                       <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
                     </div>
                   </div>
@@ -1709,24 +1724,24 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    Evolução de Troféus
+                    {t('me.trophyEvolution.title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Trophy className="w-12 h-12 text-muted-foreground/50 mb-4" />
                     <p className="text-lg font-medium text-muted-foreground mb-2">
-                      Sem dados de evolução disponíveis
+                      {t('me.trophyEvolution.noDataAvailable')}
                     </p>
                     <p className="text-sm text-muted-foreground/70">
-                      {battles.length === 0 
-                        ? "Jogue mais partidas para ver seu progresso"
-                        : "Suas batalhas recentes não possuem dados de troféus"}
+                      {battles.length === 0
+                        ? t('me.trophyEvolution.playMoreToSeeProgress')
+                        : t('me.trophyEvolution.recentBattlesNoTrophyData')}
                     </p>
                     {player?.trophies && (
                       <div className="mt-6 flex items-center gap-2">
                         <Trophy className="w-4 h-4 text-primary" />
-                        <span className="text-muted-foreground">Troféus atuais:</span>
+                        <span className="text-muted-foreground">{t('me.currentTrophies')}:</span>
                         <span className="font-bold text-primary">{player.trophies.toLocaleString()}</span>
                       </div>
                     )}
@@ -1741,7 +1756,7 @@ export default function MePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Swords className="w-5 h-5 text-primary" />
-                    Volume de Jogo (14 dias)
+                    {t('me.playVolume.title', { days: 14 })}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1749,35 +1764,36 @@ export default function MePage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={playVolumeData.chartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="hsl(var(--muted-foreground))" 
+                        <XAxis
+                          dataKey="date"
+                          stroke="hsl(var(--muted-foreground))"
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
                         />
-                        <YAxis 
-                          stroke="hsl(var(--muted-foreground))" 
+                        <YAxis
+                          stroke="hsl(var(--muted-foreground))"
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
                           allowDecimals={false}
                         />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--popover))', 
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
                             borderColor: 'hsl(var(--border))',
                             borderRadius: '8px',
                             color: 'hsl(var(--popover-foreground))'
                           }}
-                          formatter={(value: number) => [`${value} partidas`, 'Partidas']}
-                          labelFormatter={(label) => `Data: ${label}`}
+                          formatter={(value: number) => [`${value} ${t('me.matches')}`, t('me.matches')]}
+                          labelFormatter={(label) => `${t('me.date')}: ${label}`}
                         />
-                        <Bar 
-                          dataKey="matches" 
-                          fill="hsl(var(--primary))" 
+                        <Bar
+                          dataKey="matches"
+                          name={t('me.chart.matches')}
+                          fill="hsl(var(--primary))"
                           radius={[4, 4, 0, 0]}
-                          maxBarSize={40}
+                          maxBarSize={50}
                         />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1846,11 +1862,11 @@ export default function MePage() {
                 ) : activeGoals.length > 0 ? (
                   <div className="grid md:grid-cols-2 gap-4">
                     {activeGoals.map((goal: any) => {
-                      const progressValue = goal.targetValue > 0 
+                      const progressValue = goal.targetValue > 0
                         ? Math.min(100, Math.round((goal.currentValue / goal.targetValue) * 100))
                         : 0;
                       return (
-                        <div 
+                        <div
                           key={goal.id}
                           className="p-4 rounded-lg bg-background/50 border border-border/50"
                           data-testid={`goal-card-${goal.id}`}
@@ -1858,8 +1874,8 @@ export default function MePage() {
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="font-medium text-sm">{goal.title || goal.name}</h4>
                             <Badge variant="outline" className={cn(
-                              progressValue >= 100 
-                                ? "border-green-500/50 text-green-500" 
+                              progressValue >= 100
+                                ? "border-green-500/50 text-green-500"
                                 : "border-primary/50 text-primary"
                             )}>
                               {progressValue}%
@@ -1906,7 +1922,7 @@ export default function MePage() {
                   <StatRow label="Cartas Encontradas" value={player?.cards?.length || 0} />
                 </CardContent>
               </Card>
-              
+
               <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -1923,7 +1939,7 @@ export default function MePage() {
               </Card>
             </div>
 
-            <Card 
+            <Card
               className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden"
               data-testid="pro-locked-section"
             >
@@ -1973,8 +1989,8 @@ export default function MePage() {
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">Disponível no plano PRO</p>
                       <Link href="/billing">
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600"
                           data-testid="button-unlock-pro"
                         >
@@ -1993,9 +2009,9 @@ export default function MePage() {
   );
 }
 
-function GameModeCard({ title, icon, stats, color }: { 
-  title: string; 
-  icon: React.ReactNode; 
+function GameModeCard({ title, icon, stats, color }: {
+  title: string;
+  icon: React.ReactNode;
   stats: { wins: number; losses: number; matches: number; winRate: number | string };
   color: 'primary' | 'yellow';
 }) {
