@@ -251,6 +251,9 @@ function ArenaMetaDeckCard({
     typeof deck.avgElixir === "number" && Number.isFinite(deck.avgElixir)
       ? deck.avgElixir.toFixed(1)
       : UNKNOWN_VALUE;
+  const threeCrownText = Number.isFinite(deck.threeCrownRate)
+    ? `${(deck.threeCrownRate * 100).toFixed(1)}%`
+    : UNKNOWN_VALUE;
 
   return (
     <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all">
@@ -271,7 +274,7 @@ function ArenaMetaDeckCard({
               ) : null}
             </CardTitle>
 
-            <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+            <div className="mt-3 grid grid-cols-5 gap-2 text-xs">
               <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                 <p className="text-muted-foreground">{t("decks.meta.avgElixir")}</p>
                 <p className="font-medium">{avgElixirText}</p>
@@ -279,6 +282,10 @@ function ArenaMetaDeckCard({
               <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                 <p className="text-muted-foreground">{t("decks.meta.winRate")}</p>
                 <p className="font-medium text-green-500">{winRateText}</p>
+              </div>
+              <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
+                <p className="text-muted-foreground">3-Crown</p>
+                <p className="font-medium text-yellow-500">{threeCrownText}</p>
               </div>
               <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
                 <p className="text-muted-foreground">Usage</p>

@@ -901,6 +901,44 @@
         "decksDetected": "decks detectados",
         "availableOnPro": "Disponível no plano PRO",
         "unlockPro": "Desbloquear no PRO"
+      },
+      "advancedStats": {
+        "seasonSelector": "Temporada",
+        "allSeasons": "Todas as Temporadas",
+        "seasonSummaryCard": {
+          "title": "Stats da Temporada",
+          "totalBattles": "Total de Batalhas",
+          "winRate": "Taxa de Vitoria",
+          "peakTrophies": "Pico de Trofeus",
+          "mostUsedDeck": "Deck Mais Usado",
+          "bestCard": "Melhor Carta",
+          "battles": "{count} batalhas",
+          "noData": "Sem dados para esta temporada. Jogue partidas e sincronize para ver stats."
+        },
+        "cardWinRates": {
+          "title": "Taxa de Vitoria por Carta",
+          "subtitle": "Cartas com 10+ batalhas",
+          "winRate": "Taxa de Vitoria",
+          "battles": "Batalhas",
+          "noData": "Dados insuficientes. Jogue mais batalhas para ver o desempenho das cartas.",
+          "loading": "Carregando stats de cartas..."
+        },
+        "deckStats": {
+          "title": "Stats dos Seus Decks",
+          "winRate": "Taxa de Vitoria",
+          "threeCrownRate": "Taxa de 3 Coroas",
+          "battles": "{count} batalhas",
+          "matchups": "Confrontos",
+          "noData": "Sem dados de deck ainda. Sincronize suas batalhas para ver stats.",
+          "loading": "Carregando stats de decks..."
+        },
+        "matchups": {
+          "title": "Confrontos vs Arquetipos",
+          "winRate": "Taxa de Vitoria",
+          "battles": "{count} batalhas",
+          "noData": "Dados insuficientes de confronto para este deck.",
+          "loading": "Carregando confrontos..."
+        }
       }
     },
     "coach": {

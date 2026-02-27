@@ -196,6 +196,71 @@ export interface CounterDecksResponse {
   decks: CounterDeckData[];
 }
 
+// ── Story 2.4: Advanced Stats Types ──────────────────────────────────────────
+
+/** Card win rate result from /api/player/stats/cards (AC3) */
+export interface CardWinRateData {
+  cardId: string;
+  battles: number;
+  wins: number;
+  winRate: number;
+}
+
+/** Card stats API response */
+export interface CardStatsResponse {
+  season: number | null;
+  currentSeason: number;
+  cards: CardWinRateData[];
+}
+
+/** Deck stats result from /api/player/stats/decks (AC1, AC2) */
+export interface DeckStatsData {
+  deckHash: string;
+  cards: string[];
+  battles: number;
+  wins: number;
+  threeCrowns: number;
+  threeCrownRate: number;
+  winRate: number;
+  avgElixir: number | null;
+  archetype: string;
+}
+
+/** Deck stats API response */
+export interface DeckStatsResponse {
+  season: number | null;
+  currentSeason: number;
+  decks: DeckStatsData[];
+}
+
+/** Season summary from /api/player/stats/season (AC7, AC8) */
+export interface SeasonSummaryResponse {
+  season: number;
+  seasonLabel: string;
+  totalBattles: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  peakTrophies: number | null;
+  mostUsedDeck: { deckHash: string; cards: string[]; battles: number } | null;
+  bestCard: { cardId: string; winRate: number; battles: number } | null;
+  availableSeasons: Array<{ season: number; label: string }>;
+}
+
+/** Matchup result from /api/player/stats/matchups (AC5, AC6) */
+export interface MatchupData {
+  opponentArchetype: string;
+  battles: number;
+  wins: number;
+  winRate: number;
+}
+
+/** Matchups API response */
+export interface MatchupsResponse {
+  deckHash: string;
+  matchups: MatchupData[];
+}
+
 const API_BASE = "/api";
 
 type ApiErrorDetail = { path?: string; message?: string; code?: string } | unknown;
@@ -385,6 +450,30 @@ export const api = {
     // The sync response is complex (PlayerSyncResponse) and typed at the consumer level.
     sync: () => fetchAPI<unknown>("/player/sync", { method: "POST" }),
     getSyncState: () => fetchAPI<unknown>("/player/sync-state"),
+
+    // Story 2.4: Advanced stats endpoints
+    stats: {
+      cards: (options?: { season?: number }) => {
+        const params = new URLSearchParams();
+        if (typeof options?.season === "number") params.set("season", String(options.season));
+        const query = params.toString();
+        return fetchAPI<CardStatsResponse>(`/player/stats/cards${query ? `?${query}` : ""}`);
+      },
+      decks: (options?: { season?: number }) => {
+        const params = new URLSearchParams();
+        if (typeof options?.season === "number") params.set("season", String(options.season));
+        const query = params.toString();
+        return fetchAPI<DeckStatsResponse>(`/player/stats/decks${query ? `?${query}` : ""}`);
+      },
+      season: (options?: { season?: number }) => {
+        const params = new URLSearchParams();
+        if (typeof options?.season === "number") params.set("season", String(options.season));
+        const query = params.toString();
+        return fetchAPI<SeasonSummaryResponse>(`/player/stats/season${query ? `?${query}` : ""}`);
+      },
+      matchups: (deckHash: string) =>
+        fetchAPI<MatchupsResponse>(`/player/stats/matchups?deck=${encodeURIComponent(deckHash)}`),
+    },
   },
 
   history: {

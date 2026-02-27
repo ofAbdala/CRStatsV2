@@ -503,6 +503,65 @@ export type InsertDeckSuggestionsUsage = z.infer<typeof insertDeckSuggestionsUsa
 export type DeckSuggestionsUsage = typeof deckSuggestionsUsage.$inferSelect;
 
 // ============================================================================
+// BATTLE STATS CACHE TABLE (Story 2.4)
+// ============================================================================
+
+export const battleStatsCache = pgTable(
+  "battle_stats_cache",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    season: integer("season"),
+    deckHash: varchar("deck_hash"),
+    battles: integer("battles").notNull().default(0),
+    wins: integer("wins").notNull().default(0),
+    threeCrowns: integer("three_crowns").notNull().default(0),
+    avgElixir: real("avg_elixir"),
+    opponentArchetypes: jsonb("opponent_archetypes").$type<Record<string, { battles: number; wins: number }>>(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_battle_stats_cache_user_season").on(table.userId, table.season),
+    index("idx_battle_stats_cache_user_deck").on(table.userId, table.deckHash),
+  ],
+);
+
+export const insertBattleStatsCacheSchema = createInsertSchema(battleStatsCache).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertBattleStatsCache = z.infer<typeof insertBattleStatsCacheSchema>;
+export type BattleStatsCache = typeof battleStatsCache.$inferSelect;
+
+// ============================================================================
+// CARD PERFORMANCE TABLE (Story 2.4)
+// ============================================================================
+
+export const cardPerformance = pgTable(
+  "card_performance",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    cardId: varchar("card_id").notNull(),
+    season: integer("season"),
+    battles: integer("battles").notNull().default(0),
+    wins: integer("wins").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_card_performance_user_season").on(table.userId, table.season),
+    index("idx_card_performance_user_card").on(table.userId, table.cardId),
+  ],
+);
+
+export const insertCardPerformanceSchema = createInsertSchema(cardPerformance).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertCardPerformance = z.infer<typeof insertCardPerformanceSchema>;
+export type CardPerformance = typeof cardPerformance.$inferSelect;
+
+// ============================================================================
 // REQUEST ZOD SCHEMAS FOR ROUTES
 // ============================================================================
 
@@ -650,6 +709,14 @@ export const arenaCounterDecksQuerySchema = z.object({
   arena: z.coerce.number().int().min(0).max(100),
 });
 
+export const playerStatsQuerySchema = z.object({
+  season: z.coerce.number().int().min(1).max(999).optional(),
+});
+
+export const playerMatchupsQuerySchema = z.object({
+  deck: z.string().trim().min(1).max(500),
+});
+
 export type ProfileCreateInput = z.infer<typeof profileCreateInputSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateInputSchema>;
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateInputSchema>;
@@ -694,6 +761,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   coachMessages: many(coachMessages),
   pushAnalyses: many(pushAnalyses),
   trainingPlans: many(trainingPlans),
+  battleStatsCache: many(battleStatsCache),
+  cardPerformance: many(cardPerformance),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -782,5 +851,19 @@ export const trainingDrillsRelations = relations(trainingDrills, ({ one }) => ({
   plan: one(trainingPlans, {
     fields: [trainingDrills.planId],
     references: [trainingPlans.id],
+  }),
+}));
+
+export const battleStatsCacheRelations = relations(battleStatsCache, ({ one }) => ({
+  user: one(users, {
+    fields: [battleStatsCache.userId],
+    references: [users.id],
+  }),
+}));
+
+export const cardPerformanceRelations = relations(cardPerformance, ({ one }) => ({
+  user: one(users, {
+    fields: [cardPerformance.userId],
+    references: [users.id],
   }),
 }));

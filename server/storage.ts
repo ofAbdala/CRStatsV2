@@ -50,6 +50,12 @@ import {
   type InsertArenaMetaDeck,
   type ArenaCounterDeck,
   type InsertArenaCounterDeck,
+  battleStatsCache,
+  cardPerformance,
+  type BattleStatsCache,
+  type InsertBattleStatsCache,
+  type CardPerformance,
+  type InsertCardPerformance,
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -252,6 +258,16 @@ export interface IStorage {
 
   // Arena Counter Decks (Story 2.1)
   getArenaCounterDecks(arenaId: number, targetCard: string, options?: { limit?: number }): Promise<ArenaCounterDeck[]>;
+
+  // Battle Stats Cache (Story 2.4)
+  upsertBattleStatsCache(rows: InsertBattleStatsCache[]): Promise<void>;
+  getBattleStatsCache(userId: string, options?: { season?: number }): Promise<BattleStatsCache[]>;
+  clearBattleStatsCache(userId: string): Promise<void>;
+
+  // Card Performance (Story 2.4)
+  upsertCardPerformance(rows: InsertCardPerformance[]): Promise<void>;
+  getCardPerformance(userId: string, options?: { season?: number }): Promise<CardPerformance[]>;
+  clearCardPerformance(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1342,6 +1358,122 @@ export class DatabaseStorage implements IStorage {
         )
         .orderBy(desc(arenaCounterDecks.winRateVsTarget))
         .limit(limit),
+    );
+  }
+
+  // ── Battle Stats Cache (Story 2.4) ──────────────────────────────────────────
+
+  async upsertBattleStatsCache(rows: InsertBattleStatsCache[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    await this.runAsUser(async (conn) => {
+      for (const row of rows) {
+        // Try to find existing row for same user + season + deckHash
+        const existing = await conn
+          .select()
+          .from(battleStatsCache)
+          .where(
+            and(
+              eq(battleStatsCache.userId, row.userId),
+              row.season != null ? eq(battleStatsCache.season, row.season) : sql`${battleStatsCache.season} IS NULL`,
+              row.deckHash != null ? eq(battleStatsCache.deckHash, row.deckHash) : sql`${battleStatsCache.deckHash} IS NULL`,
+            ),
+          )
+          .limit(1);
+
+        if (existing.length > 0) {
+          await conn
+            .update(battleStatsCache)
+            .set({
+              battles: row.battles,
+              wins: row.wins,
+              threeCrowns: row.threeCrowns,
+              avgElixir: row.avgElixir,
+              opponentArchetypes: row.opponentArchetypes,
+              updatedAt: new Date(),
+            })
+            .where(eq(battleStatsCache.id, existing[0].id));
+        } else {
+          await conn.insert(battleStatsCache).values(row);
+        }
+      }
+    });
+  }
+
+  async getBattleStatsCache(userId: string, options?: { season?: number }): Promise<BattleStatsCache[]> {
+    const conditions = [eq(battleStatsCache.userId, userId)];
+    if (options?.season !== undefined) {
+      conditions.push(eq(battleStatsCache.season, options.season));
+    }
+
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(battleStatsCache)
+        .where(and(...conditions))
+        .orderBy(desc(battleStatsCache.battles)),
+    );
+  }
+
+  async clearBattleStatsCache(userId: string): Promise<void> {
+    await this.runAsUser((conn) =>
+      conn.delete(battleStatsCache).where(eq(battleStatsCache.userId, userId)),
+    );
+  }
+
+  // ── Card Performance (Story 2.4) ────────────────────────────────────────────
+
+  async upsertCardPerformance(rows: InsertCardPerformance[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    await this.runAsUser(async (conn) => {
+      for (const row of rows) {
+        const existing = await conn
+          .select()
+          .from(cardPerformance)
+          .where(
+            and(
+              eq(cardPerformance.userId, row.userId),
+              eq(cardPerformance.cardId, row.cardId),
+              row.season != null ? eq(cardPerformance.season, row.season) : sql`${cardPerformance.season} IS NULL`,
+            ),
+          )
+          .limit(1);
+
+        if (existing.length > 0) {
+          await conn
+            .update(cardPerformance)
+            .set({
+              battles: row.battles,
+              wins: row.wins,
+              updatedAt: new Date(),
+            })
+            .where(eq(cardPerformance.id, existing[0].id));
+        } else {
+          await conn.insert(cardPerformance).values(row);
+        }
+      }
+    });
+  }
+
+  async getCardPerformance(userId: string, options?: { season?: number }): Promise<CardPerformance[]> {
+    const conditions = [eq(cardPerformance.userId, userId)];
+    if (options?.season !== undefined) {
+      conditions.push(eq(cardPerformance.season, options.season));
+    }
+
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(cardPerformance)
+        .where(and(...conditions))
+        .orderBy(desc(cardPerformance.battles)),
+    );
+  }
+
+  async clearCardPerformance(userId: string): Promise<void> {
+    await this.runAsUser((conn) =>
+      conn.delete(cardPerformance).where(eq(cardPerformance.userId, userId)),
     );
   }
 }

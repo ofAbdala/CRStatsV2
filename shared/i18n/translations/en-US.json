@@ -901,6 +901,44 @@
         "decksDetected": "decks detected",
         "availableOnPro": "Available on PRO plan",
         "unlockPro": "Unlock on PRO"
+      },
+      "advancedStats": {
+        "seasonSelector": "Season",
+        "allSeasons": "All Seasons",
+        "seasonSummaryCard": {
+          "title": "Season Stats",
+          "totalBattles": "Total Battles",
+          "winRate": "Win Rate",
+          "peakTrophies": "Peak Trophies",
+          "mostUsedDeck": "Most Used Deck",
+          "bestCard": "Best Card",
+          "battles": "{count} battles",
+          "noData": "No data for this season yet. Play matches and sync to see stats."
+        },
+        "cardWinRates": {
+          "title": "Card Win Rates",
+          "subtitle": "Cards with 10+ battles",
+          "winRate": "Win Rate",
+          "battles": "Battles",
+          "noData": "Not enough data. Play more battles to see card performance.",
+          "loading": "Loading card stats..."
+        },
+        "deckStats": {
+          "title": "Your Deck Stats",
+          "winRate": "Win Rate",
+          "threeCrownRate": "3-Crown Rate",
+          "battles": "{count} battles",
+          "matchups": "Matchups",
+          "noData": "No deck data yet. Sync your battles to see stats.",
+          "loading": "Loading deck stats..."
+        },
+        "matchups": {
+          "title": "Matchups vs Archetypes",
+          "winRate": "Win Rate",
+          "battles": "{count} battles",
+          "noData": "Not enough matchup data for this deck.",
+          "loading": "Loading matchups..."
+        }
       }
     },
     "coach": {

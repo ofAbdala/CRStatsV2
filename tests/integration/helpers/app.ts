@@ -797,6 +797,208 @@ export function mountFavoriteRoutes(app: express.Express, storage: IStorage) {
 }
 
 /**
+ * Player Stats routes — mirrors server/routes/player.ts (Story 2.4 endpoints)
+ */
+export function mountPlayerStatsRoutes(app: express.Express, storage: IStorage) {
+  const router = Router();
+
+  // Inline implementations of stats engine logic for test isolation
+  function computeCardWinRatesFromRows(rows: any[], options: { minBattles?: number; season?: number } = {}) {
+    const minBattles = options.minBattles ?? 10;
+    const aggregated = new Map<string, { battles: number; wins: number }>();
+    for (const row of rows) {
+      if (options.season !== undefined && row.season !== options.season) continue;
+      const existing = aggregated.get(row.cardId) ?? { battles: 0, wins: 0 };
+      existing.battles += row.battles;
+      existing.wins += row.wins;
+      aggregated.set(row.cardId, existing);
+    }
+    return Array.from(aggregated.entries())
+      .filter(([, stats]) => stats.battles >= minBattles)
+      .map(([cardId, stats]) => ({
+        cardId,
+        battles: stats.battles,
+        wins: stats.wins,
+        winRate: stats.battles > 0 ? Number(((stats.wins / stats.battles) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.winRate - a.winRate);
+  }
+
+  function computeDeckStatsFromRows(rows: any[], options: { season?: number } = {}) {
+    const aggregated = new Map<string, { deckHash: string; battles: number; wins: number; threeCrowns: number }>();
+    for (const row of rows) {
+      if (options.season !== undefined && row.season !== options.season) continue;
+      const existing = aggregated.get(row.deckHash) ?? { deckHash: row.deckHash, battles: 0, wins: 0, threeCrowns: 0 };
+      existing.battles += row.battles;
+      existing.wins += row.wins;
+      existing.threeCrowns += row.threeCrowns;
+      aggregated.set(row.deckHash, existing);
+    }
+    return Array.from(aggregated.values()).map((stats) => ({
+      deckHash: stats.deckHash,
+      cards: stats.deckHash.split("|").filter(Boolean),
+      battles: stats.battles,
+      wins: stats.wins,
+      threeCrowns: stats.threeCrowns,
+      threeCrownRate: stats.battles > 0 ? Number(((stats.threeCrowns / stats.battles) * 100).toFixed(1)) : 0,
+      winRate: stats.battles > 0 ? Number(((stats.wins / stats.battles) * 100).toFixed(1)) : 0,
+      avgElixir: null,
+      archetype: "Unknown",
+    })).sort((a, b) => b.battles - a.battles);
+  }
+
+  function getCurrentSeason() {
+    const now = new Date();
+    return (now.getUTCFullYear() - 2016) * 12 + (now.getUTCMonth() + 1);
+  }
+
+  function getSeasonLabel(season: number) {
+    const monthIndex = ((season - 1) % 12);
+    const year = 2016 + Math.floor((season - 1) / 12);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${months[monthIndex]} ${year}`;
+  }
+
+  // GET /api/player/stats/cards
+  router.get("/api/player/stats/cards", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      const seasonRaw = typeof req.query?.season === "string" ? Number.parseInt(req.query.season, 10) : undefined;
+      const season = Number.isFinite(seasonRaw) ? seasonRaw : undefined;
+
+      const cardStats = await storage.getCardPerformance(userId, { season });
+      const rows = cardStats.map((r: any) => ({
+        userId: r.userId,
+        cardId: r.cardId,
+        season: r.season ?? 0,
+        battles: r.battles,
+        wins: r.wins,
+      }));
+      const winRates = computeCardWinRatesFromRows(rows, { minBattles: 10, season });
+
+      res.json({ season: season ?? null, currentSeason: getCurrentSeason(), cards: winRates });
+    } catch (error) {
+      res.status(500).json({ code: "CARD_STATS_FETCH_FAILED", message: "Failed to fetch card stats" });
+    }
+  });
+
+  // GET /api/player/stats/decks
+  router.get("/api/player/stats/decks", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      const seasonRaw = typeof req.query?.season === "string" ? Number.parseInt(req.query.season, 10) : undefined;
+      const season = Number.isFinite(seasonRaw) ? seasonRaw : undefined;
+
+      const deckStats = await storage.getBattleStatsCache(userId, { season });
+      const rows = deckStats.map((r: any) => ({
+        userId: r.userId,
+        season: r.season ?? 0,
+        deckHash: r.deckHash ?? "",
+        battles: r.battles,
+        wins: r.wins,
+        threeCrowns: r.threeCrowns,
+        avgElixir: r.avgElixir,
+        opponentArchetypes: r.opponentArchetypes ?? {},
+      }));
+      const decks = computeDeckStatsFromRows(rows, { season });
+
+      res.json({ season: season ?? null, currentSeason: getCurrentSeason(), decks });
+    } catch (error) {
+      res.status(500).json({ code: "DECK_STATS_FETCH_FAILED", message: "Failed to fetch deck stats" });
+    }
+  });
+
+  // GET /api/player/stats/season
+  router.get("/api/player/stats/season", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      const seasonRaw = typeof req.query?.season === "string" ? Number.parseInt(req.query.season, 10) : undefined;
+      const season = Number.isFinite(seasonRaw) ? seasonRaw : getCurrentSeason();
+
+      const [deckStats, cardStats] = await Promise.all([
+        storage.getBattleStatsCache(userId, { season }),
+        storage.getCardPerformance(userId, { season }),
+      ]);
+
+      let totalBattles = 0;
+      let totalWins = 0;
+      for (const d of deckStats) {
+        totalBattles += d.battles;
+        totalWins += d.wins;
+      }
+
+      const allDeckStats = await storage.getBattleStatsCache(userId);
+      const seasonSet = new Set(allDeckStats.map((d: any) => d.season).filter((s: any): s is number => s != null));
+      const seasons = Array.from(seasonSet).sort((a: number, b: number) => b - a);
+
+      res.json({
+        season,
+        seasonLabel: getSeasonLabel(season!),
+        totalBattles,
+        wins: totalWins,
+        losses: totalBattles - totalWins,
+        winRate: totalBattles > 0 ? Number(((totalWins / totalBattles) * 100).toFixed(1)) : 0,
+        peakTrophies: null,
+        mostUsedDeck: null,
+        bestCard: null,
+        availableSeasons: seasons.map((s: number) => ({ season: s, label: getSeasonLabel(s) })),
+      });
+    } catch (error) {
+      res.status(500).json({ code: "SEASON_STATS_FETCH_FAILED", message: "Failed to fetch season stats" });
+    }
+  });
+
+  // GET /api/player/stats/matchups
+  router.get("/api/player/stats/matchups", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    const deck = typeof req.query?.deck === "string" ? req.query.deck : null;
+    if (!deck) {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "deck query parameter is required" });
+    }
+
+    try {
+      const deckStats = await storage.getBattleStatsCache(userId);
+      const archMap = new Map<string, { battles: number; wins: number }>();
+
+      for (const row of deckStats) {
+        if ((row.deckHash ?? "") !== deck) continue;
+        const archetypes = (row.opponentArchetypes as Record<string, { battles: number; wins: number }>) || {};
+        for (const [arch, data] of Object.entries(archetypes)) {
+          const existing = archMap.get(arch) ?? { battles: 0, wins: 0 };
+          existing.battles += data.battles;
+          existing.wins += data.wins;
+          archMap.set(arch, existing);
+        }
+      }
+
+      const matchups = Array.from(archMap.entries())
+        .map(([archetype, stats]) => ({
+          opponentArchetype: archetype,
+          battles: stats.battles,
+          wins: stats.wins,
+          winRate: stats.battles > 0 ? Number(((stats.wins / stats.battles) * 100).toFixed(1)) : 0,
+        }))
+        .sort((a, b) => b.battles - a.battles)
+        .slice(0, 5);
+
+      res.json({ deckHash: deck, matchups });
+    } catch (error) {
+      res.status(500).json({ code: "MATCHUP_STATS_FETCH_FAILED", message: "Failed to fetch matchup data" });
+    }
+  });
+
+  app.use(router);
+}
+
+/**
  * Community routes — mirrors server/routes/community.ts
  */
 export function mountCommunityRoutes(

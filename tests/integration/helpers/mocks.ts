@@ -251,6 +251,20 @@ export function createMockStorage(overrides: Partial<IStorage> = {}): IStorage {
     async getArenaCounterDecks() {
       return [];
     },
+
+    // Battle Stats Cache (Story 2.4)
+    async upsertBattleStatsCache() {},
+    async getBattleStatsCache() {
+      return [];
+    },
+    async clearBattleStatsCache() {},
+
+    // Card Performance (Story 2.4)
+    async upsertCardPerformance() {},
+    async getCardPerformance() {
+      return [];
+    },
+    async clearCardPerformance() {},
   };
 
   return Object.assign(defaults, overrides);

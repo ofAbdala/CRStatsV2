@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ClashCardImage from "@/components/clash/ClashCardImage";
+import { MeAdvancedStatsSection } from "./MeAdvancedStatsSection";
 import type { MeDataContext } from "./types";
 
 interface MeCardsTabProps {
@@ -22,6 +23,9 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Story 2.4: Advanced Stats Section (Season selector, deck 3-crown rate, card win rates, matchups) */}
+      <MeAdvancedStatsSection t={t} />
+
       {/* Current Deck */}
       <Card
         className="border-border/50 bg-gradient-to-br from-card via-card/95 to-primary/5 backdrop-blur-sm"
