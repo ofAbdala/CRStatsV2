@@ -11,6 +11,11 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/sitemap.xml", "destination": "/api/index.ts" },
+    { "source": "/robots.txt", "destination": "/api/index.ts" },
+    { "source": "/meta/:arenaSlug", "destination": "/api/index.ts" },
+    { "source": "/counter/:cardSlug", "destination": "/api/index.ts" },
+    { "source": "/player/:tag", "destination": "/api/index.ts" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -24,6 +29,27 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/meta/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/counter/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/player/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=600, s-maxage=600, stale-while-revalidate=1200" },
         { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     }

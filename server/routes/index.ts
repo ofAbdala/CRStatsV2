@@ -2,6 +2,7 @@
  * Route orchestrator — mounts all domain route modules onto the Express app.
  *
  * Domain modules:
+ *   seo.ts          — SEO server-rendered HTML pages: meta, counter, player, sitemap, robots (5 endpoints)
  *   auth.ts         — authentication, profile, subscription (5 endpoints)
  *   goals.ts        — goal CRUD (4 endpoints)
  *   favorites.ts    — favorite players (3 endpoints)
@@ -16,11 +17,12 @@
  *   decks.ts        — meta decks, counter, optimizer (4 endpoints)
  *   cron/index.ts   — cron job endpoints: retention, meta-refresh (2 endpoints)
  *
- * Total: 53 route registrations (48 unique + backwards-compatible aliases + Stripe webhook)
+ * Total: 58 route registrations (53 unique + backwards-compatible aliases + Stripe webhook)
  */
 import { type Express } from "express";
 import { type Server } from "http";
 
+import seoRouter from "./seo";
 import authRouter from "./auth";
 import goalsRouter from "./goals";
 import favoritesRouter from "./favorites";
@@ -40,6 +42,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  // SEO routes MUST be mounted FIRST — they serve HTML pages at /meta/*, /counter/*,
+  // /player/*, /sitemap.xml, and /robots.txt. These must be handled before the SPA
+  // catch-all (Story 2.3).
+  app.use(seoRouter);
+
   app.use(authRouter);
   app.use(goalsRouter);
   app.use(favoritesRouter);

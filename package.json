@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:critical": "node --import tsx --test server/domain/syncRules.test.ts server/domain/battleHistory.test.ts server/domain/stripeCheckout.test.ts shared/contracts/playerSyncPayload.test.ts",
+    "test:seo": "node --import tsx --test server/seo/constants.test.ts server/seo/templates.test.ts server/seo/data.test.ts",
     "test:integration": "node --import tsx --test tests/integration/routes/*.test.ts",
     "test:e2e": "npx playwright test",
     "audit:data": "tsx scripts/audit-data-authenticity.ts",
