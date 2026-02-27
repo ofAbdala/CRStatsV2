@@ -113,7 +113,7 @@ export function PushTimeline({ session }: PushTimelineProps) {
                                     const changeStr = change > 0 ? `+${change}` : change;
                                     return [`${value} (${changeStr})`, "Trophies"];
                                 }}
-                                labelFormatter={(label) => label === 0 ? "Início da Sessão" : `Partida #${label}`}
+                                labelFormatter={(label) => label === 0 ? t("pages.push.sessionStart") : t("pages.push.matchNumber", { number: label })}
                             />
                             <Area
                                 type="monotone"

@@ -2,6 +2,7 @@ import { PushSession } from "@/lib/pushUtils";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Layers, Trophy, Clock, Swords } from "lucide-react";
+import { useLocale } from "@/hooks/use-locale";
 
 interface PushSessionListProps {
     sessions: PushSession[];
@@ -10,11 +11,13 @@ interface PushSessionListProps {
 }
 
 export function PushSessionList({ sessions, selectedSession, onSelect }: PushSessionListProps) {
+    const { t } = useLocale();
+
     if (sessions.length === 0) {
         return (
             <div className="p-4 text-center text-muted-foreground text-sm border rounded-lg bg-card/50 h-full flex flex-col items-center justify-center">
                 <Layers className="w-8 h-8 mb-2 opacity-50" />
-                <p>Nenhuma sessão encontrada.</p>
+                <p>{t("pages.push.noSessions")}</p>
             </div>
         );
     }
@@ -22,8 +25,7 @@ export function PushSessionList({ sessions, selectedSession, onSelect }: PushSes
     return (
         <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-200px)] pr-2">
             {sessions.map((session, index) => {
-                const isSelected = selectedSession === session; // Note: Object reference comparison might fail if recreated. Index might be safer if array stable.
-                // Or generate an ID. PushSession doesn't have ID. We can use startTime as key.
+                const isSelected = selectedSession === session;
 
                 return (
                     <div
@@ -57,21 +59,21 @@ export function PushSessionList({ sessions, selectedSession, onSelect }: PushSes
                             </div>
                             <div className="flex items-center gap-1.5 text-foreground">
                                 <Swords className="w-3 h-3 text-muted-foreground" />
-                                <span>{session.battles.length} partidas</span>
+                                <span>{t("pages.push.matches", { count: session.battles.length })}</span>
                             </div>
                             <div className="col-span-2 mt-1 flex gap-2">
                                 <div className="flex items-center gap-1">
                                     <div className="w-2 h-2 rounded-full bg-green-500" />
-                                    <span className="text-muted-foreground">{session.wins}V</span>
+                                    <span className="text-muted-foreground">{t("pages.push.winsAbbr", { count: session.wins })}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <div className="w-2 h-2 rounded-full bg-red-500" />
-                                    <span className="text-muted-foreground">{session.losses}D</span>
+                                    <span className="text-muted-foreground">{t("pages.push.lossesAbbr", { count: session.losses })}</span>
                                 </div>
                                 {session.draws > 0 && (
                                     <div className="flex items-center gap-1">
                                         <div className="w-2 h-2 rounded-full bg-gray-500" />
-                                        <span className="text-muted-foreground">{session.draws}E</span>
+                                        <span className="text-muted-foreground">{t("pages.push.drawsAbbr", { count: session.draws })}</span>
                                     </div>
                                 )}
                             </div>

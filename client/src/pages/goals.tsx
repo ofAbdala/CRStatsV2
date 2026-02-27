@@ -43,32 +43,27 @@ function decodeFrequency(description?: string | null): GoalFrequency | null {
   return match[1] as GoalFrequency;
 }
 
-function formatTypeLabel(type: GoalType, locale: "pt-BR" | "en-US") {
-  const isPt = locale === "pt-BR";
-  if (type === "trophies") return isPt ? "Troféus" : "Trophies";
-  if (type === "winrate") return isPt ? "Win rate" : "Win rate";
-  if (type === "streak") return isPt ? "Sequência" : "Streak";
-  return isPt ? "Personalizada" : "Custom";
-}
+const typeBadgeKeys: Record<GoalType, string> = {
+  trophies: "pages.goals.badgeTrophies",
+  winrate: "pages.goals.badgeWinrate",
+  streak: "pages.goals.badgeStreak",
+  custom: "pages.goals.badgeCustom",
+};
 
-function formatFrequencyLabel(freq: GoalFrequency, locale: "pt-BR" | "en-US") {
-  const isPt = locale === "pt-BR";
-  if (freq === "daily") return isPt ? "Diária" : "Daily";
-  if (freq === "weekly") return isPt ? "Semanal" : "Weekly";
-  return isPt ? "Mensal" : "Monthly";
-}
+const frequencyKeys: Record<GoalFrequency, string> = {
+  daily: "pages.goals.freqDaily",
+  weekly: "pages.goals.freqWeekly",
+  monthly: "pages.goals.freqMonthly",
+};
 
-function buildAutoTitle(type: Exclude<GoalType, "custom">, targetValue: number, locale: "pt-BR" | "en-US") {
-  const isPt = locale === "pt-BR";
-
-  if (type === "trophies") return isPt ? `Alcançar ${targetValue} troféus` : `Reach ${targetValue} trophies`;
-  if (type === "winrate") return isPt ? `Alcançar ${targetValue}% de win rate` : `Reach ${targetValue}% win rate`;
-  return isPt ? `Vencer ${targetValue} seguidas` : `Win ${targetValue} in a row`;
-}
+const autoTitleKeys: Record<Exclude<GoalType, "custom">, string> = {
+  trophies: "pages.goals.autoTitleTrophies",
+  winrate: "pages.goals.autoTitleWinrate",
+  streak: "pages.goals.autoTitleStreak",
+};
 
 export default function GoalsPage() {
-  const { locale, t } = useLocale();
-  const isPt = locale === "pt-BR";
+  const { t } = useLocale();
 
   const goalsQuery = useGoals();
   const createGoalMutation = useCreateGoal();
@@ -117,7 +112,7 @@ export default function GoalsPage() {
       const encoded = encodeFrequency(frequency ? (frequency as GoalFrequency) : null);
       if (encoded) payload.description = encoded;
     } else {
-      payload.title = buildAutoTitle(type, payload.targetValue, locale);
+      payload.title = t(autoTitleKeys[type], { target: payload.targetValue });
     }
 
     createGoalMutation.mutate(payload, {
@@ -129,9 +124,7 @@ export default function GoalsPage() {
   };
 
   const handleDelete = (goal: any) => {
-    const confirmed = window.confirm(
-      isPt ? "Tem certeza que deseja deletar esta meta?" : "Are you sure you want to delete this goal?",
-    );
+    const confirmed = window.confirm(t("pages.goals.deleteConfirm"));
     if (!confirmed) return;
     deleteGoalMutation.mutate(goal.id);
   };
@@ -145,14 +138,14 @@ export default function GoalsPage() {
               {t("pages.dashboard.goalsTitle")}
             </h1>
             <p className="text-muted-foreground">
-              {isPt ? "Crie e gerencie suas metas." : "Create and manage your goals."}
+              {t("pages.goals.subtitle")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              {isPt ? "Nova meta" : "New goal"}
+              {t("pages.goals.newGoal")}
             </Button>
 
             <Link href="/dashboard">
@@ -170,8 +163,8 @@ export default function GoalsPage() {
           </Card>
         ) : goalsQuery.isError ? (
           <PageErrorState
-            title={isPt ? "Falha ao carregar metas" : "Failed to load goals"}
-            description={isPt ? "Não foi possível buscar suas metas." : "We couldn't fetch your goals."}
+            title={t("pages.goals.errorTitle")}
+            description={t("pages.goals.errorDescription")}
             error={goalsQuery.error}
             onRetry={() => goalsQuery.refetch()}
           />
@@ -179,14 +172,14 @@ export default function GoalsPage() {
           <Card className="border-border/50 bg-card/50">
             <CardContent className="py-10 text-center text-muted-foreground">
               <Target className="w-10 h-10 mx-auto mb-3 opacity-60" />
-              <p className="font-medium">{isPt ? "Nenhuma meta criada" : "No goals yet"}</p>
+              <p className="font-medium">{t("pages.goals.emptyTitle")}</p>
               <p className="text-sm">
-                {isPt ? "Clique em Nova meta para começar." : "Click New goal to get started."}
+                {t("pages.goals.emptyHint")}
               </p>
               <div className="mt-4">
                 <Button onClick={() => setIsCreateOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  {isPt ? "Nova meta" : "New goal"}
+                  {t("pages.goals.newGoal")}
                 </Button>
               </div>
             </CardContent>
@@ -196,7 +189,7 @@ export default function GoalsPage() {
             <Card className="border-border/50 bg-card/50">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">
-                  {isPt ? "Metas ativas" : "Active goals"}{" "}
+                  {t("pages.goals.activeGoals")}{" "}
                   <span className="text-muted-foreground font-normal">({activeGoals.length})</span>
                 </CardTitle>
               </CardHeader>
@@ -223,18 +216,18 @@ export default function GoalsPage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium text-sm truncate">{goal.title}</p>
                               <Badge variant="outline" className="text-[10px]">
-                                {formatTypeLabel(goalType, locale)}
+                                {t(typeBadgeKeys[goalType])}
                               </Badge>
                               {freq ? (
                                 <Badge variant="outline" className="text-[10px]">
-                                  {formatFrequencyLabel(freq, locale)}
+                                  {t(frequencyKeys[freq])}
                                 </Badge>
                               ) : null}
                             </div>
                             <div className="mt-2">
                               <div className="flex justify-between text-xs text-muted-foreground">
                                 <span>
-                                  {isPt ? "Progresso" : "Progress"}: {currentValue} / {target}
+                                  {t("pages.goals.progress")}: {currentValue} / {target}
                                 </span>
                                 <span>{progress}%</span>
                               </div>
@@ -248,8 +241,8 @@ export default function GoalsPage() {
                             className={cn("shrink-0", deleteGoalMutation.isPending && "opacity-50")}
                             onClick={() => handleDelete(goal)}
                             disabled={deleteGoalMutation.isPending}
-                            aria-label={isPt ? "Deletar meta" : "Delete goal"}
-                            title={isPt ? "Deletar" : "Delete"}
+                            aria-label={t("pages.goals.deleteGoal")}
+                            title={t("pages.goals.deleteButton")}
                           >
                             <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                           </Button>
@@ -264,14 +257,14 @@ export default function GoalsPage() {
             <Card className="border-border/50 bg-card/50">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">
-                  {isPt ? "Metas concluídas" : "Completed goals"}{" "}
+                  {t("pages.goals.completedGoals")}{" "}
                   <span className="text-muted-foreground font-normal">({completedGoals.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {completedGoals.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    {isPt ? "Nenhuma meta concluída ainda." : "No completed goals yet."}
+                    {t("pages.goals.noCompletedGoals")}
                   </p>
                 ) : (
                   completedGoals.map((goal) => {
@@ -287,19 +280,19 @@ export default function GoalsPage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium text-sm truncate">{goal.title}</p>
                               <Badge className="text-[10px] bg-green-500/15 text-green-500 border border-green-500/30">
-                                {isPt ? "Concluída" : "Completed"}
+                                {t("pages.goals.completedBadge")}
                               </Badge>
                               <Badge variant="outline" className="text-[10px]">
-                                {formatTypeLabel(goalType, locale)}
+                                {t(typeBadgeKeys[goalType])}
                               </Badge>
                               {freq ? (
                                 <Badge variant="outline" className="text-[10px]">
-                                  {formatFrequencyLabel(freq, locale)}
+                                  {t(frequencyKeys[freq])}
                                 </Badge>
                               ) : null}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {isPt ? "Alvo" : "Target"}: {goal.targetValue}
+                              {t("pages.goals.target")}: {goal.targetValue}
                             </p>
                           </div>
 
@@ -309,8 +302,8 @@ export default function GoalsPage() {
                             className={cn("shrink-0", deleteGoalMutation.isPending && "opacity-50")}
                             onClick={() => handleDelete(goal)}
                             disabled={deleteGoalMutation.isPending}
-                            aria-label={isPt ? "Deletar meta" : "Delete goal"}
-                            title={isPt ? "Deletar" : "Delete"}
+                            aria-label={t("pages.goals.deleteGoal")}
+                            title={t("pages.goals.deleteButton")}
                           >
                             <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                           </Button>
@@ -334,36 +327,36 @@ export default function GoalsPage() {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>{isPt ? "Criar meta" : "Create goal"}</DialogTitle>
+            <DialogTitle>{t("pages.goals.createTitle")}</DialogTitle>
             <DialogDescription>
-              {isPt ? "Escolha o tipo e defina um alvo." : "Choose the type and set a target."}
+              {t("pages.goals.createDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-2">
-              <Label>{isPt ? "Tipo" : "Type"}</Label>
+              <Label>{t("pages.goals.typeLabel")}</Label>
               <Select value={type} onValueChange={(value) => setType(value as GoalType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder={isPt ? "Selecione um tipo" : "Select a type"} />
+                  <SelectValue placeholder={t("pages.goals.typePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="trophies">{isPt ? "Alvo de troféus" : "Trophies target"}</SelectItem>
-                  <SelectItem value="winrate">{isPt ? "Win rate (%)" : "Win rate (%)"}</SelectItem>
-                  <SelectItem value="streak">{isPt ? "Sequência de vitórias" : "Win streak"}</SelectItem>
-                  <SelectItem value="custom">{isPt ? "Personalizada" : "Custom"}</SelectItem>
+                  <SelectItem value="trophies">{t("pages.goals.typeTrophies")}</SelectItem>
+                  <SelectItem value="winrate">{t("pages.goals.typeWinrate")}</SelectItem>
+                  <SelectItem value="streak">{t("pages.goals.typeStreak")}</SelectItem>
+                  <SelectItem value="custom">{t("pages.goals.typeCustom")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {type === "custom" ? (
               <div className="space-y-2">
-                <Label htmlFor="customTitle">{isPt ? "Título" : "Title"}</Label>
+                <Label htmlFor="customTitle">{t("pages.goals.customTitleLabel")}</Label>
                 <Input
                   id="customTitle"
                   value={customTitle}
                   onChange={(event) => setCustomTitle(event.target.value)}
-                  placeholder={isPt ? "Ex: Jogar 30 min" : "Ex: Play 30 min"}
+                  placeholder={t("pages.goals.customTitlePlaceholder")}
                   maxLength={200}
                   required
                 />
@@ -371,7 +364,7 @@ export default function GoalsPage() {
             ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="targetValue">{isPt ? "Alvo" : "Target"}</Label>
+              <Label htmlFor="targetValue">{t("pages.goals.targetLabel")}</Label>
               <Input
                 id="targetValue"
                 type="number"
@@ -384,21 +377,21 @@ export default function GoalsPage() {
                 required
               />
               {type === "winrate" ? (
-                <p className="text-xs text-muted-foreground">{isPt ? "De 1 a 100." : "From 1 to 100."}</p>
+                <p className="text-xs text-muted-foreground">{t("pages.goals.winrateHint")}</p>
               ) : null}
             </div>
 
             {type === "custom" ? (
               <div className="space-y-2">
-                <Label>{isPt ? "Frequência (opcional)" : "Frequency (optional)"}</Label>
+                <Label>{t("pages.goals.frequencyLabel")}</Label>
                 <Select value={frequency || undefined} onValueChange={(value) => setFrequency(value as any)}>
                   <SelectTrigger>
-                    <SelectValue placeholder={isPt ? "Selecione" : "Select"} />
+                    <SelectValue placeholder={t("pages.goals.frequencyPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="daily">{isPt ? "Diária" : "Daily"}</SelectItem>
-                    <SelectItem value="weekly">{isPt ? "Semanal" : "Weekly"}</SelectItem>
-                    <SelectItem value="monthly">{isPt ? "Mensal" : "Monthly"}</SelectItem>
+                    <SelectItem value="daily">{t("pages.goals.freqDaily")}</SelectItem>
+                    <SelectItem value="weekly">{t("pages.goals.freqWeekly")}</SelectItem>
+                    <SelectItem value="monthly">{t("pages.goals.freqMonthly")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -417,7 +410,7 @@ export default function GoalsPage() {
                 {createGoalMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    {isPt ? "Salvando..." : "Saving..."}
+                    {t("pages.goals.saving")}
                   </>
                 ) : (
                   t("common.save")
