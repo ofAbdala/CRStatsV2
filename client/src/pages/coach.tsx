@@ -54,7 +54,7 @@ export default function CoachPage() {
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
-    queryFn: () => api.profile.get() as Promise<{ clashTag?: string }>,
+    queryFn: () => api.profile.get() as Promise<{ defaultPlayerTag?: string; clashTag?: string }>,
   });
 
   const { data: subscription } = useQuery({
@@ -102,7 +102,7 @@ export default function CoachPage() {
   });
 
   const pushAnalysisMutation = useMutation({
-    mutationFn: () => api.coach.generatePushAnalysis(profile?.clashTag),
+    mutationFn: () => api.coach.generatePushAnalysis(profile?.defaultPlayerTag || profile?.clashTag),
     onSuccess: () => {
       latestAnalysisQuery.refetch();
       setErrorText(null);
@@ -124,7 +124,7 @@ export default function CoachPage() {
       history.push({ role: "user", content });
       return api.coach.chat(
         history,
-        profile?.clashTag,
+        profile?.defaultPlayerTag || profile?.clashTag,
         quickPrompts.includes(content) ? "quick_prompt" : "manual",
       );
     },
@@ -259,13 +259,13 @@ export default function CoachPage() {
         )}
 
         <div className="grid lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2 border-border/50 bg-card/50 overflow-hidden">
+          <Card className="lg:col-span-2 border-border/50 bg-card/50 overflow-hidden" aria-busy={chatMutation.isPending}>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">{t("pages.coach.chatTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <ScrollArea className="h-[55vh] pr-3">
-                <div className="space-y-3">
+                <div className="space-y-3" role="log" aria-live="polite" aria-label="Chat messages">
                   {messages.map((message) => (
                     <div
                       key={message.id}
@@ -288,7 +288,7 @@ export default function CoachPage() {
                     </div>
                   ))}
                   {chatMutation.isPending && (
-                    <div className="flex gap-3">
+                    <div className="flex gap-3" role="status" aria-label={t("coach.thinking")}>
                       <Avatar className="w-8 h-8">
                         <AvatarFallback>AI</AvatarFallback>
                       </Avatar>

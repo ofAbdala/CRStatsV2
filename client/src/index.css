@@ -40,6 +40,15 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+
   --color-chart-1: hsl(var(--chart-1));
   --color-chart-2: hsl(var(--chart-2));
   --color-chart-3: hsl(var(--chart-3));
@@ -56,39 +65,52 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 }
 
-/* Default to Dark Mode for Gaming Aesthetic */
+/* Default to Dark Mode for Gaming Aesthetic (Liquid Glass) */
 :root {
-  /* Deep Blue/Black Background */
+  /* Deep Blue/Black Background (Almost Black) */
   --background: 224 71% 4%; 
   --foreground: 210 40% 98%;
 
-  /* Darker Cards */
-  --card: 222 47% 11%;
+  /* Darker Cards with slightly more blue tint */
+  --card: 224 71% 6%;
   --card-foreground: 210 40% 98%;
 
-  --popover: 222 47% 11%;
+  --popover: 224 71% 6%;
   --popover-foreground: 210 40% 98%;
 
-  /* Gold Primary (Clash Royale style) */
+  /* Gold Primary (Clash Royale Style - PRO) */
   --primary: 43 96% 56%; 
   --primary-foreground: 224 71% 4%;
 
-  /* Blue Secondary */
+  /* Blue Secondary (Neutral/Action) */
   --secondary: 217 91% 60%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217 33% 17%;
+  --muted: 217 33% 12%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 217 33% 17%;
+  --accent: 217 33% 12%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 62.8% 30.6%;
+  /* Red (Loss/Tilt) */
+  --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 224 76% 48%;
+  /* Green (Win/Ok) */
+  --success: 142 71% 45%;
+  --success-foreground: 210 40% 98%;
+
+  /* Yellow (Warning/Partial Sync) */
+  --warning: 48 96% 53%;
+  --warning-foreground: 224 71% 4%;
+
+  /* Blue (Info) */
+  --info: 217 91% 60%;
+  --info-foreground: 210 40% 98%;
+
+  --border: 217 33% 12%;
+  --input: 217 33% 12%;
+  --ring: 43 96% 56%; /* Gold focus ring */
 
   --radius: 0.75rem;
 
@@ -102,10 +124,10 @@
   --sidebar-foreground: 240 5% 96%;
   --sidebar-primary: 43 96% 56%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 3.7% 15.9%;
-  --sidebar-accent-foreground: 240 4.8% 95.9%;
-  --sidebar-border: 240 3.7% 15.9%;
-  --sidebar-ring: 217 91% 60%;
+  --sidebar-accent: 217 33% 12%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217 33% 12%;
+  --sidebar-ring: 43 96% 56%;
 }
 
 @layer base {
@@ -114,6 +136,10 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(217, 91%, 60%, 0.1) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(43, 96%, 56%, 0.05) 0px, transparent 50%);
+    background-attachment: fixed;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
@@ -133,29 +159,22 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
-  
-  /* Page Transitions */
-  .page-transition-enter {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  .page-transition-enter-active {
-    opacity: 1;
-    transform: translateY(0);
-    transition: opacity 300ms, transform 300ms;
-  }
-  .page-transition-exit {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .page-transition-exit-active {
-    opacity: 0;
-    transform: translateY(-10px);
-    transition: opacity 300ms, transform 300ms;
-  }
-  
   /* Hover effects for interactive elements */
   .interactive-hover {
     @apply transition-all duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  /* Liquid Glass Utilities */
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-md border border-white/5 shadow-lg relative overflow-hidden;
+  }
+  
+  .glass-card::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none;
+  }
+
+  .text-shadow-glow {
+    text-shadow: 0 0 20px hsla(var(--primary), 0.5);
   }
 }

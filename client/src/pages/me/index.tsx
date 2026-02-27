@@ -19,7 +19,7 @@ export default function MePage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex items-center justify-center min-h-[60vh]" role="status" aria-label={t('pages.me.loading')}>
           <div className="flex flex-col items-center gap-2">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">{t('pages.me.loading')}</p>
@@ -66,7 +66,7 @@ export default function MePage() {
                     <span className="text-sm text-muted-foreground">{player.clan.name}</span>
                     {player.clan.badgeId && (
                       <img src={`https://cdn.royaleapi.com/static/img/badge/${player.clan.badgeId}.png`} alt="Clan Badge" className="w-5 h-5"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     )}
                   </div>
                 )}

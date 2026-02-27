@@ -1,534 +1,137 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "wouter";
-import { format } from "date-fns";
-import { enUS, ptBR } from "date-fns/locale";
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import ClashCardImage from "@/components/clash/ClashCardImage";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { buildTrophyChartData, parseClashBattleTime } from "@/lib/analytics/trophyChart";
-import { getArenaImageUrl } from "@/lib/clashIcons";
-import { cn } from "@/lib/utils";
-import { getApiErrorMessage } from "@/lib/errorMessages";
 import { useLocale } from "@/hooks/use-locale";
-import { useFavorites } from "@/hooks/useFavorites";
-import { useGoals } from "@/hooks/useGoals";
 import { usePlayerSync } from "@/hooks/usePlayerSync";
 import { computeTiltState } from "@shared/domain/tilt";
-import {
-  AlertTriangle,
-  AlertCircle,
-  BellOff,
-  ChevronRight,
-  Clock,
-  Crown,
-  Loader2,
-  RefreshCcw,
-  Star,
-  Swords,
-  Target,
-  TrendingUp,
-  Trophy,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-function getTiltLabel(tiltLevel: "high" | "medium" | "none" | undefined, t: (key: string) => string) {
-  if (tiltLevel === "high") return t("pages.dashboard.tilt.high");
-  if (tiltLevel === "medium") return t("pages.dashboard.tilt.medium");
-  return t("pages.dashboard.tilt.none");
-}
-
-function getTiltClass(tiltLevel?: "high" | "medium" | "none") {
-  if (tiltLevel === "high") return "border-red-500/50 text-red-500";
-  if (tiltLevel === "medium") return "border-yellow-500/50 text-yellow-500";
-  return "border-green-500/50 text-green-500";
-}
-
-const TILT_ALERT_SNOOZE_KEY = "tilt_alert_snoozed_until";
+import { DailyStatusCard } from "@/components/home/DailyStatusCard";
+import { MiniGraph } from "@/components/home/MiniGraph";
+import { LastMatches } from "@/components/home/LastMatches";
+import { DailyInsight } from "@/components/home/DailyInsight";
+import { buildTrophyChartData } from "@/lib/analytics/trophyChart";
+import { Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
   const { t, locale } = useLocale();
-  const { sync, derivedStatus, isLoading, isFetching, refresh, error } = usePlayerSync();
-  const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
-  const goalsQuery = useGoals();
+  const { sync, isLoading } = usePlayerSync();
 
   const player = sync?.player ?? null;
   const battles = sync?.battles ?? [];
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [tiltDismissed, setTiltDismissed] = useState(false);
-  const [tiltSnoozedUntilMs, setTiltSnoozedUntilMs] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const raw = window.localStorage.getItem(TILT_ALERT_SNOOZE_KEY);
-    const parsed = raw ? Number(raw) : 0;
-    return Number.isFinite(parsed) ? parsed : 0;
-  });
 
+  // Update time every minute
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 60 * 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  const tilt = useMemo(() => computeTiltState(battles, new Date(nowMs)), [battles, nowMs]);
-  const isTiltSnoozed = tiltSnoozedUntilMs > nowMs;
+  // Compute Tilt State
+  const tilt = useMemo(() => {
+    const state = computeTiltState(battles, new Date(nowMs));
+    // Map to DailyStatusCard expected format
+    return {
+      level: (state.level === "high" || state.level === "medium" || state.level === "none") ? state.level : "none",
+      risk: state.level === "high" ? t("pages.dashboard.tilt.high") : state.level === "medium" ? t("pages.dashboard.tilt.medium") : t("pages.dashboard.tilt.none")
+    };
+  }, [battles, nowMs, t]);
 
-  useEffect(() => {
-    if (!tilt.alert) {
-      setTiltDismissed(false);
-    }
-  }, [tilt.alert]);
+  // Calculate 24h Stats
+  const stats24h = useMemo(() => {
+    const oneDayAgo = nowMs - 24 * 60 * 60 * 1000;
+    const recentBattles = battles.filter((b: any) => new Date(b.battleTime).getTime() > oneDayAgo);
 
-  useEffect(() => {
-    if (!isTiltSnoozed && tiltSnoozedUntilMs) {
-      window.localStorage.removeItem(TILT_ALERT_SNOOZE_KEY);
-      setTiltSnoozedUntilMs(0);
-    }
-  }, [isTiltSnoozed, tiltSnoozedUntilMs]);
-  const goalsFromApi = Array.isArray(goalsQuery.data) ? goalsQuery.data : null;
-  const goalsFallback = sync?.goals ?? [];
-  const goals = goalsFromApi ?? goalsFallback;
-  const activeGoals = goals.filter((goal: any) => !goal?.completed);
-  const isGoalsLoading = goalsQuery.isLoading && !goalsFromApi && goalsFallback.length === 0;
-  const stats = sync?.stats;
-  const latestFive = battles.slice(0, 5);
-  const chartData = buildTrophyChartData({
+    const totalMatches24h = recentBattles.length;
+    let wins24h = 0;
+    let losses24h = 0;
+    let delta24h = 0;
+
+    recentBattles.forEach((battle: any) => {
+      const teamCrowns = battle?.team?.[0]?.crowns || 0;
+      const opponentCrowns = battle?.opponent?.[0]?.crowns || 0;
+      if (teamCrowns > opponentCrowns) wins24h++;
+      else if (opponentCrowns > teamCrowns) losses24h++;
+
+      // Trophy change approximation (since API might not give explicit delta history per match clearly in all endpoints, 
+      // usually derived from context. Assuming battle.trophyChange exists or we approximate. 
+      // For now, if ladder, typical +30/-30. Real implementation needs robust parser)
+      // `battleHistory` table has trophyChange.
+      if (battle.trophyChange) {
+        delta24h += battle.trophyChange;
+      } else {
+        // Fallback estimation
+        if (teamCrowns > opponentCrowns) delta24h += 30;
+        else if (opponentCrowns > teamCrowns) delta24h -= 30;
+      }
+    });
+
+    const winRate = totalMatches24h > 0 ? Math.round((wins24h / totalMatches24h) * 100) : 0;
+
+    return {
+      trophies: player?.trophies || 0,
+      delta24h,
+      winRate,
+      totalMatches24h,
+      wins24h,
+      losses24h
+    };
+  }, [battles, nowMs, player]);
+
+  // Chart Data
+  const chartData = useMemo(() => buildTrophyChartData({
     battles,
     currentTrophies: player?.trophies,
     locale,
     days: 7,
-  });
+  }), [battles, player, locale]);
 
-  const updatedAtText = sync?.lastSyncedAt
-    ? format(new Date(sync.lastSyncedAt), "Pp", { locale: locale === "pt-BR" ? ptBR : enUS })
-    : t("pages.dashboard.noSync");
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          <p className="text-muted-foreground">{t("common.loading")}</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">{t("pages.dashboard.title")}</h1>
-            <p className="text-muted-foreground">{t("pages.dashboard.subtitle")}</p>
+      <div className="space-y-6">
+        {/* Header Section */}
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t("home.welcome", { name: player?.name || "Player" })}</h1>
+          <p className="text-muted-foreground">{t("home.subtitle")}</p>
+        </div>
+
+        {/* Core Loop Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* 1. Status of the Day (Hero) */}
+          <div className="lg:col-span-2">
+            <DailyStatusCard
+              player={player}
+              stats={stats24h}
+              tilt={tilt}
+            />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg shadow-sm">
-              {isLoading || isFetching ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-sm font-medium text-muted-foreground">{t("common.loading")}</span>
-                </>
-              ) : derivedStatus === "ok" ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-sm font-medium text-muted-foreground">{t("pages.dashboard.syncNow")}</span>
-                </>
-              ) : derivedStatus === "partial" ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-                  <span className="text-sm font-medium text-muted-foreground">{t("pages.dashboard.syncPartial")}</span>
-                </>
-              ) : (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-sm font-medium text-muted-foreground">{t("pages.dashboard.syncError")}</span>
-                </>
-              )}
-            </div>
 
-            <Badge variant="outline" className={getTiltClass(tilt.level)}>
-              {getTiltLabel(tilt.level, t)}
-            </Badge>
+          {/* 4. Daily Insight */}
+          <div className="lg:col-span-1">
+            <DailyInsight stats={stats24h} tilt={tilt} />
+          </div>
 
-            <Badge variant="outline">{t("pages.dashboard.lastUpdate", { time: updatedAtText })}</Badge>
+          {/* 2. Mini Graph */}
+          <div className="lg:col-span-2 h-[200px]">
+            <MiniGraph data={chartData} />
+          </div>
 
-            <Button variant="outline" size="sm" onClick={() => refresh()} disabled={isFetching}>
-              {isFetching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-              {t("pages.dashboard.sync")}
-            </Button>
+          {/* 3. Last Matches */}
+          <div className="lg:col-span-1 h-[200px]">
+            <LastMatches battles={battles} />
           </div>
         </div>
 
-        {derivedStatus === "error" && (
-          <Alert data-testid="sync-error-alert">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {getApiErrorMessage(error, t)}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {sync?.partial && (
-          <Alert data-testid="sync-partial-alert">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {t("pages.dashboard.partialSync")}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {tilt.alert && !tiltDismissed && !isTiltSnoozed && (
-          <Alert variant="destructive" data-testid="tilt-alert">
-            <AlertTriangle className="h-4 w-4" />
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-              <div>
-                <AlertTitle>{t("pages.dashboard.tiltAlert.title")}</AlertTitle>
-                <AlertDescription>
-                  {t("pages.dashboard.tiltAlert.description", {
-                    risk: tilt.risk,
-                    time: tilt.lastBattleAt
-                      ? format(tilt.lastBattleAt, "Pp", { locale: locale === "pt-BR" ? ptBR : enUS })
-                      : updatedAtText,
-                  })}
-                </AlertDescription>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const until = Date.now() + 6 * 60 * 60 * 1000;
-                    window.localStorage.setItem(TILT_ALERT_SNOOZE_KEY, String(until));
-                    setTiltSnoozedUntilMs(until);
-                  }}
-                >
-                  <BellOff className="w-4 h-4 mr-2" />
-                  {t("pages.dashboard.tiltAlert.snooze6h")}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setTiltDismissed(true)}>
-                  {t("pages.dashboard.tiltAlert.dismiss")}
-                </Button>
-              </div>
-            </div>
-          </Alert>
-        )}
-
-        {isLoading ? (
-          <div className="min-h-[320px] flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard
-                title={t("pages.dashboard.stats.trophies")}
-                value={player?.trophies ?? 0}
-                icon={<Trophy className="w-5 h-5 text-primary" />}
-                trend={
-                  player?.arena?.name ? t("pages.dashboard.stats.arenaLabel", { name: player.arena.name }) : undefined
-                }
-                trendUp
-                arenaImage={
-                  typeof player?.arena?.id === "number" ? getArenaImageUrl(player.arena.id) : undefined
-                }
-              />
-              <StatCard
-                title={t("pages.dashboard.stats.bestSeason")}
-                value={player?.bestTrophies ?? 0}
-                icon={<Crown className="w-5 h-5 text-yellow-500" />}
-                subtext={t("pages.dashboard.stats.personalBest")}
-              />
-              <StatCard
-                title={t("pages.dashboard.stats.winRate")}
-                value={`${(stats?.winRate ?? 0).toFixed?.(1) ?? Math.round(stats?.winRate ?? 0)}%`}
-                icon={<TrendingUp className="w-5 h-5 text-green-500" />}
-                subtext={t("pages.dashboard.stats.lastBattles", { count: stats?.totalMatches ?? 0 })}
-              />
-              <StatCard
-                title={t("pages.dashboard.stats.wins")}
-                value={player?.wins ?? stats?.wins ?? 0}
-                icon={<Swords className="w-5 h-5 text-blue-500" />}
-                subtext={t("pages.dashboard.stats.lossesLine", { count: player?.losses ?? stats?.losses ?? 0 })}
-              />
-            </div>
-
-            {Array.isArray(player?.currentDeck) && player.currentDeck.length > 0 ? (
-              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Swords className="w-5 h-5 text-primary" />
-                    {t("pages.dashboard.currentDeckTitle")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                    {player.currentDeck.map((card: any, idx: number) => (
-                      <ClashCardImage
-                        key={card?.id || `${card?.name || "card"}-${idx}`}
-                        name={card?.name || "Card"}
-                        iconUrls={card?.iconUrls}
-                        level={typeof card?.level === "number" ? card.level : null}
-                        size="md"
-                      />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
-
-            <div className="grid lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-8">
-                <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle>{t("pages.dashboard.trophyProgressTitle")}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData}>
-                          <defs>
-                            <linearGradient id="trophyGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                          <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                          <YAxis
-                            stroke="hsl(var(--muted-foreground))"
-                            fontSize={12}
-                            tickLine={false}
-                            axisLine={false}
-                            domain={["dataMin - 50", "dataMax + 50"]}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--popover))",
-                              borderColor: "hsl(var(--border))",
-                              borderRadius: "8px",
-                              color: "hsl(var(--popover-foreground))",
-                            }}
-                          />
-                          <Area type="monotone" dataKey="trophies" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#trophyGradient)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="w-5 h-5 text-primary" />
-                      {t("pages.dashboard.goalsTitle")}
-                    </CardTitle>
-                    <Link href="/goals">
-                      <Button variant="ghost" size="sm" className="h-8 text-xs">
-                        {t("pages.dashboard.manageGoals")}
-                      </Button>
-                    </Link>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {isGoalsLoading ? (
-                      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        {t("common.loading")}
-                      </div>
-                    ) : activeGoals.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">{t("pages.dashboard.emptyGoals")}</p>
-                    ) : (
-                      activeGoals.slice(0, 3).map((goal: any) => {
-                        const currentValue = goal.currentValue || 0;
-                        const targetValue = goal.targetValue || 0;
-                        const progress = targetValue > 0 ? Math.min(100, (currentValue / targetValue) * 100) : 0;
-                        return (
-                          <div key={goal.id} className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium">{goal.title}</span>
-                              <span className="text-muted-foreground">
-                                {currentValue} / {targetValue}
-                              </span>
-                            </div>
-                            <Progress value={progress} className="h-2" />
-                          </div>
-                        );
-                      })
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="space-y-8">
-                <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle>{t("pages.dashboard.recentBattlesTitle")}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {latestFive.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">{t("pages.dashboard.emptyBattles")}</p>
-                    ) : (
-                      latestFive.map((battle: any, idx: number) => {
-                        const teamCrowns = battle?.team?.[0]?.crowns || 0;
-                        const opponentCrowns = battle?.opponent?.[0]?.crowns || 0;
-                        const isWin = teamCrowns > opponentCrowns;
-                        const isDraw = teamCrowns === opponentCrowns;
-                        const opponentName = battle?.opponent?.[0]?.name || t("pages.dashboard.opponentFallback");
-                        const battleTime = parseClashBattleTime(battle?.battleTime);
-
-                        return (
-                          <div
-                            key={`${battle?.battleTime || "battle"}-${idx}`}
-                            className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-white/5 transition-colors cursor-pointer interactive-hover"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "w-10 h-10 rounded flex items-center justify-center font-bold text-lg border shrink-0",
-                                  isWin && !isDraw
-                                    ? "bg-green-500/10 text-green-500 border-green-500/20"
-                                    : isDraw
-                                      ? "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                                      : "bg-red-500/10 text-red-500 border-red-500/20",
-                                )}
-                              >
-                                {isWin && !isDraw ? "W" : isDraw ? "D" : "L"}
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-sm font-medium truncate">{opponentName}</span>
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {battleTime
-                                    ? battleTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                                    : "--:--"}
-                                </span>
-                                {Array.isArray(battle?.team?.[0]?.cards) ? (
-                                  <div className="flex gap-1 mt-1 flex-wrap">
-                                    {(battle.team[0].cards as any[]).slice(0, 8).map((card: any, cardIdx: number) => (
-                                      <ClashCardImage
-                                        key={card?.id || `${card?.name || "card"}-${cardIdx}`}
-                                        name={card?.name || "Card"}
-                                        iconUrls={card?.iconUrls}
-                                        level={null}
-                                        size="sm"
-                                        showLevel={false}
-                                      />
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="text-sm font-bold text-muted-foreground shrink-0">
-                              {teamCrowns}-{opponentCrowns}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                    <div className="pt-2 text-center">
-                      <Link href="/me">
-                        <button className="text-sm text-primary hover:underline font-medium transition-colors hover:text-primary/80">
-                          {t("pages.dashboard.viewFullHistory")}
-                        </button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Star className="w-5 h-5 text-yellow-500" />
-                      {t("pages.dashboard.favoritesTitle")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {favoritesLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                      </div>
-                    ) : (favorites as any[]).length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">{t("pages.dashboard.emptyFavorites")}</p>
-                    ) : (
-                      (favorites as any[]).slice(0, 6).map((fav: any) => (
-                        <Link
-                          key={fav.id}
-                          href={fav.playerTag ? `/p/${String(fav.playerTag).replace(/^#/, "")}` : "/me"}
-                        >
-                          <div className="flex items-center justify-between p-3 rounded-lg bg-background/40 hover:bg-background/60 transition-colors cursor-pointer group">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="w-8 h-8 border border-border">
-                                <AvatarFallback>{String(fav.name || "").substring(0, 2).toUpperCase() || "PL"}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-bold text-sm">{fav.name}</div>
-                                <div className="text-xs text-muted-foreground">{fav.clan || fav.playerTag || ""}</div>
-                              </div>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </Link>
-                      ))
-                    )}
-                    <Link href="/community">
-                      <Button variant="ghost" size="sm" className="w-full text-xs mt-2">
-                        {t("pages.dashboard.exploreCommunity")}
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </>
-        )}
       </div>
     </DashboardLayout>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  icon,
-  trend,
-  trendUp,
-  subtext,
-  arenaImage,
-}: {
-  title: string;
-  value: string | number;
-  icon: ReactNode;
-  trend?: string;
-  trendUp?: boolean;
-  subtext?: string;
-  arenaImage?: string;
-}) {
-  return (
-    <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-colors">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between space-y-0 pb-2">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="flex items-center gap-2">
-            {arenaImage ? (
-              <img
-                src={arenaImage}
-                alt="Arena"
-                className="w-8 h-8 object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : null}
-            {icon}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <div className="text-2xl font-bold font-display">{value}</div>
-          {trend ? (
-            <p className={cn("text-xs font-medium", trendUp ? "text-green-500" : "text-red-500")}>{trend}</p>
-          ) : null}
-          {subtext ? <p className="text-xs text-muted-foreground">{subtext}</p> : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}

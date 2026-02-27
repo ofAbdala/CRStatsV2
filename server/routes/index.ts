@@ -34,6 +34,7 @@ import communityRouter from "./community";
 import publicRouter from "./public";
 import decksRouter from "./decks";
 import cronRouter from "../cron/index";
+import healthRouter from "./health";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -52,6 +53,7 @@ export async function registerRoutes(
   app.use(publicRouter);
   app.use(decksRouter);
   app.use(cronRouter);
+  app.use(healthRouter);
 
   return httpServer;
 }

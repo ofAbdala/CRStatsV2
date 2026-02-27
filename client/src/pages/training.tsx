@@ -189,10 +189,10 @@ export default function TrainingPage() {
           </h2>
 
           {isPro ? (
-            <div className="space-y-6">
+            <div className="space-y-6" aria-busy={isProLoading}>
               {isProLoading ? (
                 <Card className="border-border/50 bg-card/50">
-                  <CardContent className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
+                  <CardContent className="py-10 flex items-center justify-center gap-2 text-muted-foreground" role="status" aria-label={t("pages.training.loading")}>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     {t("pages.training.loading")}
                   </CardContent>
@@ -445,8 +445,16 @@ export default function TrainingPage() {
             </div>
           ) : (
             <Card
-              className="border-border/50 bg-card/30 border-dashed relative overflow-hidden group cursor-pointer"
+              className="border-border/50 bg-card/30 border-dashed relative overflow-hidden group cursor-pointer focus-within:ring-2 focus-within:ring-ring"
+              role="button"
+              tabIndex={0}
               onClick={() => setLocation("/billing")}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setLocation("/billing");
+                }
+              }}
             >
               <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center transition-all group-hover:bg-background/50">
                 <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -500,8 +508,16 @@ function DrillCard({
 
   return (
     <Card
-      className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all hover:-translate-y-1 cursor-pointer interactive-hover"
+      className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all hover:-translate-y-1 cursor-pointer interactive-hover focus-within:ring-2 focus-within:ring-ring"
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <CardHeader>
         <div className="flex justify-between items-start mb-2">

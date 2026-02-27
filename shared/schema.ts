@@ -27,8 +27,8 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export type UpsertUser = typeof users.$inferInsert;
@@ -41,13 +41,14 @@ export type User = typeof users.$inferSelect;
 export const profiles = pgTable("profiles", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   displayName: varchar("display_name"),
-  clashTag: varchar("clash_tag"),
+  /** @deprecated Use defaultPlayerTag. Column renamed to _clash_tag_deprecated in migration 0002. */
+  clashTag: varchar("_clash_tag_deprecated"),
   defaultPlayerTag: varchar("default_player_tag"),
   region: varchar("region").default("BR"),
   language: varchar("language").default("pt"),
   role: varchar("role").default("user"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertProfileSchema = createInsertSchema(profiles).omit({
@@ -70,13 +71,13 @@ export const subscriptions = pgTable(
     stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
     plan: varchar("plan").notNull().default("free"),
     status: varchar("status").notNull().default("inactive"),
-    currentPeriodEnd: timestamp("current_period_end"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    uniqueIndex("UIDX_subscriptions_user_id").on(table.userId),
+    uniqueIndex("uidx_subscriptions_user_id").on(table.userId),
     check("chk_subscriptions_plan", sql`${table.plan} IN ('free', 'pro')`),
     check("chk_subscriptions_status", sql`${table.status} IN ('inactive', 'active', 'canceled', 'past_due')`),
   ],
@@ -105,12 +106,12 @@ export const goals = pgTable(
     targetValue: integer("target_value").notNull(),
     currentValue: integer("current_value").default(0),
     completed: boolean("completed").default(false),
-    completedAt: timestamp("completed_at"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_goals_user_id").on(table.userId),
+    index("idx_goals_user_id").on(table.userId),
     check("chk_goals_type", sql`${table.type} IN ('trophies', 'streak', 'winrate', 'custom')`),
   ],
 );
@@ -136,11 +137,11 @@ export const favoritePlayers = pgTable(
     name: varchar("name").notNull(),
     trophies: integer("trophies"),
     clan: varchar("clan"),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_favorite_players_user_id").on(table.userId),
-    uniqueIndex("UIDX_favorite_players_user_id_player_tag").on(table.userId, table.playerTag),
+    index("idx_favorite_players_user_id").on(table.userId),
+    uniqueIndex("uidx_favorite_players_user_id_player_tag").on(table.userId, table.playerTag),
   ],
 );
 
@@ -164,9 +165,9 @@ export const notifications = pgTable(
     description: text("description"),
     type: varchar("type").notNull(),
     read: boolean("read").default(false),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [index("IDX_notifications_user_id").on(table.userId)],
+  (table) => [index("idx_notifications_user_id").on(table.userId)],
 );
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
@@ -187,8 +188,8 @@ export const userSettings = pgTable("user_settings", {
   defaultLandingPage: varchar("default_landing_page").default("dashboard"),
   showAdvancedStats: boolean("show_advanced_stats").default(false),
   notificationsEnabled: boolean("notifications_enabled").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
@@ -207,8 +208,8 @@ export const notificationPreferences = pgTable("notification_preferences", {
   training: boolean("training").notNull().default(true),
   billing: boolean("billing").notNull().default(true),
   system: boolean("system").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
@@ -224,8 +225,8 @@ export type NotificationPreferences = typeof notificationPreferences.$inferSelec
 
 export const playerSyncState = pgTable("player_sync_state", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
-  lastSyncedAt: timestamp("last_synced_at"),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertPlayerSyncStateSchema = createInsertSchema(playerSyncState).omit({
@@ -244,12 +245,12 @@ export const battleHistory = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     playerTag: varchar("player_tag").notNull(),
-    battleTime: timestamp("battle_time").notNull(),
+    battleTime: timestamp("battle_time", { withTimezone: true }).notNull(),
     battleKey: varchar("battle_key").notNull().unique(),
     battleJson: jsonb("battle_json").notNull().$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("IDX_battle_history_user_tag_time").on(table.userId, table.playerTag, table.battleTime)],
+  (table) => [index("idx_battle_history_user_tag_time").on(table.userId, table.playerTag, table.battleTime)],
 );
 
 export const insertBattleHistorySchema = createInsertSchema(battleHistory).omit({
@@ -271,10 +272,10 @@ export const coachMessages = pgTable(
     role: varchar("role").notNull(),
     content: text("content").notNull(),
     contextType: varchar("context_type"),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_coach_messages_user_id").on(table.userId),
+    index("idx_coach_messages_user_id").on(table.userId),
     index("idx_coach_messages_user_role_created").on(table.userId, table.role, table.createdAt),
   ],
 );
@@ -295,17 +296,17 @@ export const pushAnalyses = pgTable(
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    pushStartTime: timestamp("push_start_time").notNull(),
-    pushEndTime: timestamp("push_end_time").notNull(),
+    pushStartTime: timestamp("push_start_time", { withTimezone: true }).notNull(),
+    pushEndTime: timestamp("push_end_time", { withTimezone: true }).notNull(),
     battlesCount: integer("battles_count").notNull(),
     wins: integer("wins").notNull(),
     losses: integer("losses").notNull(),
     netTrophies: integer("net_trophies").notNull(),
     resultJson: jsonb("result_json").notNull().$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_push_analyses_user_id").on(table.userId),
+    index("idx_push_analyses_user_id").on(table.userId),
     index("idx_push_analyses_user_created").on(table.userId, table.createdAt),
   ],
 );
@@ -330,11 +331,11 @@ export const trainingPlans = pgTable(
     source: varchar("source").notNull().default("manual"),
     status: varchar("status").notNull().default("active"),
     pushAnalysisId: varchar("push_analysis_id").references(() => pushAnalyses.id, { onDelete: "set null" }),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_training_plans_user_id").on(table.userId),
+    index("idx_training_plans_user_id").on(table.userId),
     check("chk_training_plans_status", sql`${table.status} IN ('active', 'archived', 'completed')`),
   ],
 );
@@ -363,11 +364,11 @@ export const trainingDrills = pgTable(
     mode: varchar("mode").notNull(),
     priority: integer("priority").notNull().default(1),
     status: varchar("status").notNull().default("pending"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_training_drills_plan_id").on(table.planId),
+    index("idx_training_drills_plan_id").on(table.planId),
     check("chk_training_drills_status", sql`${table.status} IN ('pending', 'in_progress', 'completed', 'skipped')`),
   ],
 );
@@ -399,7 +400,7 @@ export const metaDecksCache = pgTable("meta_decks_cache", {
   winRateEstimate: real("win_rate_estimate"),
   sourceRegion: varchar("source_region"),
   sourceRange: varchar("source_range"),
-  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertMetaDeckCacheSchema = createInsertSchema(metaDecksCache).omit({
@@ -418,10 +419,10 @@ export const deckSuggestionsUsage = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     suggestionType: varchar("suggestion_type").notNull(),
-    createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("IDX_deck_suggestions_usage_user_type_created").on(
+    index("idx_deck_suggestions_usage_user_type_created").on(
       table.userId,
       table.suggestionType,
       table.createdAt,
@@ -455,6 +456,7 @@ const nullableTagSchema = z.union([normalizedTagSchema, z.null()]);
 
 export const profileCreateInputSchema = z.object({
   displayName: z.string().trim().min(1).max(80).optional(),
+  /** @deprecated Use defaultPlayerTag instead. Kept for backwards compatibility during transition. */
   clashTag: nullableTagSchema.optional(),
   defaultPlayerTag: nullableTagSchema.optional(),
   region: z.string().trim().min(2).max(10).optional(),

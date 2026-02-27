@@ -23,8 +23,23 @@ export default function AuthPage() {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (data.session) {
+        // Check if returning user has a clashTag (TD-017)
+        try {
+          const res = await fetch("/api/auth/user", {
+            headers: { Authorization: `Bearer ${data.session.access_token}` },
+          });
+          if (res.ok) {
+            const userData = await res.json();
+            if (userData.profile?.defaultPlayerTag) {
+              setLocation("/dashboard");
+              return;
+            }
+          }
+        } catch {
+          // Fallback: go to dashboard if profile check fails
+        }
         setLocation("/dashboard");
       }
     });
@@ -63,11 +78,29 @@ export default function AuthPage() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: loginData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
       toast({ title: t("auth.toast.loginSuccess"), description: t("auth.toast.redirecting") });
-      setLocation("/onboarding");
+
+      // TD-017: Returning users with clashTag go to /dashboard, new users go to /onboarding
+      let redirectTo = "/onboarding";
+      if (loginData.session) {
+        try {
+          const res = await fetch("/api/auth/user", {
+            headers: { Authorization: `Bearer ${loginData.session.access_token}` },
+          });
+          if (res.ok) {
+            const userData = await res.json();
+            if (userData.profile?.defaultPlayerTag) {
+              redirectTo = "/dashboard";
+            }
+          }
+        } catch {
+          // Fallback to onboarding if check fails
+        }
+      }
+      setLocation(redirectTo);
     } catch (err: any) {
       toast({
         title: t("auth.toast.authFailedTitle"),

@@ -25,6 +25,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Skip Navigation Link (AC3: TD-043) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:font-medium focus:text-sm focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* Desktop Sidebar */}
       <aside className="hidden md:block w-64 fixed inset-y-0 z-50">
         <Sidebar isPro={isPro} />
@@ -44,7 +52,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           onMobileMenuClick={() => setIsMobileOpen(true)}
         />
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 animate-fade-in custom-scrollbar overflow-y-auto">
+        <main id="main-content" className="flex-1 p-4 md:p-6 lg:p-8 animate-fade-in custom-scrollbar overflow-y-auto">
           <div className="max-w-7xl mx-auto w-full space-y-6">
             {children}
           </div>

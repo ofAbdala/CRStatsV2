@@ -1,7 +1,8 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Swords, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle2 } from "lucide-react";
-import heroBg from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.png";
+import heroBgWebp from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.webp";
+import heroBgPng from "@assets/generated_images/dark_gaming_abstract_background_with_blue_and_gold_neon_accents.png";
 import { useLocale } from "@/hooks/use-locale";
 import { PRICING } from "@shared/pricing";
 
@@ -48,11 +49,14 @@ export default function LandingPage() {
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
         {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
-          <img 
-            src={heroBg} 
-            alt="Hero Background" 
-            className="w-full h-full object-cover opacity-40"
-          />
+          <picture>
+            <source srcSet={heroBgWebp} type="image/webp" />
+            <img
+              src={heroBgPng}
+              alt=""
+              className="w-full h-full object-cover opacity-40"
+            />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/80 to-background" />
         </div>
 

@@ -160,7 +160,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
         </h3>
 
         {battlesLoading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex justify-center py-8" role="status" aria-label="Loading battles">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
         ) : sessions.length === 0 ? (

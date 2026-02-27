@@ -17,7 +17,7 @@ import type { PeriodFilter, BattleStats, TiltState, RecentSeriesStats, MeDataCon
 export function useMeData(): MeDataContext {
   const queryClient = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const clashTag = profile?.clashTag;
+  const clashTag = profile?.defaultPlayerTag || profile?.clashTag;
   const { data: playerData, isLoading: playerLoading, error: playerError } = useClashPlayer(clashTag);
   const { data: subscription } = useQuery({ queryKey: ['subscription'], queryFn: () => api.subscription.get() });
   const { data: goalsData, isLoading: goalsLoading } = useGoals();

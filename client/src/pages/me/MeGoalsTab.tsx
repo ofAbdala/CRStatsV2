@@ -83,7 +83,7 @@ function TrophyEvolutionChart({ data: trophyEvolutionData, player, t }: {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[280px] w-full">
+        <div className="h-[280px] w-full" role="img" aria-label="Trophy evolution chart showing trophy progression over time">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={trophyEvolutionData}>
               <defs>
@@ -161,7 +161,7 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[200px] w-full">
+          <div className="h-[200px] w-full" role="img" aria-label="Play volume bar chart showing matches per day over the last 14 days">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={playVolumeData.chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
@@ -227,7 +227,7 @@ function GoalsSection({ activeGoals, goalsLoading, t }: { activeGoals: any[]; go
       </CardHeader>
       <CardContent>
         {goalsLoading ? (
-          <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+          <div className="flex items-center justify-center py-8" role="status" aria-label="Loading goals"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
         ) : activeGoals.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-4">
             {activeGoals.map((goal: any) => {
