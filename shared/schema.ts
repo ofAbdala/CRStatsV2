@@ -268,7 +268,10 @@ export const coachMessages = pgTable(
     contextType: varchar("context_type"),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("IDX_coach_messages_user_id").on(table.userId)],
+  (table) => [
+    index("IDX_coach_messages_user_id").on(table.userId),
+    index("idx_coach_messages_user_role_created").on(table.userId, table.role, table.createdAt),
+  ],
 );
 
 export const insertCoachMessageSchema = createInsertSchema(coachMessages).omit({
@@ -296,7 +299,10 @@ export const pushAnalyses = pgTable(
     resultJson: jsonb("result_json").notNull().$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("IDX_push_analyses_user_id").on(table.userId)],
+  (table) => [
+    index("IDX_push_analyses_user_id").on(table.userId),
+    index("idx_push_analyses_user_created").on(table.userId, table.createdAt),
+  ],
 );
 
 export const insertPushAnalysisSchema = createInsertSchema(pushAnalyses).omit({

@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -25,6 +27,24 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
   const app = express();
   const httpServer = createServer(app);
   const enableViteInDevelopment = options?.enableViteInDevelopment ?? true;
+
+  // CORS configuration (TD-006)
+  app.use(
+    cors({
+      origin: process.env.CORS_ORIGIN || "https://crstats.app",
+      credentials: true,
+    }),
+  );
+
+  // Global rate limiting (TD-005)
+  app.use(
+    rateLimit({
+      windowMs: 60_000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+    }),
+  );
 
   app.use((req, res, next) => {
     const headerValue = req.headers["x-request-id"];

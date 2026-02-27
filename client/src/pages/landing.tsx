@@ -222,7 +222,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <Swords className="w-4 h-4" />
             <span className="font-bold text-foreground">CRStats</span>
-            <span>© 2025</span>
+            <span>© {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-6">
             <a href="#" className="hover:text-foreground">{t("pages.landing.footer.terms")}</a>

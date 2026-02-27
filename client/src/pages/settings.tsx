@@ -10,7 +10,6 @@ import {
   Loader2,
   LogOut,
   Monitor,
-  Moon,
   Plus,
   Search,
   Trash2,
@@ -651,26 +650,6 @@ export default function SettingsPage() {
 	          </TabsContent>
 
           <TabsContent value="preferences" className="mt-6 space-y-6">
-            <Card className="border-border/50 bg-card/50">
-              <CardHeader>
-                <CardTitle>{t("settings.preferences.appearanceTitle")}</CardTitle>
-                <CardDescription>{t("settings.preferences.appearanceDescription")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Moon className="w-4 h-4" />
-                    <span className="font-medium">{t("settings.preferences.darkMode")}</span>
-                  </div>
-                  <Switch
-                    checked={darkMode}
-                    onCheckedChange={(checked) => setDarkMode(checked)}
-                    disabled={settingsLoading || updateSettings.isPending}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
             <Card className="border-border/50 bg-card/50">
               <CardHeader>
                 <CardTitle>{t("settings.preferences.languageTitle")}</CardTitle>

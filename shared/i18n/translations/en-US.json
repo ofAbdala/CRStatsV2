@@ -26,6 +26,39 @@
     "yesterday": "yesterday",
     "lastNDays": "last {n} days"
   },
+  "home": {
+    "welcome": "Welcome, {name}!",
+    "subtitle": "Consolidated view of your recent performance.",
+    "dailyStatusTitle": "Daily Status",
+    "status": {
+      "climbingFast": "On a roll!",
+      "climbing": "Slowly climbing",
+      "stable": "Stagnant...",
+      "falling": "Falling a bit",
+      "embarrassing": "Rough day (Embarrassing)"
+    },
+    "dailyInsightTitle": "Daily Insight",
+    "insight": {
+      "stopPlaying": "Stop playing now! You're tilted.",
+      "losingStreak": "Too many losses today. Your deck might be off-meta.",
+      "onFire": "You're on fire! Keep pushing trophies.",
+      "generic": "Analyze your matches to find mistakes.",
+      "action": {
+        "chill": "View Tilt Analysis",
+        "checkMeta": "View Meta Decks",
+        "pushMore": "Continue Push",
+        "analyze": "View Last Session"
+      }
+    },
+    "progress7d": "Progress (7 Days)",
+    "lastMatchesTitle": "Recent Matches",
+    "noMatches": "No recent matches",
+    "viewAllHistory": "View full history"
+  },
+  "custom": {
+    "trophies": "Trophies",
+    "winRate": "Win Rate"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "coach": "AI Coach",
@@ -41,7 +74,9 @@
     "logout": "Logout",
     "login": "Login",
     "myProfile": "My Profile",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "push": "Push Analysis",
+    "switchAccount": "Switch account"
   },
   "decks": {
     "meta": {
@@ -366,6 +401,31 @@
       "description": "Ask questions and get personalized tips from our AI Coach."
     }
   },
+  "auth": {
+    "signupTitle": "Create your account",
+    "loginTitle": "Welcome back",
+    "signupSubtitle": "Start your journey to the top of the rankings",
+    "loginSubtitle": "Sign in to continue your training",
+    "nameLabel": "Name",
+    "namePlaceholder": "Your name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@email.com",
+    "passwordLabel": "Password",
+    "loading": "Loading...",
+    "signupButton": "Create Account",
+    "loginButton": "Sign In",
+    "switchToLogin": "Already have an account? Sign in",
+    "switchToSignup": "Don't have an account? Sign up free",
+    "toast": {
+      "accountCreatedTitle": "Account created!",
+      "accountCreatedConfirmEmail": "Check your email to confirm your registration, then sign in.",
+      "accountCreatedSuccess": "Account created successfully!",
+      "redirecting": "Redirecting...",
+      "loginSuccess": "Login successful!",
+      "authFailedTitle": "Authentication failed",
+      "authFailedDescription": "Please try again."
+    }
+  },
   "errors": {
     "generic": "Something went wrong. Please try again.",
     "notFound": "Page not found",
@@ -447,6 +507,7 @@
   "components": {
     "pushAnalysis": {
       "title": "Push analysis",
+      "summaryPlaceholder": "Select 'Generate Analysis' for deep insights.",
       "winLoss": "{wins}W / {losses}L",
       "netTrophies": "{value} trophies",
       "matches": "{count} matches",

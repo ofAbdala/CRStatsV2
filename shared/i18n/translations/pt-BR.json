@@ -26,6 +26,39 @@
     "yesterday": "ontem",
     "lastNDays": "últimos {n} dias"
   },
+  "home": {
+    "welcome": "Bem-vindo, {name}!",
+    "subtitle": "Visão consolidada da sua performance recente.",
+    "dailyStatusTitle": "Status do Dia",
+    "status": {
+      "climbingFast": "Tô voando alto!",
+      "climbing": "Subindo devagar e sempre",
+      "stable": "Estagnado...",
+      "falling": "Caindo um pouco",
+      "embarrassing": "Hoje tá feio (Passando vergonha)"
+    },
+    "dailyInsightTitle": "Insight do Dia",
+    "insight": {
+      "stopPlaying": "Pare de jogar agora! Você está tiltado.",
+      "losingStreak": "Muitas derrotas hoje. Seu deck pode estar fora do meta.",
+      "onFire": "Você está on fire! Aproveite para subir troféus.",
+      "generic": "Analise suas partidas para encontrar erros.",
+      "action": {
+        "chill": "Ver Análise de Tilt",
+        "checkMeta": "Ver Meta Decks",
+        "pushMore": "Continuar Push",
+        "analyze": "Ver Última Sessão"
+      }
+    },
+    "progress7d": "Evolução (7 Dias)",
+    "lastMatchesTitle": "Últimas Partidas",
+    "noMatches": "Nenhuma partida recente",
+    "viewAllHistory": "Ver histórico completo"
+  },
+  "custom": {
+    "trophies": "Troféus",
+    "winRate": "Taxa de Vitória"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "coach": "Coach IA",
@@ -41,7 +74,9 @@
     "logout": "Sair",
     "login": "Entrar",
     "myProfile": "Meu Perfil",
-    "notifications": "Notificações"
+    "notifications": "Notificações",
+    "push": "Push Analysis",
+    "switchAccount": "Trocar conta"
   },
   "decks": {
     "meta": {
@@ -366,6 +401,31 @@
       "description": "Tire dúvidas e receba dicas personalizadas do nosso Coach IA."
     }
   },
+  "auth": {
+    "signupTitle": "Crie sua conta",
+    "loginTitle": "Bem-vindo de volta",
+    "signupSubtitle": "Comece sua jornada para o topo do ranking",
+    "loginSubtitle": "Entre para continuar seu treinamento",
+    "nameLabel": "Nome",
+    "namePlaceholder": "Seu nome",
+    "emailLabel": "Email",
+    "emailPlaceholder": "seu@email.com",
+    "passwordLabel": "Senha",
+    "loading": "Carregando...",
+    "signupButton": "Criar Conta",
+    "loginButton": "Entrar",
+    "switchToLogin": "Já tem uma conta? Entre aqui",
+    "switchToSignup": "Não tem conta? Cadastre-se grátis",
+    "toast": {
+      "accountCreatedTitle": "Conta criada!",
+      "accountCreatedConfirmEmail": "Verifique seu email para confirmar o cadastro e depois faça login.",
+      "accountCreatedSuccess": "Conta criada com sucesso!",
+      "redirecting": "Redirecionando...",
+      "loginSuccess": "Login realizado!",
+      "authFailedTitle": "Falha na autenticação",
+      "authFailedDescription": "Tente novamente."
+    }
+  },
   "errors": {
     "generic": "Algo deu errado. Tente novamente.",
     "notFound": "Página não encontrada",
@@ -447,6 +507,7 @@
   "components": {
     "pushAnalysis": {
       "title": "Análise de push",
+      "summaryPlaceholder": "Selecione 'Gerar Análise' para insights profundos.",
       "winLoss": "{wins}V / {losses}D",
       "netTrophies": "{value} troféus",
       "matches": "{count} partidas",

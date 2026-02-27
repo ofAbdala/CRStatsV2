@@ -7,17 +7,19 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Swords, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useLocale } from "@/hooks/use-locale";
 
 export default function AuthPage() {
   const [location, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const isSignup = searchParams.get("signup") === "true";
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { toast } = useToast();
+  const { t } = useLocale();
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -49,14 +51,14 @@ export default function AuthPage() {
         if (!data.session) {
           // If email confirmation is enabled, Supabase won't return a session.
           toast({
-            title: "Conta criada!",
-            description: "Verifique seu email para confirmar o cadastro e depois faça login.",
+            title: t("auth.toast.accountCreatedTitle"),
+            description: t("auth.toast.accountCreatedConfirmEmail"),
           });
           setLocation("/auth");
           return;
         }
 
-        toast({ title: "Conta criada com sucesso!", description: "Redirecionando..." });
+        toast({ title: t("auth.toast.accountCreatedSuccess"), description: t("auth.toast.redirecting") });
         setLocation("/onboarding");
         return;
       }
@@ -64,12 +66,12 @@ export default function AuthPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      toast({ title: "Login realizado!", description: "Redirecionando..." });
+      toast({ title: t("auth.toast.loginSuccess"), description: t("auth.toast.redirecting") });
       setLocation("/onboarding");
     } catch (err: any) {
       toast({
-        title: "Falha na autenticacao",
-        description: err?.message || "Tente novamente.",
+        title: t("auth.toast.authFailedTitle"),
+        description: err?.message || t("auth.toast.authFailedDescription"),
         variant: "destructive",
       });
     } finally {
@@ -94,22 +96,22 @@ export default function AuthPage() {
         <Card className="border-border/50 shadow-2xl bg-card/50 backdrop-blur-xl">
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-display">
-              {isSignup ? "Crie sua conta" : "Bem-vindo de volta"}
+              {isSignup ? t("auth.signupTitle") : t("auth.loginTitle")}
             </CardTitle>
             <CardDescription>
-              {isSignup 
-                ? "Comece sua jornada para o topo do ranking" 
-                : "Entre para continuar seu treinamento"}
+              {isSignup
+                ? t("auth.signupSubtitle")
+                : t("auth.loginSubtitle")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAuth} className="space-y-4">
               {isSignup && (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome</Label>
+                  <Label htmlFor="name">{t("auth.nameLabel")}</Label>
                   <Input
                     id="name"
-                    placeholder="Seu nome"
+                    placeholder={t("auth.namePlaceholder")}
                     required
                     className="bg-background/50"
                     value={name}
@@ -118,11 +120,11 @@ export default function AuthPage() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("auth.emailLabel")}</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="seu@email.com"
+                  placeholder={t("auth.emailPlaceholder")}
                   required
                   className="bg-background/50"
                   value={email}
@@ -130,7 +132,7 @@ export default function AuthPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password">{t("auth.passwordLabel")}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -140,15 +142,15 @@ export default function AuthPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              
+
               <Button type="submit" className="w-full font-bold h-11" disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Carregando...
+                    {t("auth.loading")}
                   </>
                 ) : (
-                  isSignup ? "Criar Conta" : "Entrar"
+                  isSignup ? t("auth.signupButton") : t("auth.loginButton")
                 )}
               </Button>
             </form>
@@ -156,9 +158,9 @@ export default function AuthPage() {
           <CardFooter className="flex justify-center">
             <Link href={isSignup ? "/auth" : "/auth?signup=true"}>
               <Button variant="link" className="text-sm text-muted-foreground hover:text-primary">
-                {isSignup 
-                  ? "Já tem uma conta? Entre aqui" 
-                  : "Não tem conta? Cadastre-se grátis"}
+                {isSignup
+                  ? t("auth.switchToLogin")
+                  : t("auth.switchToSignup")}
               </Button>
             </Link>
           </CardFooter>

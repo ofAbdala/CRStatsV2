@@ -354,3 +354,71 @@ for all
 to authenticated
 using (user_id = auth.uid()::text)
 with check (user_id = auth.uid()::text);
+
+-- ============================================================================
+-- AUTOMATIC updated_at TRIGGER (TD-013)
+-- ============================================================================
+
+create or replace function public.update_updated_at_column()
+returns trigger as $$
+begin
+  NEW.updated_at = NOW();
+  return NEW;
+end;
+$$ language plpgsql;
+
+-- Apply to all 9 tables with updated_at columns
+drop trigger if exists trg_users_updated_at on public.users;
+create trigger trg_users_updated_at
+before update on public.users
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_profiles_updated_at on public.profiles;
+create trigger trg_profiles_updated_at
+before update on public.profiles
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_subscriptions_updated_at on public.subscriptions;
+create trigger trg_subscriptions_updated_at
+before update on public.subscriptions
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_goals_updated_at on public.goals;
+create trigger trg_goals_updated_at
+before update on public.goals
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_user_settings_updated_at on public.user_settings;
+create trigger trg_user_settings_updated_at
+before update on public.user_settings
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_notification_preferences_updated_at on public.notification_preferences;
+create trigger trg_notification_preferences_updated_at
+before update on public.notification_preferences
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_player_sync_state_updated_at on public.player_sync_state;
+create trigger trg_player_sync_state_updated_at
+before update on public.player_sync_state
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_training_plans_updated_at on public.training_plans;
+create trigger trg_training_plans_updated_at
+before update on public.training_plans
+for each row execute function public.update_updated_at_column();
+
+drop trigger if exists trg_training_drills_updated_at on public.training_drills;
+create trigger trg_training_drills_updated_at
+before update on public.training_drills
+for each row execute function public.update_updated_at_column();
+
+-- ============================================================================
+-- COMPOSITE INDEXES (TD-014)
+-- ============================================================================
+
+create index if not exists idx_coach_messages_user_role_created
+  on public.coach_messages(user_id, role, created_at);
+
+create index if not exists idx_push_analyses_user_created
+  on public.push_analyses(user_id, created_at);
