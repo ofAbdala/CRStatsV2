@@ -14,8 +14,9 @@
  *   community.ts    — rankings (2 endpoints)
  *   public.ts       — public Clash Royale API proxy (5 endpoints)
  *   decks.ts        — meta decks, counter, optimizer (4 endpoints)
+ *   cron/index.ts   — cron job endpoints: retention, meta-refresh (2 endpoints)
  *
- * Total: 51 route registrations (46 unique + backwards-compatible aliases + Stripe webhook)
+ * Total: 53 route registrations (48 unique + backwards-compatible aliases + Stripe webhook)
  */
 import { type Express } from "express";
 import { type Server } from "http";
@@ -32,6 +33,7 @@ import trainingRouter from "./training";
 import communityRouter from "./community";
 import publicRouter from "./public";
 import decksRouter from "./decks";
+import cronRouter from "../cron/index";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -49,6 +51,7 @@ export async function registerRoutes(
   app.use(communityRouter);
   app.use(publicRouter);
   app.use(decksRouter);
+  app.use(cronRouter);
 
   return httpServer;
 }

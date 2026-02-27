@@ -46,7 +46,10 @@ import {
   type InsertMetaDeckCache,
 } from "@shared/schema";
 import { db } from "./db";
+import { pool } from "./db";
 import { eq, and, desc, gte, lt, notInArray, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "@shared/schema";
 import type { SupabaseAuthContext } from "./supabaseAuth";
 import { FREE_BATTLE_LIMIT, PRO_HISTORY_MAX_DAYS, buildBattleKey, extractBattleTime } from "./domain/battleHistory";
 
@@ -55,6 +58,16 @@ interface BootstrapResult {
   settings: UserSettings;
   subscription: Subscription;
   notificationPreferences: NotificationPreferences;
+}
+
+/**
+ * A session object representing an open transaction with RLS context already set.
+ * Storage methods can optionally accept this to reuse the existing transaction
+ * instead of opening a new `runAsUser` context per call (TD-051).
+ */
+export interface DbSession {
+  /** Drizzle-compatible connection (the active transaction). */
+  conn: any;
 }
 
 interface MetaDeckWriteInput {
@@ -113,18 +126,21 @@ function buildCanonicalProfileData(profileData: Partial<InsertProfile>): Partial
 }
 
 export interface IStorage {
+  // Session management (TD-051)
+  withUserSession<T>(fn: (session: DbSession) => Promise<T>): Promise<T>;
+
   // User operations
-  getUser(id: string): Promise<User | undefined>;
+  getUser(id: string, session?: DbSession): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  bootstrapUserData(userId: string): Promise<BootstrapResult>;
+  bootstrapUserData(userId: string, session?: DbSession): Promise<BootstrapResult>;
 
   // Profile operations
-  getProfile(userId: string): Promise<Profile | undefined>;
+  getProfile(userId: string, session?: DbSession): Promise<Profile | undefined>;
   createProfile(profile: InsertProfile): Promise<Profile>;
   updateProfile(userId: string, profile: Partial<InsertProfile>): Promise<Profile | undefined>;
 
   // Subscription operations
-  getSubscription(userId: string): Promise<Subscription | undefined>;
+  getSubscription(userId: string, session?: DbSession): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
@@ -142,6 +158,11 @@ export interface IStorage {
   getFavoritePlayer(id: string): Promise<FavoritePlayer | undefined>;
   createFavoritePlayer(player: InsertFavoritePlayer): Promise<FavoritePlayer>;
   deleteFavoritePlayer(id: string): Promise<void>;
+  refreshFavoritePlayerData(
+    userId: string,
+    playerTag: string,
+    data: { trophies?: number | null; clan?: string | null },
+  ): Promise<void>;
 
   // Notifications operations
   getNotifications(userId: string): Promise<Notification[]>;
@@ -160,7 +181,7 @@ export interface IStorage {
   ): Promise<NotificationPreferences>;
 
   // User Settings operations
-  getUserSettings(userId: string): Promise<UserSettings | undefined>;
+  getUserSettings(userId: string, session?: DbSession): Promise<UserSettings | undefined>;
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, settings: Partial<InsertUserSettings>): Promise<UserSettings | undefined>;
 
@@ -223,7 +244,17 @@ export class DatabaseStorage implements IStorage {
     this.auth = options?.auth;
   }
 
-  private async runAsUser<T>(fn: (conn: any) => Promise<T>): Promise<T> {
+  /**
+   * Execute `fn` within an RLS-scoped transaction.
+   * If a `session` is provided (from `withUserSession`), reuses its connection
+   * instead of opening a new transaction — this avoids repeated SET commands (TD-051).
+   */
+  private async runAsUser<T>(fn: (conn: any) => Promise<T>, session?: DbSession): Promise<T> {
+    // If a session is provided, reuse it (RLS context already set)
+    if (session) {
+      return fn(session.conn);
+    }
+
     const auth = this.auth;
 
     if (!auth) {
@@ -244,11 +275,57 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getUser(id: string): Promise<User | undefined> {
+  /**
+   * Open a single transaction with RLS context set once, then run multiple
+   * queries through the provided callback.  This avoids the 4 SET commands
+   * per individual `runAsUser` call (TD-051).
+   *
+   * Storage methods called with the returned session reuse the existing
+   * connection.  Methods called without a session still create their own
+   * `runAsUser` context (backward compatible — AC14).
+   */
+  async withUserSession<T>(fn: (session: DbSession) => Promise<T>): Promise<T> {
+    const auth = this.auth;
+
+    if (!auth) {
+      // No auth context — run within a plain transaction for consistency
+      return db.transaction(async (tx) => {
+        return fn({ conn: tx });
+      });
+    }
+
+    const claims = auth.claims ?? { sub: auth.userId, role: "authenticated" };
+    const claimsJson = JSON.stringify(claims);
+
+    // Use a raw pg client to get a dedicated connection for the session
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SELECT set_config('request.jwt.claims', $1, true)`, [claimsJson]);
+      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [auth.userId]);
+      await client.query(`SELECT set_config('request.jwt.claim.role', $1, true)`, [auth.role ?? "authenticated"]);
+      await client.query(`SET LOCAL role authenticated`);
+
+      // Create a drizzle instance bound to this client for the session
+      const sessionDb = drizzle(client as any, { schema });
+      const session: DbSession = { conn: sessionDb };
+
+      const result = await fn(session);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUser(id: string, session?: DbSession): Promise<User | undefined> {
     return this.runAsUser(async (conn) => {
       const [user] = await conn.select().from(users).where(eq(users.id, id));
       return user;
-    });
+    }, session);
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -349,7 +426,11 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async bootstrapUserData(userId: string): Promise<BootstrapResult> {
+  async bootstrapUserData(userId: string, session?: DbSession): Promise<BootstrapResult> {
+    if (session) {
+      return this._bootstrapInTransaction(session.conn, userId);
+    }
+
     if (!this.auth) {
       return db.transaction(async (tx) => this._bootstrapInTransaction(tx, userId));
     }
@@ -357,11 +438,11 @@ export class DatabaseStorage implements IStorage {
     return this.runAsUser(async (tx) => this._bootstrapInTransaction(tx, userId));
   }
 
-  async getProfile(userId: string): Promise<Profile | undefined> {
+  async getProfile(userId: string, session?: DbSession): Promise<Profile | undefined> {
     return this.runAsUser(async (conn) => {
       const [profile] = await conn.select().from(profiles).where(eq(profiles.userId, userId));
       return profile;
-    });
+    }, session);
   }
 
   async createProfile(profileData: InsertProfile): Promise<Profile> {
@@ -404,7 +485,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getSubscription(userId: string): Promise<Subscription | undefined> {
+  async getSubscription(userId: string, session?: DbSession): Promise<Subscription | undefined> {
     return this.runAsUser(async (conn) => {
       const [subscription] = await conn
         .select()
@@ -414,7 +495,7 @@ export class DatabaseStorage implements IStorage {
         .limit(1);
 
       return subscription;
-    });
+    }, session);
   }
 
   async createSubscription(subscriptionData: InsertSubscription): Promise<Subscription> {
@@ -546,6 +627,34 @@ export class DatabaseStorage implements IStorage {
     await this.runAsUser((conn) => conn.delete(favoritePlayers).where(eq(favoritePlayers.id, id)));
   }
 
+  /**
+   * Update matching favorite_players rows with fresh trophies and clan data (TD-033).
+   * Piggybacks on existing player data -- no additional API calls needed.
+   */
+  async refreshFavoritePlayerData(
+    userId: string,
+    playerTag: string,
+    data: { trophies?: number | null; clan?: string | null },
+  ): Promise<void> {
+    const normalizedTag = normalizePlayerTag(playerTag);
+    if (!normalizedTag) return;
+
+    await this.runAsUser(async (conn) => {
+      await conn
+        .update(favoritePlayers)
+        .set({
+          trophies: data.trophies ?? null,
+          clan: data.clan ?? null,
+        })
+        .where(
+          and(
+            eq(favoritePlayers.userId, userId),
+            eq(favoritePlayers.playerTag, normalizedTag),
+          ),
+        );
+    });
+  }
+
   async getNotifications(userId: string): Promise<Notification[]> {
     return this.runAsUser((conn) =>
       conn
@@ -627,11 +736,11 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getUserSettings(userId: string): Promise<UserSettings | undefined> {
+  async getUserSettings(userId: string, session?: DbSession): Promise<UserSettings | undefined> {
     return this.runAsUser(async (conn) => {
       const [settings] = await conn.select().from(userSettings).where(eq(userSettings.userId, userId));
       return settings;
-    });
+    }, session);
   }
 
   async createUserSettings(settingsData: InsertUserSettings): Promise<UserSettings> {

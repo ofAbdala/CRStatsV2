@@ -6,6 +6,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { randomUUID } from "crypto";
 import { logger, createRequestLogger } from "./logger";
+import { sanitizeBodyMiddleware } from "./middleware/sanitize";
 
 declare module "http" {
   interface IncomingMessage {
@@ -69,6 +70,10 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
   );
 
   app.use(express.urlencoded({ extended: false }));
+
+  // --- Input sanitization middleware (TD-059 — XSS protection) ---
+  // Strips HTML tags from user-submitted text fields before route handlers.
+  app.use(sanitizeBodyMiddleware as express.RequestHandler);
 
   // --- Request logging middleware (TD-057 / AC6, AC8) ---
   app.use((req, res, next) => {

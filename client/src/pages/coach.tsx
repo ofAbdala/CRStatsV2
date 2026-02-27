@@ -16,6 +16,7 @@ import { ApiError, api } from "@/lib/api";
 import { PushAnalysisCard, PushAnalysisCardData } from "@/components/PushAnalysisCard";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
+import { QuickActions } from "@/components/coach/QuickActions";
 
 interface Message {
   id: string;
@@ -61,7 +62,8 @@ export default function CoachPage() {
     queryFn: () => api.subscription.get(),
   });
 
-  const isPro = (subscription as any)?.plan === "pro" && (subscription as any)?.status === "active";
+  const sub = subscription as { plan?: string; status?: string } | undefined;
+  const isPro = sub?.plan === "pro" && sub?.status === "active";
 
   const coachMessagesQuery = useQuery({
     queryKey: ["coach-messages"],
@@ -312,20 +314,10 @@ export default function CoachPage() {
                 </Button>
               </form>
 
-              <div className="flex flex-wrap gap-2">
-                {quickPrompts.map((prompt) => (
-                  <Button
-                    key={prompt}
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={() => submitMessage(prompt)}
-                    disabled={chatMutation.isPending || limitReached}
-                  >
-                    {prompt}
-                  </Button>
-                ))}
-              </div>
+              <QuickActions
+                onAction={submitMessage}
+                disabled={chatMutation.isPending || limitReached}
+              />
             </CardContent>
           </Card>
 

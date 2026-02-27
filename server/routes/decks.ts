@@ -11,7 +11,6 @@ import { requireAuth } from "../supabaseAuth";
 import { counterDeckRequestSchema, deckOptimizerRequestSchema } from "@shared/schema";
 import { generateCounterDeckSuggestion, generateDeckOptimizationSuggestion } from "../openai";
 import { COUNTER_MAP, buildClashDeckImportLink, computeAvgElixir, computeChanges, detectWinCondition, getCardIndex } from "../domain/decks";
-import { refreshMetaDecksCacheIfStale } from "../domain/metaDecksRefresh";
 import {
   FREE_DECK_SUGGESTION_DAILY_LIMIT,
   getUserId,
@@ -72,23 +71,16 @@ function createMetaDecksHandler(route: string) {
       const minTrophies = Number.isFinite(minTrophiesParsed) ? Math.max(0, minTrophiesParsed) : undefined;
 
       const storage = getUserStorage(req.auth!);
-      const cached = await storage.getMetaDecks({ minTrophies, limit: 50 });
 
-      const refreshStatus = await refreshMetaDecksCacheIfStale({
-        ttlMs: 4 * 60 * 60 * 1000,
-        players: 50,
-        battlesPerPlayer: 10,
-      });
-
-      const cacheStatus: "fresh" | "stale" = refreshStatus === "failed" ? "stale" : "fresh";
-      // If cache was empty, always re-read after a refresh attempt (even if another request holds the lock),
-      // so the first user doesn't get an empty response unnecessarily.
-      let decks = cached;
-      if (refreshStatus === "refreshed" || cached.length === 0) {
-        decks = await storage.getMetaDecks({ minTrophies, limit: 50 });
-      }
+      // TD-028: Read from cache only — refresh is now triggered by cron job
+      const decks = await storage.getMetaDecks({ minTrophies, limit: 50 });
 
       const cardIndex = await getCardIndex().catch(() => null);
+
+      // Determine cache freshness based on last update timestamp
+      const lastUpdated = decks.length > 0 ? decks[0]?.lastUpdatedAt : null;
+      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+      const cacheStatus: "fresh" | "stale" = lastUpdated && lastUpdated > sixHoursAgo ? "fresh" : "stale";
 
       return res.json(
         decks.map((deck) => {
@@ -190,8 +182,7 @@ router.post("/api/decks/builder/counter", requireAuth, aiDeckLimiter, async (req
     const targetCardKey = payload.data.targetCardKey;
     const trophyRange = payload.data.trophyRange ?? null;
 
-    await refreshMetaDecksCacheIfStale({ ttlMs: 4 * 60 * 60 * 1000, players: 50, battlesPerPlayer: 10 });
-
+    // TD-028: meta cache refresh is now cron-only — read from cache
     const metaDecks = await storage.getMetaDecks({
       minTrophies: trophyRange?.min ?? undefined,
       limit: 50,
@@ -376,8 +367,7 @@ router.post("/api/decks/optimizer", requireAuth, async (req: any, res: any) => {
 
     const { currentDeck, goal, targetCardKey } = payload.data;
 
-    await refreshMetaDecksCacheIfStale({ ttlMs: 4 * 60 * 60 * 1000, players: 50, battlesPerPlayer: 10 });
-
+    // TD-028: meta cache refresh is now cron-only — read from cache
     const settings = await storage.getUserSettings(userId);
     const language = settings?.preferredLanguage === "en" ? "en" : "pt";
 

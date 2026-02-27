@@ -40,8 +40,8 @@ export function Sidebar({ isPro, className }: SidebarProps) {
     const { t } = useLocale();
     const { data: profile } = useProfile();
 
-    const playerName = (profile as any)?.displayName || t("layout.defaultPlayerName");
-    const profileImageUrl = (profile as any)?.profileImageUrl || null;
+    const playerName = profile?.displayName || t("layout.defaultPlayerName");
+    const profileImageUrl: string | null = null;
     const playerInitials = playerName.substring(0, 2).toUpperCase();
 
     const decksTabParam = new URLSearchParams(search).get("tab");

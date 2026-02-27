@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useLocale } from "@/hooks/use-locale";
-import { api } from "@/lib/api";
+import { api, type TrainingPlanResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/errorMessages";
 import { CheckCircle2, Crown, Loader2, Lock, Shield, Target, Zap } from "lucide-react";
@@ -20,28 +20,28 @@ export default function TrainingPage() {
 
   const { data: subscription } = useQuery({
     queryKey: ["subscription"],
-    queryFn: () => api.subscription.get() as Promise<{ plan?: string; status?: string }>,
+    queryFn: () => api.subscription.get(),
   });
 
   const isPro = subscription?.plan === "pro" && subscription?.status === "active";
 
   const trainingPlanQuery = useQuery({
     queryKey: ["training-plan"],
-    queryFn: () => api.training.getPlan() as Promise<any | null>,
+    queryFn: () => api.training.getPlan(),
     enabled: isPro,
     retry: false,
   });
 
   const trainingPlansQuery = useQuery({
     queryKey: ["training-plans"],
-    queryFn: () => api.training.getPlans() as Promise<any[]>,
+    queryFn: () => api.training.getPlans(),
     enabled: isPro,
     retry: false,
   });
 
   const latestPushAnalysisQuery = useQuery({
     queryKey: ["push-analysis-latest"],
-    queryFn: () => api.coach.getLatestPushAnalysis() as Promise<any | null>,
+    queryFn: () => api.coach.getLatestPushAnalysis(),
     enabled: isPro,
     retry: false,
   });
@@ -66,7 +66,7 @@ export default function TrainingPage() {
 
   const generatePlanMutation = useMutation({
     mutationFn: () => api.training.generatePlan(),
-    onSuccess: (plan: any) => {
+    onSuccess: (plan: TrainingPlanResponse) => {
       toast({
         title: t("pages.training.toast.planCreatedTitle"),
         description: t("pages.training.toast.planCreatedDescription", { title: plan?.title || "" }),
@@ -119,14 +119,14 @@ export default function TrainingPage() {
     },
   });
 
-  const activePlan = trainingPlanQuery.data as any | null | undefined;
-  const allPlans = (trainingPlansQuery.data as any[]) || [];
+  const activePlan = trainingPlanQuery.data ?? null;
+  const allPlans = trainingPlansQuery.data || [];
   const latestPlan = allPlans[0] || null;
   const latestCompletedPlan = latestPlan && latestPlan.status === "completed" ? latestPlan : null;
 
   const hasPushAnalysis = Boolean(latestPushAnalysisQuery.data?.id);
 
-  const planDrills = (activePlan?.drills as any[]) || [];
+  const planDrills = activePlan?.drills || [];
   const totalTargetGames = planDrills.reduce(
     (acc, drill) => acc + (typeof drill?.targetGames === "number" ? Math.max(0, drill.targetGames) : 0),
     0,

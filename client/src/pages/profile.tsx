@@ -8,7 +8,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     // `/settings` is the canonical account/profile page (real data + validations).
-    setLocation("/settings", { replace: true } as any);
+    setLocation("/settings", { replace: true });
   }, [setLocation]);
 
   return (

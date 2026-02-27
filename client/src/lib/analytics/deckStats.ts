@@ -35,21 +35,22 @@ function normalizeCardName(value: unknown) {
 }
 
 function extractCardsFromBattleTeam(team: any): DeckCard[] {
-  const cards = Array.isArray(team?.cards) ? (team.cards as any[]) : [];
+  const cards: Array<Record<string, unknown>> = Array.isArray(team?.cards) ? team.cards : [];
   return cards
-    .map((card) => {
+    .map((card: Record<string, unknown>) => {
       const name = normalizeCardName(card?.name);
       if (!name) return null;
+      const iconUrls = card?.iconUrls as { medium?: string; small?: string } | undefined;
       const deckCard: DeckCard = {
         name,
-        ...(typeof card?.id === "number" ? { id: card.id } : {}),
-        ...(card?.iconUrls ? { iconUrls: { medium: card.iconUrls.medium, small: card.iconUrls.small } } : {}),
-        ...(typeof card?.level === "number" ? { level: card.level } : {}),
-        ...(typeof card?.elixirCost === "number" ? { elixirCost: card.elixirCost } : {}),
+        ...(typeof card?.id === "number" ? { id: card.id as number } : {}),
+        ...(iconUrls ? { iconUrls: { medium: iconUrls.medium, small: iconUrls.small } } : {}),
+        ...(typeof card?.level === "number" ? { level: card.level as number } : {}),
+        ...(typeof card?.elixirCost === "number" ? { elixirCost: card.elixirCost as number } : {}),
       };
       return deckCard;
     })
-    .filter((value): value is DeckCard => value !== null);
+    .filter((value: DeckCard | null): value is DeckCard => value !== null);
 }
 
 function getBattleCrowns(battle: any) {

@@ -23,6 +23,13 @@ const contextKeyMap: Record<string, string> = {
   training: "errorBoundary.context.training",
   billing: "errorBoundary.context.billing",
   notifications: "errorBoundary.context.notifications",
+  decks: "errorBoundary.context.decks",
+  community: "errorBoundary.context.community",
+  settings: "errorBoundary.context.settings",
+  onboarding: "errorBoundary.context.onboarding",
+  goals: "errorBoundary.context.goals",
+  profile: "errorBoundary.context.profile",
+  push: "errorBoundary.context.push",
 };
 
 function DefaultBoundaryFallback({

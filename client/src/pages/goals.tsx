@@ -75,7 +75,7 @@ export default function GoalsPage() {
   const [customTitle, setCustomTitle] = useState("");
   const [frequency, setFrequency] = useState<GoalFrequency | "">("");
 
-  const goals = (goalsQuery.data || []) as Array<any>;
+  const goals = goalsQuery.data || [];
 
   const activeGoals = useMemo(() => goals.filter((goal) => !goal.completed), [goals]);
   const completedGoals = useMemo(() => goals.filter((goal) => goal.completed), [goals]);
@@ -102,18 +102,20 @@ export default function GoalsPage() {
     const target = Number(targetValue);
     if (!Number.isFinite(target)) return;
 
-    const payload: any = {
-      type,
-      targetValue: Math.trunc(target),
-    };
+    const truncatedTarget = Math.trunc(target);
+    const title = type === "custom"
+      ? customTitle.trim()
+      : t(autoTitleKeys[type], { target: truncatedTarget });
+    const description = type === "custom"
+      ? encodeFrequency(frequency ? (frequency as GoalFrequency) : null)
+      : undefined;
 
-    if (type === "custom") {
-      payload.title = customTitle.trim();
-      const encoded = encodeFrequency(frequency ? (frequency as GoalFrequency) : null);
-      if (encoded) payload.description = encoded;
-    } else {
-      payload.title = t(autoTitleKeys[type], { target: payload.targetValue });
-    }
+    const payload = {
+      type,
+      targetValue: truncatedTarget,
+      title,
+      ...(description ? { description } : {}),
+    };
 
     createGoalMutation.mutate(payload, {
       onSuccess: () => {
@@ -123,7 +125,7 @@ export default function GoalsPage() {
     });
   };
 
-  const handleDelete = (goal: any) => {
+  const handleDelete = (goal: { id: string }) => {
     const confirmed = window.confirm(t("pages.goals.deleteConfirm"));
     if (!confirmed) return;
     deleteGoalMutation.mutate(goal.id);
@@ -384,7 +386,7 @@ export default function GoalsPage() {
             {type === "custom" ? (
               <div className="space-y-2">
                 <Label>{t("pages.goals.frequencyLabel")}</Label>
-                <Select value={frequency || undefined} onValueChange={(value) => setFrequency(value as any)}>
+                <Select value={frequency || undefined} onValueChange={(value) => setFrequency(value as GoalFrequency)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("pages.goals.frequencyPlaceholder")} />
                   </SelectTrigger>

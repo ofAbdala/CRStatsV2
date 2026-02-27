@@ -36,6 +36,8 @@ router.get('/api/auth/user', requireAuth, async (req: any, res) => {
     }
 
     const storage = getUserStorage(req.auth!);
+
+    // Round trip 1: Check if user exists (needs its own context for the upsert fallback)
     let user = await storage.getUser(userId);
 
     // Normally created by the Supabase `auth.users` trigger, but keep a server-side fallback
@@ -56,12 +58,20 @@ router.get('/api/auth/user', requireAuth, async (req: any, res) => {
       });
     }
 
-    await storage.bootstrapUserData(userId);
+    // Round trip 2: TD-032 + TD-051 — single session for bootstrap + all reads
+    // Sets RLS context once, then runs bootstrap + 3 reads in the same transaction
+    const { profile, subscription, settings } = await storage.withUserSession(async (session) => {
+      await storage.bootstrapUserData(userId, session);
 
-    // Get associated data
-    const profile = await storage.getProfile(userId);
-    const subscription = await storage.getSubscription(userId);
-    const settings = await storage.getUserSettings(userId);
+      // Consolidated reads within the same session (AC7, AC8)
+      const [profile, subscription, settings] = await Promise.all([
+        storage.getProfile(userId, session),
+        storage.getSubscription(userId, session),
+        storage.getUserSettings(userId, session),
+      ]);
+
+      return { profile, subscription, settings };
+    });
 
     res.json({
       ...user,

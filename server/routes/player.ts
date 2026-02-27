@@ -152,6 +152,20 @@ router.post('/api/player/sync', requireAuth, async (req: any, res) => {
     pushSessions = computePushSessions(battles);
     stats = computeBattleStats(battles);
 
+    // TD-033: Piggyback on existing player data to refresh favorite_players rows
+    // No additional API calls — uses data already fetched above
+    try {
+      const clanName = typeof player.clan?.name === "string" ? player.clan.name : null;
+      const playerTrophies = typeof player.trophies === "number" ? player.trophies : null;
+      await storage.refreshFavoritePlayerData(userId, canonicalPlayerTag, {
+        trophies: playerTrophies,
+        clan: clanName,
+      });
+    } catch (favError) {
+      // Non-critical — log and continue
+      console.warn("Favorite player refresh failed during player sync:", favError);
+    }
+
     // Canonical rule: lastSyncedAt is updated whenever player core payload is fetched successfully,
     // even when battlelog fails/returns empty, because profile-level data is still fresh.
     const syncState = await storage.updateSyncState(userId);

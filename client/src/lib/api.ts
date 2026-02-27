@@ -1,7 +1,168 @@
 // API client utilities for CRStats
 
 import { getSupabaseAccessToken } from "@/lib/supabaseClient";
-import type { Profile, Subscription, User, UserSettings } from "@shared/schema";
+import type {
+  Profile,
+  Subscription,
+  User,
+  UserSettings,
+  Goal,
+  FavoritePlayer,
+  Notification,
+  NotificationPreferences,
+  ProfileCreateInput,
+  ProfileUpdateInput,
+  GoalCreateInput,
+  GoalUpdateInput,
+  FavoriteCreateInput,
+} from "@shared/schema";
+
+// ── API-specific types ──────────────────────────────────────────────────────
+
+/** Player data returned by the Clash Royale API proxy */
+export interface ClashPlayerData {
+  name: string;
+  tag: string;
+  trophies: number;
+  bestTrophies?: number;
+  expLevel?: number;
+  arena?: { id: number; name: string };
+  clan?: { name: string; tag: string; badgeId?: number };
+  [key: string]: unknown;
+}
+
+/** Battle data as returned by /api/history/battles */
+export interface BattleRecord {
+  battleTime: string;
+  type?: string;
+  team?: Array<{
+    crowns?: number;
+    trophyChange?: number;
+    cards?: Array<{
+      name: string;
+      id?: number;
+      level?: number;
+      elixirCost?: number;
+      iconUrls?: { medium?: string; small?: string };
+    }>;
+  }>;
+  opponent?: Array<{ crowns?: number }>;
+  [key: string]: unknown;
+}
+
+/** Training plan with drills (API response) */
+export interface TrainingPlanResponse {
+  id: string;
+  title: string;
+  source: string;
+  status: string;
+  pushAnalysisId?: string | null;
+  drills: TrainingDrillResponse[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface TrainingDrillResponse {
+  id: string;
+  planId: string;
+  focusArea: string;
+  description: string;
+  targetGames: number;
+  completedGames: number;
+  mode: string;
+  priority: number;
+  status: string;
+}
+
+/** Invoice data from /api/billing/invoices */
+export interface InvoiceData {
+  id: string;
+  status: string | null;
+  amountPaid: number;
+  amountDue: number;
+  currency: string;
+  createdAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf?: string | null;
+}
+
+/** Subscription data from /api/subscription */
+export interface SubscriptionData {
+  plan: string;
+  status: string;
+  currentPeriodEnd?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+}
+
+/** Community ranking item */
+export interface RankingResponse {
+  items: Array<{
+    tag: string;
+    name: string;
+    trophies?: number;
+    rank: number;
+    clan?: { tag: string; name: string; badgeId?: number };
+  }>;
+}
+
+/** Stripe product with prices */
+export interface StripeProductWithPrices {
+  id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  metadata: Record<string, string>;
+  prices: Array<{
+    id: string;
+    unit_amount: number | null;
+    currency: string;
+    recurring: { interval: string; interval_count: number } | null;
+    active: boolean;
+  }>;
+}
+
+/** Settings update payload used by the client */
+export interface SettingsUpdatePayload {
+  theme?: string;
+  preferredLanguage?: string;
+  notificationsEnabled?: boolean;
+  notificationsSystem?: boolean;
+  notificationsTraining?: boolean;
+  notificationsBilling?: boolean;
+  notificationPreferences?: {
+    system: boolean;
+    training: boolean;
+    billing: boolean;
+  };
+}
+
+/** Public player/clan data */
+export interface PublicPlayerData {
+  name: string;
+  tag: string;
+  trophies: number;
+  bestTrophies?: number;
+  arena?: { id: number; name: string };
+  clan?: { name: string; tag: string; badgeId?: number };
+  [key: string]: unknown;
+}
+
+/** Meta deck data from /api/decks/meta */
+export interface MetaDeckData {
+  deckHash: string;
+  cards: string[];
+  avgElixir: number;
+  games: number;
+  wins: number;
+  losses: number;
+  winRateEstimate: number;
+  archetype: string | null;
+  lastUpdatedAt: string;
+  cacheStatus?: "fresh" | "stale";
+}
 
 const API_BASE = "/api";
 
@@ -143,54 +304,55 @@ export const api = {
   },
 
   profile: {
-    get: () => fetchAPI("/profile"),
-    create: (data: any) => fetchAPI("/profile", { method: "POST", body: JSON.stringify(data) }),
-    update: (data: any) => fetchAPI("/profile", { method: "PATCH", body: JSON.stringify(data) }),
+    get: () => fetchAPI<Profile>("/profile"),
+    create: (data: ProfileCreateInput) => fetchAPI<Profile>("/profile", { method: "POST", body: JSON.stringify(data) }),
+    update: (data: Partial<ProfileUpdateInput>) => fetchAPI<Profile>("/profile", { method: "PATCH", body: JSON.stringify(data) }),
   },
 
   subscription: {
-    get: () => fetchAPI("/subscription"),
+    get: () => fetchAPI<SubscriptionData>("/subscription"),
   },
 
   goals: {
-    list: () => fetchAPI("/goals"),
-    create: (data: any) => fetchAPI("/goals", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: string, data: any) => fetchAPI(`/goals/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    delete: (id: string) => fetchAPI(`/goals/${id}`, { method: "DELETE" }),
+    list: () => fetchAPI<Goal[]>("/goals"),
+    create: (data: GoalCreateInput) => fetchAPI<Goal>("/goals", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: GoalUpdateInput) => fetchAPI<Goal>(`/goals/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) => fetchAPI<void>(`/goals/${id}`, { method: "DELETE" }),
   },
 
   favorites: {
-    list: () => fetchAPI("/favorites"),
-    create: (data: any) => fetchAPI("/favorites", { method: "POST", body: JSON.stringify(data) }),
-    delete: (id: string) => fetchAPI(`/favorites/${id}`, { method: "DELETE" }),
+    list: () => fetchAPI<FavoritePlayer[]>("/favorites"),
+    create: (data: FavoriteCreateInput & { setAsDefault?: boolean }) => fetchAPI<FavoritePlayer>("/favorites", { method: "POST", body: JSON.stringify(data) }),
+    delete: (id: string) => fetchAPI<void>(`/favorites/${id}`, { method: "DELETE" }),
   },
 
   notifications: {
-    list: () => fetchAPI("/notifications"),
-    markRead: (id: string) => fetchAPI(`/notifications/${id}/read`, { method: "POST" }),
-    markAllRead: () => fetchAPI("/notifications/read-all", { method: "POST" }),
-    clearAll: () => fetchAPI("/notifications", { method: "DELETE" }),
+    list: () => fetchAPI<Array<{ id: string; userId: string; title: string; description: string | null; type: string; read: boolean; createdAt: string }>>("/notifications"),
+    markRead: (id: string) => fetchAPI<void>(`/notifications/${id}/read`, { method: "POST" }),
+    markAllRead: () => fetchAPI<void>("/notifications/read-all", { method: "POST" }),
+    clearAll: () => fetchAPI<void>("/notifications", { method: "DELETE" }),
   },
 
   notificationPreferences: {
-    get: () => fetchAPI("/notification-preferences"),
-    update: (data: any) => fetchAPI("/notification-preferences", { method: "PATCH", body: JSON.stringify(data) }),
+    get: () => fetchAPI<NotificationPreferences>("/notification-preferences"),
+    update: (data: Partial<NotificationPreferences>) => fetchAPI<NotificationPreferences>("/notification-preferences", { method: "PATCH", body: JSON.stringify(data) }),
   },
 
   settings: {
-    get: () => fetchAPI("/settings"),
-    update: (data: any) => fetchAPI("/settings", { method: "PATCH", body: JSON.stringify(data) }),
+    get: () => fetchAPI<UserSettings & { notificationPreferences?: { system: boolean; training: boolean; billing: boolean } }>("/settings"),
+    update: (data: SettingsUpdatePayload) => fetchAPI<UserSettings>("/settings", { method: "PATCH", body: JSON.stringify(data) }),
   },
 
   clash: {
-    getPlayer: (tag: string) => fetchAPI(`/clash/player/${encodeURIComponent(tag)}`),
-    getBattles: (tag: string) => fetchAPI(`/clash/player/${encodeURIComponent(tag)}/battles`),
-    getCards: () => fetchAPI("/clash/cards"),
+    getPlayer: (tag: string) => fetchAPI<ClashPlayerData>(`/clash/player/${encodeURIComponent(tag)}`),
+    getBattles: (tag: string) => fetchAPI<BattleRecord[]>(`/clash/player/${encodeURIComponent(tag)}/battles`),
+    getCards: () => fetchAPI<Array<{ key: string; name: string; id: number; elixirCost: number; iconUrls?: { medium?: string } }>>("/clash/cards"),
   },
 
   player: {
-    sync: () => fetchAPI("/player/sync", { method: "POST" }),
-    getSyncState: () => fetchAPI("/player/sync-state"),
+    // The sync response is complex (PlayerSyncResponse) and typed at the consumer level.
+    sync: () => fetchAPI<unknown>("/player/sync", { method: "POST" }),
+    getSyncState: () => fetchAPI<unknown>("/player/sync-state"),
   },
 
   history: {
@@ -199,7 +361,7 @@ export const api = {
       if (typeof options?.days === "number") params.set("days", String(options.days));
       if (typeof options?.limit === "number") params.set("limit", String(options.limit));
       const query = params.toString();
-      return fetchAPI<any[]>(`/history/battles${query ? `?${query}` : ""}`);
+      return fetchAPI<BattleRecord[]>(`/history/battles${query ? `?${query}` : ""}`);
     },
   },
 
@@ -257,20 +419,20 @@ export const api = {
   },
 
   training: {
-    getPlan: () => fetchAPI<any>("/training/plan"),
-    getPlans: () => fetchAPI<any[]>("/training/plans"),
+    getPlan: () => fetchAPI<TrainingPlanResponse | null>("/training/plan"),
+    getPlans: () => fetchAPI<TrainingPlanResponse[]>("/training/plans"),
     generatePlan: (pushAnalysisId?: string) =>
-      fetchAPI<any>("/training/plan/generate", {
+      fetchAPI<TrainingPlanResponse>("/training/plan/generate", {
         method: "POST",
         body: JSON.stringify({ pushAnalysisId }),
       }),
     updateDrill: (drillId: string, data: { completedGames?: number; status?: string }) =>
-      fetchAPI<any>(`/training/drill/${drillId}`, {
+      fetchAPI<TrainingDrillResponse>(`/training/drill/${drillId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
     updatePlan: (planId: string, data: { status: string }) =>
-      fetchAPI<any>(`/training/plan/${planId}`, {
+      fetchAPI<TrainingPlanResponse>(`/training/plan/${planId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
@@ -278,7 +440,7 @@ export const api = {
 
   meta: {
     // Backwards-compatible alias (preferred: api.decks.getMetaDecks)
-    getDecks: () => fetchAPI<any[]>("/meta/decks"),
+    getDecks: () => fetchAPI<MetaDeckData[]>("/meta/decks"),
   },
 
   decks: {
@@ -288,7 +450,7 @@ export const api = {
         params.set("minTrophies", String(Math.floor(options.minTrophies)));
       }
       const query = params.toString();
-      return fetchAPI<any[]>(`/decks/meta${query ? `?${query}` : ""}`);
+      return fetchAPI<MetaDeckData[]>(`/decks/meta${query ? `?${query}` : ""}`);
     },
     generateCounter: (data: {
       targetCardKey: string;
@@ -315,25 +477,26 @@ export const api = {
 
   community: {
     getPlayerRankings: (locationId: string = "global") =>
-      fetchAPI<any>(`/community/player-rankings?locationId=${encodeURIComponent(locationId)}`),
+      fetchAPI<RankingResponse>(`/community/player-rankings?locationId=${encodeURIComponent(locationId)}`),
     getClanRankings: (locationId: string = "global") =>
-      fetchAPI<any>(`/community/clan-rankings?locationId=${encodeURIComponent(locationId)}`),
+      fetchAPI<RankingResponse>(`/community/clan-rankings?locationId=${encodeURIComponent(locationId)}`),
   },
 
   public: {
-    getPlayer: (tag: string) => fetchAPI<any>(`/public/player/${encodeURIComponent(tag)}`),
-    getClan: (tag: string) => fetchAPI<any>(`/public/clan/${encodeURIComponent(tag)}`),
+    // These endpoints return complex server-shaped data; consumers cast to page-level types.
+    getPlayer: (tag: string) => fetchAPI<unknown>(`/public/player/${encodeURIComponent(tag)}`),
+    getClan: (tag: string) => fetchAPI<unknown>(`/public/clan/${encodeURIComponent(tag)}`),
   },
 
   billing: {
-    getInvoices: () => fetchAPI<any[]>("/billing/invoices"),
+    getInvoices: () => fetchAPI<InvoiceData[]>("/billing/invoices"),
   },
 
   stripe: {
     getConfig: () => fetchAPI<{ publishableKey: string }>("/stripe/config"),
-    getProducts: () => fetchAPI<{ data: any[] }>("/stripe/products"),
-    getPrices: () => fetchAPI<{ data: any[] }>("/stripe/prices"),
-    getProductsWithPrices: () => fetchAPI<{ data: any[] }>("/stripe/products-with-prices"),
+    getProducts: () => fetchAPI<{ data: StripeProductWithPrices[] }>("/stripe/products"),
+    getPrices: () => fetchAPI<{ data: Array<{ id: string; unit_amount: number | null; currency: string; recurring: { interval: string } | null; active: boolean }> }>("/stripe/prices"),
+    getProductsWithPrices: () => fetchAPI<{ data: StripeProductWithPrices[] }>("/stripe/products-with-prices"),
     createCheckout: (priceId: string, currency?: string) =>
       fetchAPI<{ url: string }>("/stripe/checkout", {
         method: "POST",

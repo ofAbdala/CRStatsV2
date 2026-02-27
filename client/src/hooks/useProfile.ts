@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/hooks/use-locale';
+import type { ProfileUpdateInput } from '@shared/schema';
 
 export function useProfile() {
   return useQuery({
@@ -16,7 +17,7 @@ export function useUpdateProfile() {
   const { t } = useLocale();
 
   return useMutation({
-    mutationFn: (data: any) => api.profile.update(data),
+    mutationFn: (data: Partial<ProfileUpdateInput>) => api.profile.update(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['user'] });

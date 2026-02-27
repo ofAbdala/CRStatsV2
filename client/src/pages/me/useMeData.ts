@@ -2,7 +2,7 @@ import React from "react";
 import { useProfile } from "@/hooks/useProfile";
 import { useClashPlayer } from "@/hooks/useClashPlayer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type ClashPlayerData, type BattleRecord } from "@/lib/api";
 import { formatDistanceToNow, differenceInDays, startOfDay } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 import { useGoals } from "@/hooks/useGoals";
@@ -17,15 +17,16 @@ import type { PeriodFilter, BattleStats, TiltState, RecentSeriesStats, MeDataCon
 export function useMeData(): MeDataContext {
   const queryClient = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const clashTag = (profile as any)?.clashTag;
+  const clashTag = profile?.clashTag;
   const { data: playerData, isLoading: playerLoading, error: playerError } = useClashPlayer(clashTag);
   const { data: subscription } = useQuery({ queryKey: ['subscription'], queryFn: () => api.subscription.get() });
   const { data: goalsData, isLoading: goalsLoading } = useGoals();
   const { t, locale } = useLocale();
   const dateFnsLocale = locale === 'pt-BR' ? ptBR : enUS;
 
-  const subscriptionPlan = typeof (subscription as any)?.plan === "string" ? ((subscription as any).plan as string).toLowerCase() : "";
-  const isPro = subscriptionPlan === "pro" && (subscription as any)?.status === "active";
+  const sub = subscription as { plan?: string; status?: string } | undefined;
+  const subscriptionPlan = typeof sub?.plan === "string" ? sub.plan.toLowerCase() : "";
+  const isPro = subscriptionPlan === "pro" && sub?.status === "active";
 
   const historyBattlesQuery = useQuery({
     queryKey: ["history-battles", clashTag, isPro ? "pro" : "free"],
@@ -34,7 +35,7 @@ export function useMeData(): MeDataContext {
   });
 
   const battlesLoading = historyBattlesQuery.isLoading || historyBattlesQuery.isFetching;
-  const battles = (historyBattlesQuery.data as any) || [];
+  const battles: BattleRecord[] = historyBattlesQuery.data || [];
 
   const syncMutation = useMutation({
     mutationFn: () => api.player.sync(),
@@ -46,7 +47,7 @@ export function useMeData(): MeDataContext {
   });
 
   const isLoading = profileLoading || playerLoading;
-  const player = playerData as any;
+  const player = playerData as ClashPlayerData | undefined;
   const [periodFilter, setPeriodFilter] = React.useState<PeriodFilter>('7days');
 
   const filteredBattles = React.useMemo(() => {
@@ -140,11 +141,11 @@ export function useMeData(): MeDataContext {
 
   const activeGoals = React.useMemo(() => {
     if (!goalsData || !Array.isArray(goalsData)) return [];
-    return (goalsData as any[]).filter((g: any) => g.status === 'active' || !g.status).slice(0, 4);
+    return goalsData.filter((g) => !g.completed).slice(0, 4);
   }, [goalsData]);
 
   return {
-    player, clashTag, isPro, isLoading, playerError, playerLoading, battlesLoading, goalsLoading,
+    player, clashTag: clashTag ?? undefined, isPro, isLoading, playerError, playerLoading, battlesLoading, goalsLoading,
     battles, filteredBattles, periodFilter, setPeriodFilter,
     stats, tiltAnalysis, recentSeriesStats, lastPush, sessions,
     chartData, trophyEvolutionData, playVolumeData,
