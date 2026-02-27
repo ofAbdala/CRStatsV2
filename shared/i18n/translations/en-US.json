@@ -1129,8 +1129,110 @@
         "canceledTitle": "Checkout canceled",
         "canceledDescription": "You can try again anytime.",
         "checkoutErrorTitle": "Failed to start checkout",
-        "portalErrorTitle": "Failed to open portal"
+        "portalErrorTitle": "Failed to open portal",
+        "upgradeErrorTitle": "Failed to upgrade",
+        "upgradeSuccessTitle": "Upgrade complete",
+        "upgradeSuccessDescription": "Your Elite plan is active."
+      },
+      "planElite": "Elite active",
+      "subscribePro": "Subscribe PRO",
+      "subscribeElite": "Subscribe Elite",
+      "upgradeToElite": "Upgrade to Elite",
+      "viewPricing": "View plans"
+    },
+    "pricing": {
+      "title": "Plans & Pricing",
+      "subtitle": "Choose the right plan to dominate the arena.",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "perMonth": "/mo",
+      "perYear": "/yr",
+      "savePercent": "Save {percent}%",
+      "currentPlan": "Current plan",
+      "mostPopular": "MOST POPULAR",
+      "bestValue": "BEST VALUE",
+      "free": {
+        "name": "Free",
+        "description": "Start improving",
+        "cta": "Start for free",
+        "features": {
+          "metaQueries": "5 meta queries/day",
+          "counterQueries": "5 counter queries/day",
+          "coachMessages": "5 coach msgs/day",
+          "optimizerQueries": "5 optimizations/day",
+          "basicMatchups": "Basic matchups"
+        }
+      },
+      "pro": {
+        "name": "PRO",
+        "description": "For serious players",
+        "cta": "Subscribe PRO",
+        "features": {
+          "unlimitedMeta": "Unlimited meta decks",
+          "unlimitedCounter": "Unlimited counter decks",
+          "unlimitedCoach": "Unlimited AI Coach",
+          "unlimitedOptimizer": "Unlimited optimizer",
+          "pushAnalysis": "Full push analysis",
+          "deckOptimizer": "Deck optimizer"
+        }
+      },
+      "elite": {
+        "name": "Elite",
+        "description": "Maximum competitive edge",
+        "cta": "Subscribe Elite",
+        "features": {
+          "everythingPro": "Everything in PRO",
+          "trainingPlans": "Training plans",
+          "priorityCoaching": "Priority coaching",
+          "advancedAnalytics": "Advanced analytics",
+          "detailedMatchups": "Detailed matchups",
+          "seasonComparisons": "Season comparisons"
+        }
+      },
+      "featureTable": {
+        "feature": "Feature",
+        "metaDecks": "Meta decks",
+        "counterDecks": "Counter decks",
+        "coachChat": "AI Coach",
+        "pushAnalysis": "Push analysis",
+        "deckOptimizer": "Deck optimizer",
+        "trainingPlans": "Training plans",
+        "advancedAnalytics": "Advanced analytics",
+        "matchupData": "Matchup data",
+        "unlimited": "Unlimited",
+        "perDay": "{n}/day",
+        "full": "Full",
+        "none": "None",
+        "basic": "Basic",
+        "detailed": "Detailed",
+        "unlimitedPriority": "Unlimited + Priority"
+      },
+      "faq": {
+        "title": "Frequently Asked Questions",
+        "upgradeQuestion": "Can I upgrade anytime?",
+        "upgradeAnswer": "Yes! Upgrades are prorated based on your remaining billing period.",
+        "cancelQuestion": "Can I cancel anytime?",
+        "cancelAnswer": "Yes! Cancel anytime through the billing portal."
       }
+    },
+    "paywall": {
+      "limitReached": "You've used {used}/{limit} queries today.",
+      "unlockPro": "Unlock unlimited access for {price}/month.",
+      "unlockElite": "Unlock the ultimate experience for {price}/month.",
+      "valueMessage": "Today you discovered a {winRate}% WR counter to {card}. Imagine having this data for every card, every day.",
+      "genericValue": "You found {count} counter decks today. Unlock unlimited counters.",
+      "upgradeNow": "Upgrade now",
+      "viewPlans": "View plans",
+      "maybeLater": "Maybe later",
+      "proRequired": "This feature requires PRO or higher.",
+      "eliteRequired": "This feature requires Elite plan."
+    },
+    "conversionPrompt": {
+      "counterSuccess": "That {winRate}% WR counter deck could be your secret weapon. With PRO, get unlimited counters.",
+      "pushInsight": "Your push analysis revealed valuable patterns. Unlock unlimited analyses.",
+      "tiltRecovery": "You recovered from tilt! AI Coach can help you stay consistent.",
+      "upgradeButton": "View plans",
+      "dismiss": "Not now"
     },
     "decks": {
       "title": "Decks & meta",

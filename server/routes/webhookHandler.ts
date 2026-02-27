@@ -5,6 +5,18 @@
 import Stripe from "stripe";
 import { serviceStorage } from "../storage";
 import { getStripeSubscriptionPeriodEnd, createNotificationIfAllowed } from "./utils";
+import { getPlanFromPriceId } from "../domain/stripeCheckout";
+
+/** Detect the plan (pro/elite) from a Stripe subscription's price ID. */
+function detectPlanFromSubscription(stripeSub: Stripe.Subscription | null): 'pro' | 'elite' {
+  if (!stripeSub?.items?.data?.length) return 'pro';
+
+  const priceId = stripeSub.items.data[0]?.price?.id;
+  if (!priceId) return 'pro';
+
+  const detected = getPlanFromPriceId(priceId);
+  return detected === 'elite' ? 'elite' : 'pro';
+}
 
 export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
   const storage = serviceStorage;
@@ -26,10 +38,12 @@ export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
           console.warn("Failed to retrieve Stripe subscription on checkout completion:", subscriptionFetchError);
         }
 
+        const plan = detectPlanFromSubscription(stripeSubscription);
+
         if (subscription) {
           await storage.updateSubscription(subscription.id, {
             stripeSubscriptionId,
-            plan: 'pro',
+            plan,
             status: stripeSubscription?.status === "active" ? "active" : "inactive",
             currentPeriodEnd:
               getStripeSubscriptionPeriodEnd(stripeSubscription) ??
@@ -37,7 +51,7 @@ export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
               null,
             cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
           });
-          console.log(`PRO activated for user: ${userId}`);
+          console.log(`${plan.toUpperCase()} activated for user: ${userId}`);
 
           await createNotificationIfAllowed(storage, userId, "billing", {
             title: 'notifications.billing.activated.title',
@@ -50,7 +64,7 @@ export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
             stripeCustomerId:
               typeof session.customer === "string" ? session.customer : session.customer?.id,
             stripeSubscriptionId,
-            plan: 'pro',
+            plan,
             status: stripeSubscription?.status === "active" ? "active" : "inactive",
             currentPeriodEnd: getStripeSubscriptionPeriodEnd(stripeSubscription),
             cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end ?? false,
@@ -68,16 +82,19 @@ export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
           const status = subscriptionData.status === 'active' ? 'active' :
             subscriptionData.status === 'canceled' ? 'canceled' :
               subscriptionData.status;
+          const plan = status === "active"
+            ? detectPlanFromSubscription(subscriptionData)
+            : existing.plan;
           await storage.updateSubscription(existing.id, {
             status: status,
-            plan: status === "active" ? "pro" : existing.plan,
+            plan,
             currentPeriodEnd:
               getStripeSubscriptionPeriodEnd(subscriptionData) ??
               existing.currentPeriodEnd ??
               null,
             cancelAtPeriodEnd: subscriptionData.cancel_at_period_end ?? false,
           });
-          console.log(`Subscription ${subscriptionData.id} updated to: ${status}`);
+          console.log(`Subscription ${subscriptionData.id} updated to: ${status} (plan: ${plan})`);
         }
       }
       break;
@@ -122,8 +139,15 @@ export async function handleWebhookEvent(event: Stripe.Event, stripe: Stripe) {
       if (subscriptionId) {
         const existing = await storage.getSubscriptionByStripeId(subscriptionId);
         if (existing) {
+          // Detect plan from the invoice line item price
+          // In newer Stripe API versions, price is at pricing.price_details.price (string)
+          const invoicePriceId = invoice.lines?.data?.[0]?.pricing?.price_details?.price;
+          const plan = invoicePriceId
+            ? (getPlanFromPriceId(invoicePriceId) ?? existing.plan)
+            : existing.plan;
+
           await storage.updateSubscription(existing.id, {
-            plan: "pro",
+            plan: plan || "pro",
             status: "active",
             currentPeriodEnd:
               typeof periodEndUnix === "number"

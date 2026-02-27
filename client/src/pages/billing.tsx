@@ -16,13 +16,14 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { PRICING } from "@shared/pricing";
+import { PRICING, ELITE_PRICING } from "@shared/pricing";
 import { cn } from "@/lib/utils";
-import { Crown, ExternalLink, Loader2, ReceiptText } from "lucide-react";
+import { Crown, ExternalLink, Loader2, ReceiptText, Sparkles } from "lucide-react";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
-import { getYearlySavingsPercent } from "@shared/pricing";
+import { getYearlySavingsPercent, getEliteYearlySavingsPercent } from "@shared/pricing";
 import { formatDate, formatMoneyFromCents } from "@/lib/formatters";
+import { trackFunnelEvent } from "@/lib/funnelTracking";
 
 interface SubscriptionResponse {
   plan?: string;
@@ -49,7 +50,7 @@ export default function BillingPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [activeAction, setActiveAction] = useState<"checkout" | "portal" | null>(null);
+  const [activeAction, setActiveAction] = useState<"checkout" | "portal" | "upgrade" | null>(null);
   const [billingInterval, setBillingInterval] = useState<"month" | "year">("month");
 
   const subscriptionQuery = useQuery({
@@ -66,6 +67,7 @@ export default function BillingPage() {
     mutationFn: (priceId: string) => api.stripe.createCheckout(priceId, "BRL"),
     onMutate: () => setActiveAction("checkout"),
     onSuccess: ({ url }) => {
+      trackFunnelEvent("checkout_start");
       window.location.href = url;
     },
     onError: (error: unknown) => {
@@ -94,9 +96,31 @@ export default function BillingPage() {
     },
   });
 
+  const upgradeMutation = useMutation({
+    mutationFn: () => api.stripe.upgrade(billingInterval),
+    onMutate: () => setActiveAction("upgrade"),
+    onSuccess: () => {
+      toast({
+        title: t("pages.billing.toast.upgradeSuccessTitle"),
+        description: t("pages.billing.toast.upgradeSuccessDescription"),
+      });
+      setActiveAction(null);
+      subscriptionQuery.refetch();
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: t("pages.billing.toast.upgradeErrorTitle"),
+        description: getApiErrorMessage(error, t, "pages.billing.errors.checkout"),
+        variant: "destructive",
+      });
+      setActiveAction(null);
+    },
+  });
+
   useEffect(() => {
     const params = new URLSearchParams(search);
     if (params.get("success") === "true") {
+      trackFunnelEvent("payment_complete");
       toast({
         title: t("pages.billing.toast.activatedTitle"),
         description: t("pages.billing.toast.activatedDescription"),
@@ -117,17 +141,22 @@ export default function BillingPage() {
   const invoices = invoicesQuery.data || [];
 
   const isPro = subscription?.plan === "pro" && subscription?.status === "active";
-  const hasYearly = Boolean(PRICING.BRL.yearlyPriceId) && typeof PRICING.BRL.yearlyPrice === "number";
-  const savingsPercent = hasYearly ? getYearlySavingsPercent("BRL") : 0;
+  const isElite = subscription?.plan === "elite" && subscription?.status === "active";
+  const isPaid = isPro || isElite;
 
-  const selectedPriceId =
-    billingInterval === "year" && hasYearly ? (PRICING.BRL.yearlyPriceId as string) : PRICING.BRL.monthlyPriceId;
-  const selectedPriceAmount =
-    billingInterval === "year" && hasYearly ? (PRICING.BRL.yearlyPrice as number) : PRICING.BRL.monthlyPrice;
-  const selectedPriceLabel =
+  const hasProYearly = Boolean(PRICING.BRL.yearlyPriceId) && typeof PRICING.BRL.yearlyPrice === "number";
+  const hasEliteYearly = Boolean(ELITE_PRICING.BRL.yearlyPriceId) && typeof ELITE_PRICING.BRL.yearlyPrice === "number";
+  const proSavingsPercent = hasProYearly ? getYearlySavingsPercent("BRL") : 0;
+  const eliteSavingsPercent = hasEliteYearly ? getEliteYearlySavingsPercent("BRL") : 0;
+
+  const selectedProPriceId =
+    billingInterval === "year" && hasProYearly ? (PRICING.BRL.yearlyPriceId as string) : PRICING.BRL.monthlyPriceId;
+  const selectedProAmount =
+    billingInterval === "year" && hasProYearly ? (PRICING.BRL.yearlyPrice as number) : PRICING.BRL.monthlyPrice;
+  const selectedProLabel =
     billingInterval === "year"
-      ? `${formatMoneyFromCents(Math.round(selectedPriceAmount * 100), "BRL", locale)}/${t("common.year")}`
-      : `${formatMoneyFromCents(Math.round(selectedPriceAmount * 100), "BRL", locale)}/${t("common.month")}`;
+      ? `${formatMoneyFromCents(Math.round(selectedProAmount * 100), "BRL", locale)}/${t("common.year")}`
+      : `${formatMoneyFromCents(Math.round(selectedProAmount * 100), "BRL", locale)}/${t("common.month")}`;
 
   const renewalText = useMemo(() => {
     if (!subscription?.currentPeriodEnd) return t("pages.billing.renewal.none");
@@ -142,6 +171,7 @@ export default function BillingPage() {
   }, [locale, subscription?.cancelAtPeriodEnd, subscription?.currentPeriodEnd, t]);
 
   const hasLoadError = subscriptionQuery.isError || invoicesQuery.isError;
+  const isLoading = checkoutMutation.isPending || portalMutation.isPending || upgradeMutation.isPending;
 
   return (
     <DashboardLayout>
@@ -175,35 +205,51 @@ export default function BillingPage() {
             <Card className="lg:col-span-2 border-border/50 bg-card/50" data-testid="billing-plan-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Crown className="w-5 h-5 text-yellow-500" />
+                  {isElite ? (
+                    <Sparkles className="w-5 h-5 text-purple-500" />
+                  ) : (
+                    <Crown className="w-5 h-5 text-yellow-500" />
+                  )}
                   {t("pages.billing.planTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={isPro ? "default" : "secondary"} className={cn(isPro && "bg-gradient-to-r from-yellow-500 to-orange-500")}>
-                    {isPro ? t("pages.billing.planActive") : t("pages.billing.planFree")}
+                  <Badge
+                    variant={isPaid ? "default" : "secondary"}
+                    className={cn(
+                      isElite && "bg-gradient-to-r from-purple-500 to-indigo-600",
+                      isPro && !isElite && "bg-gradient-to-r from-yellow-500 to-orange-500",
+                    )}
+                  >
+                    {isElite
+                      ? t("pages.billing.planElite")
+                      : isPro
+                        ? t("pages.billing.planActive")
+                        : t("pages.billing.planFree")}
                   </Badge>
-                  <Badge variant="outline">
-                    {selectedPriceLabel}
-                  </Badge>
-                  {!isPro && billingInterval === "year" && savingsPercent > 0 ? (
+                  {!isPaid && (
+                    <Badge variant="outline">
+                      {selectedProLabel}
+                    </Badge>
+                  )}
+                  {!isPaid && billingInterval === "year" && proSavingsPercent > 0 ? (
                     <Badge variant="outline" className="border-green-500/30 text-green-600">
-                      {t("pages.billing.interval.savePercent", { percent: savingsPercent })}
+                      {t("pages.billing.interval.savePercent", { percent: proSavingsPercent })}
                     </Badge>
                   ) : null}
                 </div>
 
                 <p className="text-sm text-muted-foreground">{renewalText}</p>
 
-                {!isPro && hasYearly ? (
+                {!isPaid && hasProYearly ? (
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant={billingInterval === "month" ? "default" : "outline"}
                       onClick={() => setBillingInterval("month")}
-                      disabled={checkoutMutation.isPending || portalMutation.isPending}
+                      disabled={isLoading}
                       data-testid="button-billing-interval-month"
                     >
                       {t("pages.billing.interval.monthly")}
@@ -213,7 +259,7 @@ export default function BillingPage() {
                       size="sm"
                       variant={billingInterval === "year" ? "default" : "outline"}
                       onClick={() => setBillingInterval("year")}
-                      disabled={checkoutMutation.isPending || portalMutation.isPending}
+                      disabled={isLoading}
                       data-testid="button-billing-interval-year"
                     >
                       {t("pages.billing.interval.yearly")}
@@ -229,25 +275,48 @@ export default function BillingPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">
-                  {isPro ? (
-                    <Button
-                      onClick={() => portalMutation.mutate()}
-                      disabled={portalMutation.isPending || checkoutMutation.isPending}
-                      data-testid="button-manage-subscription"
-                    >
-                      {activeAction === "portal" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      {t("pages.billing.manage")}
-                    </Button>
+                  {isPaid ? (
+                    <>
+                      <Button
+                        onClick={() => portalMutation.mutate()}
+                        disabled={isLoading}
+                        data-testid="button-manage-subscription"
+                      >
+                        {activeAction === "portal" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {t("pages.billing.manage")}
+                      </Button>
+                      {isPro && !isElite && (
+                        <Button
+                          variant="outline"
+                          className="border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+                          onClick={() => upgradeMutation.mutate()}
+                          disabled={isLoading}
+                          data-testid="button-upgrade-elite"
+                        >
+                          {activeAction === "upgrade" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                          {t("pages.billing.upgradeToElite")}
+                        </Button>
+                      )}
+                    </>
                   ) : (
-                    <Button
-                      className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
-                      onClick={() => checkoutMutation.mutate(selectedPriceId)}
-                      disabled={checkoutMutation.isPending || portalMutation.isPending}
-                      data-testid="button-upgrade-pro-brl"
-                    >
-                      {activeAction === "checkout" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      {t("pages.billing.subscribe")}
-                    </Button>
+                    <>
+                      <Button
+                        className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
+                        onClick={() => checkoutMutation.mutate(selectedProPriceId)}
+                        disabled={isLoading}
+                        data-testid="button-upgrade-pro-brl"
+                      >
+                        {activeAction === "checkout" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {t("pages.billing.subscribePro")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setLocation("/pricing")}
+                        disabled={isLoading}
+                      >
+                        {t("pages.billing.viewPricing")}
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>

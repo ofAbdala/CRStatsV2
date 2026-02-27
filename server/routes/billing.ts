@@ -13,6 +13,7 @@ import { requireAuth } from "../supabaseAuth";
 import { stripeService } from "../stripeService";
 import { getStripePublishableKey, getStripeSecretKey, getUncachableStripeClient } from "../stripeClient";
 import { validateCheckoutPriceId } from "../domain/stripeCheckout";
+import { ELITE_PRICING } from "@shared/pricing";
 import {
   getUserId,
   sendApiError,
@@ -251,6 +252,101 @@ router.post('/api/stripe/checkout', requireAuth, async (req: any, res) => {
       provider: "stripe",
       status: 500,
       error: { code: "CHECKOUT_SESSION_FAILED", message: "Failed to create checkout session" },
+    });
+  }
+});
+
+// POST /api/stripe/upgrade — PRO → Elite prorated upgrade
+router.post('/api/stripe/upgrade', requireAuth, async (req: any, res) => {
+  const route = "/api/stripe/upgrade";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "supabase-auth",
+        status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 503,
+        error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe not configured" },
+      });
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const subscription = await storage.getSubscription(userId);
+
+    if (!subscription?.stripeSubscriptionId || subscription.plan !== "pro" || subscription.status !== "active") {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 400,
+        error: { code: "UPGRADE_NOT_ELIGIBLE", message: "Only active PRO subscribers can upgrade to Elite" },
+      });
+    }
+
+    const { billingInterval } = req.body as { billingInterval?: string };
+    const elitePriceId = billingInterval === "year" && ELITE_PRICING.BRL.yearlyPriceId
+      ? ELITE_PRICING.BRL.yearlyPriceId
+      : ELITE_PRICING.BRL.monthlyPriceId;
+
+    if (!elitePriceId) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 503,
+        error: { code: "ELITE_PRICE_NOT_CONFIGURED", message: "Elite price IDs not configured" },
+      });
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+
+    if (!stripeSubscription.items?.data?.length) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "stripe",
+        status: 400,
+        error: { code: "NO_SUBSCRIPTION_ITEMS", message: "Subscription has no items" },
+      });
+    }
+
+    // Stripe handles proration automatically
+    const updatedSubscription = await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      items: [{
+        id: stripeSubscription.items.data[0].id,
+        price: elitePriceId,
+      }],
+      proration_behavior: 'create_prorations',
+    });
+
+    console.log(`PRO → Elite upgrade for user: ${userId}, subscription: ${updatedSubscription.id}`);
+
+    res.json({
+      success: true,
+      plan: 'elite',
+      message: 'Successfully upgraded to Elite',
+    });
+  } catch (error) {
+    console.error("Error upgrading subscription:", error);
+    return sendApiError(res, {
+      route,
+      userId,
+      provider: "stripe",
+      status: 500,
+      error: { code: "UPGRADE_FAILED", message: "Failed to upgrade subscription" },
     });
   }
 });

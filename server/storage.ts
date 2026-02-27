@@ -157,6 +157,8 @@ export interface IStorage {
   updateSubscription(id: string, subscription: Partial<InsertSubscription>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Subscription | undefined>;
   isPro(userId: string): Promise<boolean>;
+  isElite(userId: string): Promise<boolean>;
+  getTier(userId: string): Promise<'free' | 'pro' | 'elite'>;
 
   // Goals operations
   getGoals(userId: string): Promise<Goal[]>;
@@ -577,7 +579,21 @@ export class DatabaseStorage implements IStorage {
 
   async isPro(userId: string): Promise<boolean> {
     const subscription = await this.getSubscription(userId);
-    return subscription?.plan === "pro" && subscription?.status === "active";
+    return (subscription?.plan === "pro" || subscription?.plan === "elite") && subscription?.status === "active";
+  }
+
+  async isElite(userId: string): Promise<boolean> {
+    const subscription = await this.getSubscription(userId);
+    return subscription?.plan === "elite" && subscription?.status === "active";
+  }
+
+  async getTier(userId: string): Promise<'free' | 'pro' | 'elite'> {
+    const subscription = await this.getSubscription(userId);
+    if (subscription?.status === "active") {
+      if (subscription.plan === "elite") return "elite";
+      if (subscription.plan === "pro") return "pro";
+    }
+    return "free";
   }
 
   async getGoals(userId: string): Promise<Goal[]> {

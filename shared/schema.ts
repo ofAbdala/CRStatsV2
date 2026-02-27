@@ -78,7 +78,7 @@ export const subscriptions = pgTable(
   },
   (table) => [
     uniqueIndex("uidx_subscriptions_user_id").on(table.userId),
-    check("chk_subscriptions_plan", sql`${table.plan} IN ('free', 'pro')`),
+    check("chk_subscriptions_plan", sql`${table.plan} IN ('free', 'pro', 'elite')`),
     check("chk_subscriptions_status", sql`${table.status} IN ('inactive', 'active', 'canceled', 'past_due')`),
   ],
 );

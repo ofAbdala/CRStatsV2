@@ -31,6 +31,7 @@ const MePage = lazy(() => import("@/pages/me"));
 const NotificationsPage = lazy(() => import("@/pages/notifications"));
 const GoalsPage = lazy(() => import("@/pages/goals"));
 const PushPage = lazy(() => import("@/pages/push"));
+const PricingPage = lazy(() => import("@/pages/pricing"));
 
 // ── Suspense loading fallback ───────────────────────────────────────────────
 // Shown while lazy-loaded chunks are being fetched (AC6).
@@ -67,6 +68,7 @@ const BillingWithBoundary = withLocalBoundary(BillingPage, "billing");
 const NotificationsWithBoundary = withLocalBoundary(NotificationsPage, "notifications");
 const GoalsWithBoundary = withLocalBoundary(GoalsPage, "goals");
 const PushWithBoundary = withLocalBoundary(PushPage, "push");
+const PricingWithBoundary = withLocalBoundary(PricingPage, "pricing");
 const DecksWithBoundary = withLocalBoundary(DecksPage, "decks");
 const CommunityWithBoundary = withLocalBoundary(CommunityPage, "community");
 const SettingsWithBoundary = withLocalBoundary(SettingsPage, "settings");
@@ -90,6 +92,7 @@ function PrivateOnboarding() { return <PrivateRoute><OnboardingWithBoundary /></
 function PrivateBilling() { return <PrivateRoute><BillingWithBoundary /></PrivateRoute>; }
 function PrivateMe() { return <PrivateRoute><MeWithBoundary /></PrivateRoute>; }
 function PrivateNotifications() { return <PrivateRoute><NotificationsWithBoundary /></PrivateRoute>; }
+function PrivatePricing() { return <PrivateRoute><PricingWithBoundary /></PrivateRoute>; }
 
 // ── Home route ──────────────────────────────────────────────────────────────
 // The root route shows the dashboard for authenticated users or the landing
@@ -126,6 +129,7 @@ function Router() {
         <Route path="/billing" component={PrivateBilling} />
         <Route path="/me" component={PrivateMe} />
         <Route path="/notifications" component={PrivateNotifications} />
+        <Route path="/pricing" component={PrivatePricing} />
 
         {/* Fallback */}
         <Route component={NotFoundPage} />

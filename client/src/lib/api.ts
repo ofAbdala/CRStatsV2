@@ -471,6 +471,13 @@ export const api = {
 
   subscription: {
     get: () => fetchAPI<SubscriptionData>("/subscription"),
+    getUsage: () =>
+      fetchAPI<{
+        tier: string;
+        limits: Record<string, number | boolean>;
+        usage: Record<string, number>;
+        remaining: Record<string, number | null>;
+      }>("/subscription/usage"),
   },
 
   goals: {
@@ -700,6 +707,11 @@ export const api = {
     createPortal: () =>
       fetchAPI<{ url: string }>("/stripe/portal", {
         method: "POST",
+      }),
+    upgrade: (billingInterval?: string) =>
+      fetchAPI<{ success: boolean; plan: string; message: string }>("/stripe/upgrade", {
+        method: "POST",
+        body: JSON.stringify({ billingInterval }),
       }),
   },
 };

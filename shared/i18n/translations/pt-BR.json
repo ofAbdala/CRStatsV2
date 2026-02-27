@@ -1129,8 +1129,110 @@
         "canceledTitle": "Checkout cancelado",
         "canceledDescription": "Você pode tentar novamente quando quiser.",
         "checkoutErrorTitle": "Falha ao iniciar checkout",
-        "portalErrorTitle": "Falha ao abrir portal"
+        "portalErrorTitle": "Falha ao abrir portal",
+        "upgradeErrorTitle": "Falha ao fazer upgrade",
+        "upgradeSuccessTitle": "Upgrade realizado",
+        "upgradeSuccessDescription": "Seu plano Elite está ativo."
+      },
+      "planElite": "Elite ativo",
+      "subscribePro": "Assinar PRO",
+      "subscribeElite": "Assinar Elite",
+      "upgradeToElite": "Upgrade para Elite",
+      "viewPricing": "Ver planos"
+    },
+    "pricing": {
+      "title": "Planos e Precos",
+      "subtitle": "Escolha o plano ideal para dominar a arena.",
+      "monthly": "Mensal",
+      "yearly": "Anual",
+      "perMonth": "/mes",
+      "perYear": "/ano",
+      "savePercent": "Economize {percent}%",
+      "currentPlan": "Plano atual",
+      "mostPopular": "MAIS POPULAR",
+      "bestValue": "MELHOR VALOR",
+      "free": {
+        "name": "Gratuito",
+        "description": "Comece a evoluir",
+        "cta": "Comecar gratis",
+        "features": {
+          "metaQueries": "5 consultas meta/dia",
+          "counterQueries": "5 consultas counter/dia",
+          "coachMessages": "5 msgs coach/dia",
+          "optimizerQueries": "5 otimizacoes/dia",
+          "basicMatchups": "Matchups basicos"
+        }
+      },
+      "pro": {
+        "name": "PRO",
+        "description": "Para jogadores serios",
+        "cta": "Assinar PRO",
+        "features": {
+          "unlimitedMeta": "Meta decks ilimitados",
+          "unlimitedCounter": "Counter decks ilimitados",
+          "unlimitedCoach": "Coach IA ilimitado",
+          "unlimitedOptimizer": "Otimizador ilimitado",
+          "pushAnalysis": "Analise de push completa",
+          "deckOptimizer": "Otimizador de deck"
+        }
+      },
+      "elite": {
+        "name": "Elite",
+        "description": "Maximo desempenho competitivo",
+        "cta": "Assinar Elite",
+        "features": {
+          "everythingPro": "Tudo do PRO",
+          "trainingPlans": "Planos de treinamento",
+          "priorityCoaching": "Coach com prioridade",
+          "advancedAnalytics": "Analytics avancados",
+          "detailedMatchups": "Matchups detalhados",
+          "seasonComparisons": "Comparacoes por temporada"
+        }
+      },
+      "featureTable": {
+        "feature": "Recurso",
+        "metaDecks": "Meta decks",
+        "counterDecks": "Counter decks",
+        "coachChat": "Coach IA",
+        "pushAnalysis": "Analise de push",
+        "deckOptimizer": "Otimizador de deck",
+        "trainingPlans": "Planos de treino",
+        "advancedAnalytics": "Analytics avancados",
+        "matchupData": "Dados de matchup",
+        "unlimited": "Ilimitado",
+        "perDay": "{n}/dia",
+        "full": "Completo",
+        "none": "Nenhum",
+        "basic": "Basico",
+        "detailed": "Detalhado",
+        "unlimitedPriority": "Ilimitado + Prioridade"
+      },
+      "faq": {
+        "title": "Perguntas frequentes",
+        "upgradeQuestion": "Posso fazer upgrade a qualquer momento?",
+        "upgradeAnswer": "Sim! O upgrade e proporcional ao periodo restante do plano atual.",
+        "cancelQuestion": "Posso cancelar a qualquer momento?",
+        "cancelAnswer": "Sim! Cancele quando quiser pelo portal de gerenciamento."
       }
+    },
+    "paywall": {
+      "limitReached": "Voce usou {used}/{limit} consultas hoje.",
+      "unlockPro": "Desbloqueie acesso ilimitado por {price}/mes.",
+      "unlockElite": "Desbloqueie o maximo por {price}/mes.",
+      "valueMessage": "Hoje voce descobriu um counter de {winRate}% WR contra {card}. Imagine ter esses dados para toda carta, todo dia.",
+      "genericValue": "Voce encontrou {count} counter decks hoje. Desbloqueie counters ilimitados.",
+      "upgradeNow": "Fazer upgrade",
+      "viewPlans": "Ver planos",
+      "maybeLater": "Talvez depois",
+      "proRequired": "Este recurso requer plano PRO ou superior.",
+      "eliteRequired": "Este recurso requer plano Elite."
+    },
+    "conversionPrompt": {
+      "counterSuccess": "Esse deck counter de {winRate}% WR pode virar sua arma secreta. Com o PRO, voce tem counters ilimitados.",
+      "pushInsight": "Sua analise de push revelou padroes valiosos. Desbloqueie analises ilimitadas.",
+      "tiltRecovery": "Voce se recuperou do tilt! O Coach IA pode ajudar a manter a consistencia.",
+      "upgradeButton": "Conhecer planos",
+      "dismiss": "Agora nao"
     },
     "decks": {
       "title": "Decks e meta",

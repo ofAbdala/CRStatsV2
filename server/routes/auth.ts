@@ -1,6 +1,7 @@
 /**
  * Auth & Profile routes
- * Endpoints: GET /api/auth/user, GET /api/profile, POST /api/profile, PATCH /api/profile, GET /api/subscription
+ * Endpoints: GET /api/auth/user, GET /api/profile, POST /api/profile, PATCH /api/profile,
+ *            GET /api/subscription, GET /api/subscription/usage
  */
 import { Router } from "express";
 import { getUserStorage, serviceStorage } from "../storage";
@@ -9,6 +10,7 @@ import {
   profileCreateInputSchema,
   profileUpdateInputSchema,
 } from "@shared/schema";
+import { getTierLimits, isUnlimited } from "@shared/constants/limits";
 import {
   getUserId,
   sendApiError,
@@ -266,6 +268,69 @@ router.get('/api/subscription', requireAuth, async (req: any, res) => {
       provider: "internal",
       status: 500,
       error: { code: "SUBSCRIPTION_FETCH_FAILED", message: "Failed to fetch subscription" },
+    });
+  }
+});
+
+// GET /api/subscription/usage — daily usage counts and limits for the user's tier
+router.get('/api/subscription/usage', requireAuth, async (req: any, res) => {
+  const route = "/api/subscription/usage";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "supabase-auth",
+        status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const tier = await storage.getTier(userId);
+    const limits = getTierLimits(tier);
+
+    // Count today's usage for rate-limited features
+    const [coachUsed, counterUsed, optimizerUsed] = await Promise.all([
+      storage.countCoachMessagesToday(userId),
+      storage.countDeckSuggestionsToday(userId, "counter"),
+      storage.countDeckSuggestionsToday(userId, "optimizer"),
+    ]);
+
+    return res.json({
+      tier,
+      limits: {
+        coachMessages: limits.coachMessages,
+        counterQueries: limits.counterQueries,
+        metaQueries: limits.metaQueries,
+        optimizerQueries: limits.optimizerQueries,
+        pushAnalysis: limits.pushAnalysis,
+        trainingPlans: limits.trainingPlans,
+        advancedAnalytics: limits.advancedAnalytics,
+        detailedMatchups: limits.detailedMatchups,
+        priorityCoaching: limits.priorityCoaching,
+      },
+      usage: {
+        coachMessages: coachUsed,
+        counterQueries: counterUsed,
+        optimizerQueries: optimizerUsed,
+      },
+      remaining: {
+        coachMessages: isUnlimited(limits.coachMessages) ? null : Math.max(0, limits.coachMessages - coachUsed),
+        counterQueries: isUnlimited(limits.counterQueries) ? null : Math.max(0, limits.counterQueries - counterUsed),
+        optimizerQueries: isUnlimited(limits.optimizerQueries) ? null : Math.max(0, limits.optimizerQueries - optimizerUsed),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching subscription usage:", error);
+    return sendApiError(res, {
+      route,
+      userId,
+      provider: "internal",
+      status: 500,
+      error: { code: "USAGE_FETCH_FAILED", message: "Failed to fetch usage data" },
     });
   }
 });
