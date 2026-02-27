@@ -91,13 +91,13 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
               onClick={() => setPeriodFilter('60days')}
               data-testid="filter-60days"
             >
-              {t('me.filters.60days')}
+              {t('pages.me.filters.60days')}
             </Button>
           ) : (
             <Link href="/billing">
               <Button variant="outline" size="sm" data-testid="filter-60days-locked">
                 <Lock className="w-4 h-4 mr-2" />
-                {t('me.filters.60days')}
+                {t('pages.me.filters.60days')}
               </Button>
             </Link>
           )}
@@ -128,7 +128,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
               <Target className="w-5 h-5 text-primary" />
               {lastPush ? (
                 <span className="font-medium" data-testid="push-summary">
-                  {t('me.history.lastPush', {
+                  {t('pages.me.history.lastPush', {
                     count: lastPush.battles.length,
                     wins: lastPush.wins,
                     losses: lastPush.losses,
@@ -138,7 +138,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
                 </span>
               ) : (
                 <span className="font-medium" data-testid="recent-stats-summary">
-                  {t('me.history.recentMatches', {
+                  {t('pages.me.history.recentMatches', {
                     count: recentSeriesStats.total,
                     wins: recentSeriesStats.wins,
                     losses: recentSeriesStats.losses,
@@ -147,7 +147,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
                 </span>
               )}
             </div>
-            <Badge variant="outline">{t('me.history.totalBattles', { count: filteredBattles.length })}</Badge>
+            <Badge variant="outline">{t('pages.me.history.totalBattles', { count: filteredBattles.length })}</Badge>
           </div>
         </CardContent>
       </Card>
@@ -156,7 +156,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
       <div className="space-y-6">
         <h3 className="text-lg font-bold flex items-center gap-2">
           <Swords className="w-5 h-5 text-primary" />
-          {t('me.history.battleHistory')}
+          {t('pages.me.history.battleHistory')}
         </h3>
 
         {battlesLoading ? (
@@ -164,7 +164,7 @@ export function MeBattlesTab({ data }: MeBattlesTabProps) {
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
         ) : sessions.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">{t('me.history.noBattlesFound')}</p>
+          <p className="text-center text-muted-foreground py-8">{t('pages.me.history.noBattlesFound')}</p>
         ) : (
           <div className="space-y-6">
             {sessions.map((session, sessionIdx) => (

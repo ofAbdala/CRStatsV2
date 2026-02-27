@@ -40,16 +40,16 @@ export function ProAnalyticsSection({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Award className="w-5 h-5 text-yellow-500" />
-              {t('me.achievements.general')}
+              {t('pages.me.achievements.general')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <StatRow label={t('me.achievements.kingLevel')} value={player?.expLevel || 0} />
-            <StatRow label={t('me.achievements.totalWins')} value={player?.wins?.toLocaleString() || 0} />
-            <StatRow label={t('me.achievements.totalLosses')} value={player?.losses?.toLocaleString() || 0} />
-            <StatRow label={t('me.achievements.threeCrownWins')} value={player?.threeCrownWins?.toLocaleString() || 0} />
-            <StatRow label={t('me.achievements.maxChallenge')} value={player?.challengeMaxWins || 0} />
-            <StatRow label={t('me.achievements.cardsFound')} value={player?.cards?.length || 0} />
+            <StatRow label={t('pages.me.achievements.kingLevel')} value={player?.expLevel || 0} />
+            <StatRow label={t('pages.me.achievements.totalWins')} value={player?.wins?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.totalLosses')} value={player?.losses?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.threeCrownWins')} value={player?.threeCrownWins?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.maxChallenge')} value={player?.challengeMaxWins || 0} />
+            <StatRow label={t('pages.me.achievements.cardsFound')} value={player?.cards?.length || 0} />
           </CardContent>
         </Card>
 
@@ -57,14 +57,14 @@ export function ProAnalyticsSection({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Crown className="w-5 h-5 text-yellow-500" />
-              {t('me.achievements.clan')}
+              {t('pages.me.achievements.clan')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <StatRow label={t('me.achievements.totalDonations')} value={player?.totalDonations?.toLocaleString() || 0} />
-            <StatRow label={t('me.achievements.donationsReceived')} value={player?.clanCardsCollected?.toLocaleString() || 0} />
-            <StatRow label={t('me.achievements.clanWars')} value={player?.warDayWins || 0} />
-            <StatRow label={t('me.achievements.clanContribution')} value={player?.clanContributionPoints?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.totalDonations')} value={player?.totalDonations?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.donationsReceived')} value={player?.clanCardsCollected?.toLocaleString() || 0} />
+            <StatRow label={t('pages.me.achievements.clanWars')} value={player?.warDayWins || 0} />
+            <StatRow label={t('pages.me.achievements.clanContribution')} value={player?.clanContributionPoints?.toLocaleString() || 0} />
           </CardContent>
         </Card>
       </div>
@@ -77,7 +77,7 @@ export function ProAnalyticsSection({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-500" />
-            {t('me.proAnalytics.title')}
+            {t('pages.me.proAnalytics.title')}
             {!isPro && (
               <Badge variant="outline" className="ml-2 border-yellow-500/50 text-yellow-500">
                 PRO
@@ -92,25 +92,25 @@ export function ProAnalyticsSection({
               !isPro && "blur-sm pointer-events-none"
             )}>
               <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                <h4 className="font-medium mb-2">{t('me.proAnalytics.trophyPrediction')}</h4>
+                <h4 className="font-medium mb-2">{t('pages.me.proAnalytics.trophyPrediction')}</h4>
                 <p className="text-2xl font-bold text-primary">
                   {trophyPrediction.net === null ? "N/A" : formatSigned(trophyPrediction.net)}
                 </p>
-                <p className="text-xs text-muted-foreground">{t('me.proAnalytics.nextWeek')}</p>
+                <p className="text-xs text-muted-foreground">{t('pages.me.proAnalytics.nextWeek')}</p>
               </div>
               <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                <h4 className="font-medium mb-2">{t('me.proAnalytics.idealDeck')}</h4>
+                <h4 className="font-medium mb-2">{t('pages.me.proAnalytics.idealDeck')}</h4>
                 <p className="text-2xl font-bold text-green-500">
                   {idealDeckWinRate === null ? "N/A" : `${idealDeckWinRate}%`}
                 </p>
-                <p className="text-xs text-muted-foreground">{t('me.proAnalytics.recentWinrate')}</p>
+                <p className="text-xs text-muted-foreground">{t('pages.me.proAnalytics.recentWinrate')}</p>
               </div>
               <div className="p-4 bg-background/50 rounded-lg border border-border/50">
-                <h4 className="font-medium mb-2">{t('me.proAnalytics.matchupAnalysis')}</h4>
+                <h4 className="font-medium mb-2">{t('pages.me.proAnalytics.matchupAnalysis')}</h4>
                 <p className="text-2xl font-bold text-yellow-500">
                   {matchupDeckCount === null ? "N/A" : matchupDeckCount}
                 </p>
-                <p className="text-xs text-muted-foreground">{t('me.proAnalytics.decksDetected')}</p>
+                <p className="text-xs text-muted-foreground">{t('pages.me.proAnalytics.decksDetected')}</p>
               </div>
             </div>
             {!isPro && (
@@ -118,14 +118,14 @@ export function ProAnalyticsSection({
                 <div className="p-3 rounded-full bg-yellow-500/20 mb-3">
                   <Lock className="w-6 h-6 text-yellow-500" />
                 </div>
-                <p className="text-sm text-muted-foreground mb-3">{t('me.proAnalytics.availableOnPro')}</p>
+                <p className="text-sm text-muted-foreground mb-3">{t('pages.me.proAnalytics.availableOnPro')}</p>
                 <Link href="/billing">
                   <Button
                     size="sm"
                     className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600"
                     data-testid="button-unlock-pro"
                   >
-                    {t('me.proAnalytics.unlockPro')}
+                    {t('pages.me.proAnalytics.unlockPro')}
                   </Button>
                 </Link>
               </div>

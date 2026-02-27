@@ -28,24 +28,24 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Trophy className="w-4 h-4 text-primary" />
-              {t('me.seasonSummary.title')}
+              {t('pages.me.seasonSummary.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.seasonSummary.currentTrophies')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.seasonSummary.currentTrophies')}</span>
               <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.seasonSummary.bestSeason')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.seasonSummary.bestSeason')}</span>
               <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.winRate')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.winRate')}</span>
               <span className="font-bold text-green-500">{stats.winRate}%</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.matches')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.matches')}</span>
               <span className="font-bold">{stats.totalMatches}</span>
             </div>
           </CardContent>
@@ -56,16 +56,16 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Target className="w-4 h-4 text-primary" />
-              {t('me.recentPerformance.title')}
+              {t('pages.me.recentPerformance.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.recentPerformance.lastBattles', { count: data.battles.length })}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.recentPerformance.lastBattles', { count: data.battles.length })}</span>
               <span className="font-bold">{stats.winRate}% WR</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.recentPerformance.currentStreak')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.recentPerformance.currentStreak')}</span>
               <span className={cn(
                 "font-bold",
                 stats.streak.type === 'win' && "text-green-500",
@@ -77,11 +77,11 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.recentPerformance.status')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.recentPerformance.status')}</span>
               <Badge variant={tiltAnalysis.trend === 'at-risk' ? 'destructive' : tiltAnalysis.trend === 'improving' ? 'default' : 'secondary'}>{tiltAnalysis.label}</Badge>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.recentPerformance.winsLosses')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.recentPerformance.winsLosses')}</span>
               <span className="font-bold">
                 <span className="text-green-500">{stats.wins}</span>
                 {' / '}
@@ -101,22 +101,22 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Crown className={cn("w-4 h-4", isPro ? "text-yellow-500" : "text-muted-foreground")} />
-              {t('me.accountStatus.title')}
+              {t('pages.me.accountStatus.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.accountStatus.plan')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.accountStatus.plan')}</span>
               <Badge variant={isPro ? "default" : "secondary"}>
                 {isPro ? 'PRO' : 'Free'}
               </Badge>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.accountStatus.totalWins')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.accountStatus.totalWins')}</span>
               <span className="font-bold">{player?.wins?.toLocaleString() || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">{t('me.accountStatus.cardsCollected')}</span>
+              <span className="text-sm text-muted-foreground">{t('pages.me.accountStatus.cardsCollected')}</span>
               <span className="font-bold">{player?.cards?.length || 0}</span>
             </div>
           </CardContent>
@@ -128,7 +128,7 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
-            {t('me.trophyProgression.title')}
+            {t('pages.me.trophyProgression.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -139,14 +139,14 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
       {/* Game Mode Stats */}
       <div className="grid md:grid-cols-2 gap-6">
         <GameModeCard
-          title={t('me.gameModes.ladder')}
+          title={t('pages.me.gameModes.ladder')}
           icon={<Shield className="w-5 h-5" />}
           stats={stats.ladderStats}
           color="primary"
           t={t}
         />
         <GameModeCard
-          title={t('me.gameModes.challenges')}
+          title={t('pages.me.gameModes.challenges')}
           icon={<Zap className="w-5 h-5" />}
           stats={stats.challengeStats}
           color="yellow"
@@ -181,21 +181,21 @@ function GameModeCard({ title, icon, stats, color, t }: {
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-2xl font-bold text-green-500">{stats.wins}</p>
-            <p className="text-xs text-muted-foreground">{t('me.gameMode.wins')}</p>
+            <p className="text-xs text-muted-foreground">{t('pages.me.gameMode.wins')}</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-red-500">{stats.losses}</p>
-            <p className="text-xs text-muted-foreground">{t('me.gameMode.losses')}</p>
+            <p className="text-xs text-muted-foreground">{t('pages.me.gameMode.losses')}</p>
           </div>
           <div>
             <p className="text-2xl font-bold">{stats.winRate}%</p>
-            <p className="text-xs text-muted-foreground">{t('me.gameMode.winRate')}</p>
+            <p className="text-xs text-muted-foreground">{t('pages.me.gameMode.winRate')}</p>
           </div>
         </div>
         {stats.matches > 0 && (
           <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Swords className="w-4 h-4" />
-            {t('me.gameMode.matchCount', { count: stats.matches })}
+            {t('pages.me.gameMode.matchCount', { count: stats.matches })}
           </div>
         )}
       </CardContent>

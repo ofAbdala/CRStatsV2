@@ -12,7 +12,7 @@ export function TiltAnalysis({ tiltAnalysis, t }: TiltAnalysisProps) {
     return (
       <Badge variant="outline" className="border-red-500/50 text-red-500 gap-1 bg-red-500/10">
         <TrendingDown className="w-3 h-3" />
-        {t('me.analysis.atRisk')}
+        {t('pages.me.analysis.atRisk')}
       </Badge>
     );
   }
@@ -21,7 +21,7 @@ export function TiltAnalysis({ tiltAnalysis, t }: TiltAnalysisProps) {
     return (
       <Badge variant="outline" className="border-green-500/50 text-green-500 gap-1 bg-green-500/10">
         <TrendingUp className="w-3 h-3" />
-        {t('me.analysis.onFire')}
+        {t('pages.me.analysis.onFire')}
       </Badge>
     );
   }
@@ -29,7 +29,7 @@ export function TiltAnalysis({ tiltAnalysis, t }: TiltAnalysisProps) {
   return (
     <Badge variant="outline" className="border-blue-500/50 text-blue-500 gap-1 bg-blue-500/10">
       <Minus className="w-3 h-3" />
-      {t('me.analysis.consistent')}
+      {t('pages.me.analysis.consistent')}
     </Badge>
   );
 }

@@ -79,7 +79,7 @@ function TrophyEvolutionChart({ data: trophyEvolutionData, player, t }: {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-primary" />
-          {t('me.trophyEvolution.title')}
+          {t('pages.me.trophyEvolution.title')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -97,8 +97,8 @@ function TrophyEvolutionChart({ data: trophyEvolutionData, player, t }: {
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} domain={['dataMin - 100', 'dataMax + 100']} tickFormatter={(v) => v.toLocaleString()} />
               <Tooltip
                 contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--popover-foreground))' }}
-                formatter={(value: number, name: string) => [value.toLocaleString(), name === 'trophies' ? t('me.trophies') : name]}
-                labelFormatter={(label) => `${t('me.date')}: ${label}`}
+                formatter={(value: number, name: string) => [value.toLocaleString(), name === 'trophies' ? t('pages.me.trophies') : name]}
+                labelFormatter={(label) => `${t('pages.me.date')}: ${label}`}
               />
               <Area type="monotone" dataKey="trophies" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorTrophiesProgress)" dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }} activeDot={{ r: 6, fill: 'hsl(var(--primary))' }} />
             </AreaChart>
@@ -107,12 +107,12 @@ function TrophyEvolutionChart({ data: trophyEvolutionData, player, t }: {
         <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
           <div className="flex items-center gap-2">
             <Trophy className="w-4 h-4 text-primary" />
-            <span className="text-muted-foreground">{t('me.current')}:</span>
+            <span className="text-muted-foreground">{t('pages.me.current')}:</span>
             <span className="font-bold text-primary">{player?.trophies?.toLocaleString() || 0}</span>
           </div>
           <div className="flex items-center gap-2">
             <Award className="w-4 h-4 text-yellow-500" />
-            <span className="text-muted-foreground">{t('me.best')}:</span>
+            <span className="text-muted-foreground">{t('pages.me.best')}:</span>
             <span className="font-bold text-yellow-500">{player?.bestTrophies?.toLocaleString() || 0}</span>
           </div>
         </div>
@@ -127,20 +127,20 @@ function TrophyEvolutionEmpty({ battles, player, t }: { battles: any[]; player: 
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-primary" />
-          {t('me.trophyEvolution.title')}
+          {t('pages.me.trophyEvolution.title')}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Trophy className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <p className="text-lg font-medium text-muted-foreground mb-2">{t('me.trophyEvolution.noDataAvailable')}</p>
+          <p className="text-lg font-medium text-muted-foreground mb-2">{t('pages.me.trophyEvolution.noDataAvailable')}</p>
           <p className="text-sm text-muted-foreground/70">
-            {battles.length === 0 ? t('me.trophyEvolution.playMoreToSeeProgress') : t('me.trophyEvolution.recentBattlesNoTrophyData')}
+            {battles.length === 0 ? t('pages.me.trophyEvolution.playMoreToSeeProgress') : t('pages.me.trophyEvolution.recentBattlesNoTrophyData')}
           </p>
           {player?.trophies && (
             <div className="mt-6 flex items-center gap-2">
               <Trophy className="w-4 h-4 text-primary" />
-              <span className="text-muted-foreground">{t('me.currentTrophies')}:</span>
+              <span className="text-muted-foreground">{t('pages.me.currentTrophies')}:</span>
               <span className="font-bold text-primary">{player.trophies.toLocaleString()}</span>
             </div>
           )}
@@ -157,7 +157,7 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Swords className="w-5 h-5 text-primary" />
-            {t('me.playVolume.title', { days: 14 })}
+            {t('pages.me.playVolume.title', { days: 14 })}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -169,10 +169,10 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--popover-foreground))' }}
-                  formatter={(value: number) => [`${value} ${t('me.matches')}`, t('me.matches')]}
-                  labelFormatter={(label) => `${t('me.date')}: ${label}`}
+                  formatter={(value: number) => [`${value} ${t('pages.me.matches')}`, t('pages.me.matches')]}
+                  labelFormatter={(label) => `${t('pages.me.date')}: ${label}`}
                 />
-                <Bar dataKey="matches" name={t('me.chart.matches')} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                <Bar dataKey="matches" name={t('pages.me.chart.matches')} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={50} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -183,7 +183,7 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
           <CardContent className="p-4 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/20"><Swords className="w-5 h-5 text-primary" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{t('me.playStats.avgPerDay')}</p>
+              <p className="text-xs text-muted-foreground">{t('pages.me.playStats.avgPerDay')}</p>
               <p className="text-2xl font-bold">{playVolumeData.avgMatchesPerDay}</p>
             </div>
           </CardContent>
@@ -192,9 +192,9 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
           <CardContent className="p-4 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-green-500/20"><Flame className="w-5 h-5 text-green-500" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{t('me.playStats.mostActiveDay')}</p>
+              <p className="text-xs text-muted-foreground">{t('pages.me.playStats.mostActiveDay')}</p>
               <p className="text-xl font-bold">{playVolumeData.mostActiveDay}</p>
-              <p className="text-xs text-muted-foreground">{t('me.playStats.matchCount', { count: playVolumeData.mostActiveDayCount })}</p>
+              <p className="text-xs text-muted-foreground">{t('pages.me.playStats.matchCount', { count: playVolumeData.mostActiveDayCount })}</p>
             </div>
           </CardContent>
         </Card>
@@ -202,9 +202,9 @@ function PlayVolumeSection({ playVolumeData, t }: { playVolumeData: MeDataContex
           <CardContent className="p-4 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-yellow-500/20"><Clock className="w-5 h-5 text-yellow-500" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{t('me.playStats.peakHour')}</p>
+              <p className="text-xs text-muted-foreground">{t('pages.me.playStats.peakHour')}</p>
               <p className="text-xl font-bold">{playVolumeData.peakHour}</p>
-              <p className="text-xs text-muted-foreground">{t('me.playStats.matchCount', { count: playVolumeData.peakHourCount })}</p>
+              <p className="text-xs text-muted-foreground">{t('pages.me.playStats.matchCount', { count: playVolumeData.peakHourCount })}</p>
             </div>
           </CardContent>
         </Card>
@@ -219,10 +219,10 @@ function GoalsSection({ activeGoals, goalsLoading, t }: { activeGoals: any[]; go
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
           <Target className="w-5 h-5 text-primary" />
-          {t('me.goals.activeGoals')}
+          {t('pages.me.goals.activeGoals')}
         </CardTitle>
         <Link href="/goals">
-          <Button variant="outline" size="sm" data-testid="link-manage-goals">{t('me.goals.manageGoals')}</Button>
+          <Button variant="outline" size="sm" data-testid="link-manage-goals">{t('pages.me.goals.manageGoals')}</Button>
         </Link>
       </CardHeader>
       <CardContent>
@@ -240,8 +240,8 @@ function GoalsSection({ activeGoals, goalsLoading, t }: { activeGoals: any[]; go
                   </div>
                   <Progress value={progressValue} className="h-2 mb-2" />
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{t('me.goals.current')}: {goal.currentValue || 0}</span>
-                    <span>{t('me.goals.target')}: {goal.targetValue || 0}</span>
+                    <span>{t('pages.me.goals.current')}: {goal.currentValue || 0}</span>
+                    <span>{t('pages.me.goals.target')}: {goal.targetValue || 0}</span>
                   </div>
                 </div>
               );
@@ -250,8 +250,8 @@ function GoalsSection({ activeGoals, goalsLoading, t }: { activeGoals: any[]; go
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             <Target className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="mb-2">{t('me.goals.noActiveGoals')}</p>
-            <Link href="/goals"><Button variant="outline" size="sm">{t('me.goals.createGoal')}</Button></Link>
+            <p className="mb-2">{t('pages.me.goals.noActiveGoals')}</p>
+            <Link href="/goals"><Button variant="outline" size="sm">{t('pages.me.goals.createGoal')}</Button></Link>
           </div>
         )}
       </CardContent>

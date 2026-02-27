@@ -30,7 +30,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-primary" />
-            {t('me.currentDeck.title')}
+            {t('pages.me.currentDeck.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -52,7 +52,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
               ))}
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8">{t('me.currentDeck.noDeckEquipped')}</p>
+            <p className="text-center text-muted-foreground py-8">{t('pages.me.currentDeck.noDeckEquipped')}</p>
           )}
         </CardContent>
       </Card>
@@ -61,7 +61,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
       <div>
         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
           <Swords className="w-5 h-5 text-primary" />
-          {t('me.mostUsedDecks.title')}
+          {t('pages.me.mostUsedDecks.title')}
         </h3>
         {deckUsage.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -103,7 +103,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Swords className="w-3 h-3" />
-                      {t('me.mostUsedDecks.matches', { count: deck.total })}
+                      {t('pages.me.mostUsedDecks.matches', { count: deck.total })}
                     </span>
                     <span>
                       <span className="text-green-500">{deck.wins}V</span>
@@ -121,10 +121,10 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
               {battlesLoading ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {t('me.mostUsedDecks.analyzingBattles')}
+                  {t('pages.me.mostUsedDecks.analyzingBattles')}
                 </div>
               ) : (
-                t('me.mostUsedDecks.noBattlesForAnalysis')
+                t('pages.me.mostUsedDecks.noBattlesForAnalysis')
               )}
             </CardContent>
           </Card>
@@ -141,7 +141,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <ThumbsUp className="w-5 h-5 text-green-500" />
-              {t('me.strengthsWeaknesses.strengths')}
+              {t('pages.me.strengthsWeaknesses.strengths')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -152,8 +152,8 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
                   className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/20"
                 >
                   <div>
-                    <p className="font-medium text-green-500">{t('me.strengthsWeaknesses.goodAgainst', { archetype: strength.archetype })}</p>
-                    <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.matches', { count: strength.matches })}</p>
+                    <p className="font-medium text-green-500">{t('pages.me.strengthsWeaknesses.goodAgainst', { archetype: strength.archetype })}</p>
+                    <p className="text-xs text-muted-foreground">{t('pages.me.strengthsWeaknesses.matches', { count: strength.matches })}</p>
                   </div>
                   <Badge variant="outline" className="border-green-500/50 text-green-500">
                     {strength.winRate}% WR
@@ -166,8 +166,8 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
                   "p-3 rounded-lg bg-muted/50 border border-border/50",
                   !isPro && "blur-sm"
                 )}>
-                  <p className="font-medium text-green-500">{t('me.strengthsWeaknesses.goodAgainst', { archetype: t('me.archetype.cycle') })}</p>
-                  <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
+                  <p className="font-medium text-green-500">{t('pages.me.strengthsWeaknesses.goodAgainst', { archetype: t('pages.me.archetype.cycle') })}</p>
+                  <p className="text-xs text-muted-foreground">{t('pages.me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
                 </div>
                 {!isPro && (
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -181,7 +181,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
             )}
             {archetypeAnalysis.strengths.length === 0 && isPro && (
               <p className="text-sm text-muted-foreground text-center py-2">
-                {t('me.strengthsWeaknesses.playMoreForStrengths')}
+                {t('pages.me.strengthsWeaknesses.playMoreForStrengths')}
               </p>
             )}
           </CardContent>
@@ -195,7 +195,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <ThumbsDown className="w-5 h-5 text-red-500" />
-              {t('me.strengthsWeaknesses.weaknesses')}
+              {t('pages.me.strengthsWeaknesses.weaknesses')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -206,8 +206,8 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
                   className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20"
                 >
                   <div>
-                    <p className="font-medium text-red-500">{t('me.strengthsWeaknesses.difficultyAgainst', { archetype: weakness.archetype })}</p>
-                    <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.matches', { count: weakness.matches })}</p>
+                    <p className="font-medium text-red-500">{t('pages.me.strengthsWeaknesses.difficultyAgainst', { archetype: weakness.archetype })}</p>
+                    <p className="text-xs text-muted-foreground">{t('pages.me.strengthsWeaknesses.matches', { count: weakness.matches })}</p>
                   </div>
                   <Badge variant="outline" className="border-red-500/50 text-red-500">
                     {weakness.winRate}% WR
@@ -220,8 +220,8 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
                   "p-3 rounded-lg bg-muted/50 border border-border/50",
                   !isPro && "blur-sm"
                 )}>
-                  <p className="font-medium text-red-500">{t('me.strengthsWeaknesses.difficultyAgainst', { archetype: t('me.archetype.beatdown') })}</p>
-                  <p className="text-xs text-muted-foreground">{t('me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
+                  <p className="font-medium text-red-500">{t('pages.me.strengthsWeaknesses.difficultyAgainst', { archetype: t('pages.me.archetype.beatdown') })}</p>
+                  <p className="text-xs text-muted-foreground">{t('pages.me.strengthsWeaknesses.analysisBasedOnBattles')}</p>
                 </div>
                 {!isPro && (
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -235,7 +235,7 @@ export function MeCardsTab({ data }: MeCardsTabProps) {
             )}
             {archetypeAnalysis.weaknesses.length === 0 && isPro && (
               <p className="text-sm text-muted-foreground text-center py-2">
-                {t('me.strengthsWeaknesses.playMoreForWeaknesses')}
+                {t('pages.me.strengthsWeaknesses.playMoreForWeaknesses')}
               </p>
             )}
           </CardContent>

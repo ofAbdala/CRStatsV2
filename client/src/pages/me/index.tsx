@@ -22,7 +22,7 @@ export default function MePage() {
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-2">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">{t('me.loading')}</p>
+            <p className="text-sm text-muted-foreground">{t('pages.me.loading')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -36,7 +36,7 @@ export default function MePage() {
           <Alert data-testid="alert-player-error">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {clashTag ? t('me.errors.playerNotFound', { tag: clashTag }) : t('me.errors.noTag')}
+              {clashTag ? t('pages.me.errors.playerNotFound', { tag: clashTag }) : t('pages.me.errors.noTag')}
             </AlertDescription>
           </Alert>
         )}
@@ -53,7 +53,7 @@ export default function MePage() {
                   </div>
                   <div>
                     <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground" data-testid="header-player-name">
-                      {player?.name || t('me.playerFallback')}
+                      {player?.name || t('pages.me.playerFallback')}
                     </h1>
                     <p className="text-muted-foreground font-mono text-sm" data-testid="header-player-tag">
                       {clashTag || '#XXXXXXXX'}
@@ -73,20 +73,20 @@ export default function MePage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="bg-background/50" data-testid="stat-winrate">
                     <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
-                    {stats.winRate}% {t('me.winRate')}
+                    {stats.winRate}% {t('pages.me.winRate')}
                   </Badge>
                   <Badge variant="outline" className="bg-background/50">
                     <Swords className="w-3 h-3 mr-1" />
-                    {stats.totalMatches} {t('me.matches')}
+                    {stats.totalMatches} {t('pages.me.matches')}
                   </Badge>
                   <Badge variant="outline" className={cn("bg-background/50", stats.streak.type === 'win' && "border-green-500/50 text-green-500", stats.streak.type === 'loss' && "border-red-500/50 text-red-500")} data-testid="stat-streak">
                     <Flame className="w-3 h-3 mr-1" />
-                    {stats.streak.count > 0 ? `${stats.streak.count} ${stats.streak.type === 'win' ? t('me.wins') : t('me.losses')} ${t('me.streak')}` : t('me.noStreak')}
+                    {stats.streak.count > 0 ? `${stats.streak.count} ${stats.streak.type === 'win' ? t('pages.me.wins') : t('pages.me.losses')} ${t('pages.me.streak')}` : t('pages.me.noStreak')}
                   </Badge>
                   {stats.lastPlayed && (
                     <Badge variant="outline" className="bg-background/50">
                       <Clock className="w-3 h-3 mr-1" />
-                      {t('me.lastPlayed', { time: stats.lastPlayed })}
+                      {t('pages.me.lastPlayed', { time: stats.lastPlayed })}
                     </Badge>
                   )}
                   <TiltAnalysis tiltAnalysis={tiltAnalysis} t={t} />
@@ -99,7 +99,7 @@ export default function MePage() {
                 )}
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                    {player?.arena?.name || t('me.arenaFallback')}
+                    {player?.arena?.name || t('pages.me.arenaFallback')}
                   </p>
                   <div className="text-3xl md:text-4xl font-display font-bold text-primary flex items-center gap-2" data-testid="header-trophies">
                     <Trophy className="w-6 h-6 md:w-8 md:h-8" />
@@ -108,7 +108,7 @@ export default function MePage() {
                   <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Award className="w-3 h-3 text-yellow-500" />
-                      {t('me.best')}: {player?.bestTrophies?.toLocaleString() || 0}
+                      {t('pages.me.best')}: {player?.bestTrophies?.toLocaleString() || 0}
                     </span>
                   </div>
                 </div>
@@ -119,10 +119,10 @@ export default function MePage() {
 
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto bg-card/50 border border-border/50 p-1 h-auto flex-wrap md:flex-nowrap">
-            <TabsTrigger value="overview" data-testid="tab-overview" className="flex-1 min-w-[100px]">{t('me.tabs.overview')}</TabsTrigger>
-            <TabsTrigger value="history" data-testid="tab-history" className="flex-1 min-w-[100px]">{t('me.tabs.history')}</TabsTrigger>
-            <TabsTrigger value="decks" data-testid="tab-decks" className="flex-1 min-w-[100px]">{t('me.tabs.decks')}</TabsTrigger>
-            <TabsTrigger value="progress" data-testid="tab-progress" className="flex-1 min-w-[100px]">{t('me.tabs.progress')}</TabsTrigger>
+            <TabsTrigger value="overview" data-testid="tab-overview" className="flex-1 min-w-[100px]">{t('pages.me.tabs.overview')}</TabsTrigger>
+            <TabsTrigger value="history" data-testid="tab-history" className="flex-1 min-w-[100px]">{t('pages.me.tabs.history')}</TabsTrigger>
+            <TabsTrigger value="decks" data-testid="tab-decks" className="flex-1 min-w-[100px]">{t('pages.me.tabs.decks')}</TabsTrigger>
+            <TabsTrigger value="progress" data-testid="tab-progress" className="flex-1 min-w-[100px]">{t('pages.me.tabs.progress')}</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="mt-6"><MeOverviewTab data={data} /></TabsContent>
           <TabsContent value="history" className="mt-6"><MeBattlesTab data={data} /></TabsContent>

@@ -126,9 +126,9 @@ export function useMeData(): MeDataContext {
   }, [battles, dateFnsLocale]);
 
   const tiltAnalysis = React.useMemo<TiltState>(() => {
-    if (stats.streak.type === 'loss' && stats.streak.count >= 3) return { trend: 'at-risk', label: t('me.analysis.atRisk') };
-    if (stats.streak.type === 'win' && stats.streak.count >= 3) return { trend: 'improving', label: t('me.analysis.onFire') };
-    return { trend: 'consistent', label: t('me.analysis.consistent') };
+    if (stats.streak.type === 'loss' && stats.streak.count >= 3) return { trend: 'at-risk', label: t('pages.me.analysis.atRisk') };
+    if (stats.streak.type === 'win' && stats.streak.count >= 3) return { trend: 'improving', label: t('pages.me.analysis.onFire') };
+    return { trend: 'consistent', label: t('pages.me.analysis.consistent') };
   }, [stats.streak, t]);
 
   const chartData = useChartData(battles, player?.trophies, locale);

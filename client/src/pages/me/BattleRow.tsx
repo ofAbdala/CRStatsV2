@@ -19,16 +19,16 @@ import { parseBattleTime } from "@/lib/pushUtils";
 import ClashCardImage from "@/components/clash/ClashCardImage";
 
 function formatGameMode(type: string | undefined, t: (key: string) => string): string {
-  if (!type) return t('me.battleType.unknown');
+  if (!type) return t('pages.me.battleType.unknown');
   const lowerType = type.toLowerCase();
 
-  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return t('me.battleType.ladder');
-  if (lowerType.includes('challenge')) return t('me.battleType.challenge');
-  if (lowerType.includes('tournament')) return t('me.battleType.tournament');
+  if (lowerType.includes('ladder') || lowerType.includes('pvp')) return t('pages.me.battleType.ladder');
+  if (lowerType.includes('challenge')) return t('pages.me.battleType.challenge');
+  if (lowerType.includes('tournament')) return t('pages.me.battleType.tournament');
   if (lowerType.includes('2v2')) return '2v2';
-  if (lowerType.includes('war')) return t('me.battleType.war');
-  if (lowerType.includes('friendly')) return t('me.battleType.friendly');
-  if (lowerType.includes('party')) return t('me.battleType.party');
+  if (lowerType.includes('war')) return t('pages.me.battleType.war');
+  if (lowerType.includes('friendly')) return t('pages.me.battleType.friendly');
+  if (lowerType.includes('party')) return t('pages.me.battleType.party');
 
   return type.replace(/([A-Z])/g, ' $1').trim();
 }
@@ -77,7 +77,7 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
                 isWin && !isDraw && "bg-green-600 hover:bg-green-700"
               )}
             >
-              {isWin && !isDraw ? t('me.result.win') : isDraw ? t('me.result.draw') : t('me.result.loss')}
+              {isWin && !isDraw ? t('pages.me.result.win') : isDraw ? t('pages.me.result.draw') : t('pages.me.result.loss')}
             </Badge>
 
             {/* Desktop info */}
@@ -97,7 +97,7 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
                 </span>
               )}
               <div className="flex flex-col">
-                <span className="text-sm font-medium">{opponent?.name || t('me.opponentFallback')}</span>
+                <span className="text-sm font-medium">{opponent?.name || t('pages.me.opponentFallback')}</span>
                 {opponent?.tag && (
                   <span className="text-xs text-muted-foreground font-mono">{opponent.tag}</span>
                 )}
@@ -117,7 +117,7 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
                   </span>
                 )}
               </div>
-              <span className="text-xs text-muted-foreground">{t('me.vs')} {opponent?.name || t('me.opponentFallback')}</span>
+              <span className="text-xs text-muted-foreground">{t('pages.me.vs')} {opponent?.name || t('pages.me.opponentFallback')}</span>
             </div>
           </div>
 
@@ -144,12 +144,12 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
             <Badge variant="outline">{gameMode}</Badge>
             {opponent?.tag && (
               <span className="text-muted-foreground">
-                {t('me.opponent')}: <span className="font-mono">{opponent.tag}</span>
+                {t('pages.me.opponent')}: <span className="font-mono">{opponent.tag}</span>
               </span>
             )}
             {battle.deckSelection && (
               <span className="text-muted-foreground">
-                {t('me.deckSelection')}: {battle.deckSelection}
+                {t('pages.me.deckSelection')}: {battle.deckSelection}
               </span>
             )}
           </div>
@@ -158,7 +158,7 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
             <div>
               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                 <Swords className="w-4 h-4 text-primary" />
-                {t('me.yourDeck')}
+                {t('pages.me.yourDeck')}
               </h4>
               <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                 {playerCards.map((card: any, cardIdx: number) => (
@@ -183,7 +183,7 @@ export function BattleRow({ battle, idx, locale, t }: BattleRowProps) {
             <div>
               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                 <Shield className="w-4 h-4 text-red-500" />
-                {t('me.opponentDeck')}
+                {t('pages.me.opponentDeck')}
               </h4>
               <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
                 {opponentCards.map((card: any, cardIdx: number) => (

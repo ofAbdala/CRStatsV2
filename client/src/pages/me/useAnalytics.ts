@@ -53,7 +53,7 @@ export function useDeckUsage(battles: any[], t: (key: string) => string): DeckUs
       .slice(0, 5)
       .map((deck, index) => ({
         ...deck,
-        name: index === 0 ? t('me.deck.primary') : index === 1 ? t('me.deck.secondary') : t('me.deck.other'),
+        name: index === 0 ? t('pages.me.deck.primary') : index === 1 ? t('pages.me.deck.secondary') : t('pages.me.deck.other'),
         winRate: deck.total > 0 ? Math.round((deck.wins / deck.total) * 100) : 0,
       }));
   }, [battles, t]);
@@ -69,10 +69,10 @@ export function useArchetypeAnalysis(battles: any[], t: (key: string) => string)
     const airCards = ['balloon', 'lavahound', 'minions', 'mega minion', 'baby dragon', 'inferno dragon'];
 
     const archetypeKeys: Record<string, { wins: number; losses: number }> = {
-      [t('me.archetype.beatdown')]: { wins: 0, losses: 0 },
-      [t('me.archetype.cycle')]: { wins: 0, losses: 0 },
-      [t('me.archetype.control')]: { wins: 0, losses: 0 },
-      [t('me.archetype.air')]: { wins: 0, losses: 0 },
+      [t('pages.me.archetype.beatdown')]: { wins: 0, losses: 0 },
+      [t('pages.me.archetype.cycle')]: { wins: 0, losses: 0 },
+      [t('pages.me.archetype.control')]: { wins: 0, losses: 0 },
+      [t('pages.me.archetype.air')]: { wins: 0, losses: 0 },
     };
 
     battles.forEach((battle: any) => {
@@ -83,16 +83,16 @@ export function useArchetypeAnalysis(battles: any[], t: (key: string) => string)
       const isWin = teamCrowns > opponentCrowns;
 
       if (cardNames.some((n: string) => beatdownCards.some(bc => n.includes(bc)))) {
-        if (isWin) archetypeKeys[t('me.archetype.beatdown')].wins++; else archetypeKeys[t('me.archetype.beatdown')].losses++;
+        if (isWin) archetypeKeys[t('pages.me.archetype.beatdown')].wins++; else archetypeKeys[t('pages.me.archetype.beatdown')].losses++;
       }
       if (cardNames.filter((n: string) => cycleCards.some(cc => n.includes(cc))).length >= 2) {
-        if (isWin) archetypeKeys[t('me.archetype.cycle')].wins++; else archetypeKeys[t('me.archetype.cycle')].losses++;
+        if (isWin) archetypeKeys[t('pages.me.archetype.cycle')].wins++; else archetypeKeys[t('pages.me.archetype.cycle')].losses++;
       }
       if (cardNames.some((n: string) => controlCards.some(cc => n.includes(cc)))) {
-        if (isWin) archetypeKeys[t('me.archetype.control')].wins++; else archetypeKeys[t('me.archetype.control')].losses++;
+        if (isWin) archetypeKeys[t('pages.me.archetype.control')].wins++; else archetypeKeys[t('pages.me.archetype.control')].losses++;
       }
       if (cardNames.filter((n: string) => airCards.some(ac => n.includes(ac))).length >= 2) {
-        if (isWin) archetypeKeys[t('me.archetype.air')].wins++; else archetypeKeys[t('me.archetype.air')].losses++;
+        if (isWin) archetypeKeys[t('pages.me.archetype.air')].wins++; else archetypeKeys[t('pages.me.archetype.air')].losses++;
       }
     });
 
@@ -155,9 +155,9 @@ export function usePlayVolume(battles: any[], locale: Locale, t: (key: string) =
   const dateFnsLocale = locale === 'pt-BR' ? ptBR : enUS;
   return React.useMemo(() => {
     const dayNames = [
-      t('me.weekday.sun'), t('me.weekday.mon'), t('me.weekday.tue'),
-      t('me.weekday.wed'), t('me.weekday.thu'), t('me.weekday.fri'),
-      t('me.weekday.sat'),
+      t('pages.me.weekday.sun'), t('pages.me.weekday.mon'), t('pages.me.weekday.tue'),
+      t('pages.me.weekday.wed'), t('pages.me.weekday.thu'), t('pages.me.weekday.fri'),
+      t('pages.me.weekday.sat'),
     ];
     const matchesByDay: Record<string, number> = {};
     const matchesByDayOfWeek: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
