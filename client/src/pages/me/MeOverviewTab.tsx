@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrophyChart } from "./TrophyChart";
+import { TiltHistory } from "./TiltHistory";
 import type { MeDataContext, GameModeStats } from "./types";
 
 interface MeOverviewTabProps {
@@ -153,6 +154,9 @@ export function MeOverviewTab({ data }: MeOverviewTabProps) {
           t={t}
         />
       </div>
+
+      {/* Tilt History — Story 2.5, AC6 */}
+      <TiltHistory />
     </div>
   );
 }

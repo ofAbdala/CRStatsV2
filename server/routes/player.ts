@@ -15,6 +15,12 @@ import {
 } from "../domain/syncRules";
 import { FREE_BATTLE_LIMIT, clampHistoryDays, clampHistoryLimit } from "../domain/battleHistory";
 import {
+  computeDailySummary,
+  buildTrophyProgression,
+  filterBattlesByRange,
+} from "../domain/pushSession";
+import { detectTilt, detectTiltHistory } from "@shared/domain/tilt";
+import {
   processBattleStats,
   computeCardWinRates,
   computeDeckStats,
@@ -585,6 +591,186 @@ router.get('/api/player/stats/matchups', requireAuth, async (req: any, res) => {
     return sendApiError(res, {
       route, userId, provider: "internal", status: 500,
       error: { code: "MATCHUP_STATS_FETCH_FAILED", message: "Failed to fetch matchup data" },
+    });
+  }
+});
+
+// ── Story 2.5: Enhanced Push Tracking & Tilt Detection ──────────────────────
+
+// GET /api/player/daily-summary — Today's push data + tilt status + streak (AC1-AC5, AC10)
+router.get('/api/player/daily-summary', requireAuth, async (req: any, res) => {
+  const route = "/api/player/daily-summary";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route, userId, provider: "supabase-auth", status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const profile = await storage.getProfile(userId);
+    const playerTag = getCanonicalProfileTag(profile);
+
+    if (!playerTag) {
+      return sendApiError(res, {
+        route, userId, provider: "internal", status: 400,
+        error: { code: "NO_CLASH_TAG", message: "No Clash Royale tag linked to your profile" },
+      });
+    }
+
+    const isPro = await storage.isPro(userId);
+    const battles = await storage.getBattleHistory(userId, playerTag, {
+      limit: isPro ? 2000 : FREE_BATTLE_LIMIT,
+    });
+
+    const rawBattles = battles.map((b: any) => b.battleJson ?? b);
+    const dailySummary = computeDailySummary(rawBattles);
+    const tiltDetection = detectTilt(rawBattles);
+
+    res.json({
+      ...dailySummary,
+      tilt: tiltDetection,
+    });
+  } catch (error) {
+    console.error("Error fetching daily summary:", error);
+    return sendApiError(res, {
+      route, userId, provider: "internal", status: 500,
+      error: { code: "DAILY_SUMMARY_FETCH_FAILED", message: "Failed to fetch daily summary" },
+    });
+  }
+});
+
+// GET /api/player/trophy-progression?range=today|week|season — Session-by-session chart data (AC7-AC9)
+router.get('/api/player/trophy-progression', requireAuth, async (req: any, res) => {
+  const route = "/api/player/trophy-progression";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route, userId, provider: "supabase-auth", status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const profile = await storage.getProfile(userId);
+    const playerTag = getCanonicalProfileTag(profile);
+
+    if (!playerTag) {
+      return sendApiError(res, {
+        route, userId, provider: "internal", status: 400,
+        error: { code: "NO_CLASH_TAG", message: "No Clash Royale tag linked to your profile" },
+      });
+    }
+
+    const isPro = await storage.isPro(userId);
+    const range = (req.query.range as string) || "week";
+
+    // Validate range
+    const validRanges = ["today", "week", "season"];
+    const safeRange = validRanges.includes(range) ? range as "today" | "week" | "season" : "week";
+
+    // Get enough battle history for the requested range
+    const daysForRange = safeRange === "today" ? 1 : safeRange === "week" ? 7 : 35;
+    const since = new Date(Date.now() - daysForRange * 24 * 60 * 60 * 1000);
+
+    const battles = await storage.getBattleHistory(userId, playerTag, {
+      since,
+      limit: isPro ? 2000 : FREE_BATTLE_LIMIT,
+    });
+
+    const rawBattles = battles.map((b: any) => b.battleJson ?? b);
+    const filteredBattles = filterBattlesByRange(rawBattles, safeRange);
+
+    // Get current trophies from the most recent sync
+    const syncState = await storage.getSyncState(userId);
+    // Use battles to estimate current trophies if not available from sync
+    // We'll pass 0 and let the client provide currentTrophies if needed
+    const currentTrophies = 0; // Client will supplement with player.trophies
+
+    const progression = buildTrophyProgression(filteredBattles, currentTrophies);
+
+    // Calculate push balance
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalTrophyDelta = 0;
+
+    for (const b of filteredBattles) {
+      const isWin = (b?.team?.[0]?.crowns ?? 0) > (b?.opponent?.[0]?.crowns ?? 0);
+      const isLoss = (b?.team?.[0]?.crowns ?? 0) < (b?.opponent?.[0]?.crowns ?? 0);
+      if (isWin) totalWins++;
+      else if (isLoss) totalLosses++;
+      const tc = b?.team?.[0]?.trophyChange;
+      totalTrophyDelta += typeof tc === "number" ? tc : (isWin ? 30 : isLoss ? -30 : 0);
+    }
+
+    res.json({
+      range: safeRange,
+      progression,
+      pushBalance: {
+        trophyDelta: totalTrophyDelta,
+        wins: totalWins,
+        losses: totalLosses,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching trophy progression:", error);
+    return sendApiError(res, {
+      route, userId, provider: "internal", status: 500,
+      error: { code: "TROPHY_PROGRESSION_FETCH_FAILED", message: "Failed to fetch trophy progression" },
+    });
+  }
+});
+
+// GET /api/player/tilt-history — Tilt events timeline (AC6)
+router.get('/api/player/tilt-history', requireAuth, async (req: any, res) => {
+  const route = "/api/player/tilt-history";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route, userId, provider: "supabase-auth", status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const profile = await storage.getProfile(userId);
+    const playerTag = getCanonicalProfileTag(profile);
+
+    if (!playerTag) {
+      return sendApiError(res, {
+        route, userId, provider: "internal", status: 400,
+        error: { code: "NO_CLASH_TAG", message: "No Clash Royale tag linked to your profile" },
+      });
+    }
+
+    const isPro = await storage.isPro(userId);
+    const battles = await storage.getBattleHistory(userId, playerTag, {
+      limit: isPro ? 2000 : FREE_BATTLE_LIMIT,
+    });
+
+    const rawBattles = battles.map((b: any) => b.battleJson ?? b);
+    const tiltEvents = detectTiltHistory(rawBattles);
+
+    res.json({
+      events: tiltEvents.map((e) => ({
+        startTime: e.startTime.toISOString(),
+        endTime: e.endTime.toISOString(),
+        consecutiveLosses: e.consecutiveLosses,
+        trophiesLost: e.trophiesLost,
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching tilt history:", error);
+    return sendApiError(res, {
+      route, userId, provider: "internal", status: 500,
+      error: { code: "TILT_HISTORY_FETCH_FAILED", message: "Failed to fetch tilt history" },
     });
   }
 });

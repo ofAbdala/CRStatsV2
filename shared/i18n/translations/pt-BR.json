@@ -53,7 +53,21 @@
     "progress7d": "Evolução (7 Dias)",
     "lastMatchesTitle": "Últimas Partidas",
     "noMatches": "Nenhuma partida recente",
-    "viewAllHistory": "Ver histórico completo"
+    "viewAllHistory": "Ver histórico completo",
+    "noBattlesToday": "Nenhuma batalha hoje \u2014 boa sorte na ladder!",
+    "statBattles": "Batalhas",
+    "statWinLoss": "V / D",
+    "statTrophyDelta": "Troféus",
+    "statWinRate": "Win Rate",
+    "winStreak": "+{count} vitórias líquidas",
+    "lossStreak": "-{count} derrotas líquidas",
+    "tiltDetected": "Tilt Detectado",
+    "tiltWarning": "Atenção",
+    "tiltSuggestion": "Você está numa sequência de derrotas. Faça uma pausa de 15 minutos \u2014 estatisticamente, jogadores que pausam recuperam melhor.",
+    "zoomToday": "Hoje",
+    "zoomWeek": "Semana",
+    "zoomSeason": "Temporada",
+    "trophiesLabel": "troféus"
   },
   "custom": {
     "trophies": "Troféus",
@@ -939,6 +953,11 @@
           "noData": "Dados insuficientes de confronto para este deck.",
           "loading": "Carregando confrontos..."
         }
+      },
+      "tiltHistory": {
+        "title": "Histórico de Tilt",
+        "empty": "Nenhum evento de tilt detectado. Continue jogando bem!",
+        "losses": "{count} derrotas consecutivas"
       }
     },
     "coach": {

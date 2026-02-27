@@ -53,7 +53,21 @@
     "progress7d": "Progress (7 Days)",
     "lastMatchesTitle": "Recent Matches",
     "noMatches": "No recent matches",
-    "viewAllHistory": "View full history"
+    "viewAllHistory": "View full history",
+    "noBattlesToday": "No battles yet \u2014 good luck on ladder!",
+    "statBattles": "Battles",
+    "statWinLoss": "W / L",
+    "statTrophyDelta": "Trophies",
+    "statWinRate": "Win Rate",
+    "winStreak": "+{count} net wins",
+    "lossStreak": "-{count} net losses",
+    "tiltDetected": "Tilt Detected",
+    "tiltWarning": "Watch Out",
+    "tiltSuggestion": "You're on a losing streak. Take a 15-minute break \u2014 statistically, players who pause recover better.",
+    "zoomToday": "Today",
+    "zoomWeek": "Week",
+    "zoomSeason": "Season",
+    "trophiesLabel": "trophies"
   },
   "custom": {
     "trophies": "Trophies",
@@ -939,6 +953,11 @@
           "noData": "Not enough matchup data for this deck.",
           "loading": "Loading matchups..."
         }
+      },
+      "tiltHistory": {
+        "title": "Tilt History",
+        "empty": "No tilt events detected. Keep playing smart!",
+        "losses": "{count} consecutive losses"
       }
     },
     "coach": {

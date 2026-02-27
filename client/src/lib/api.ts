@@ -196,6 +196,69 @@ export interface CounterDecksResponse {
   decks: CounterDeckData[];
 }
 
+// ── Story 2.5: Push Tracking & Tilt Detection Types ─────────────────────────
+
+/** Daily summary from /api/player/daily-summary (AC1-AC5, AC10) */
+export interface DailySummaryResponse {
+  date: string;
+  battles: number;
+  wins: number;
+  losses: number;
+  trophyDelta: number;
+  winRate: number;
+  streak: { type: "win" | "loss" | "none"; count: number };
+  sessions: Array<{
+    startTime: string;
+    endTime: string;
+    battles: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    trophyDelta: number;
+    winRate: number;
+  }>;
+  tilt: {
+    isOnTilt: boolean;
+    consecutiveLosses: number;
+    trophiesLostDuringTilt: number;
+    suggestedAction: "break" | "counter" | "analyze";
+  };
+}
+
+/** Trophy progression point for session-by-session chart */
+export interface TrophyProgressionPoint {
+  time: string;
+  trophies: number;
+  sessionIndex: number;
+  trophyDelta: number;
+  wins: number;
+  losses: number;
+}
+
+/** Trophy progression response from /api/player/trophy-progression (AC7-AC9) */
+export interface TrophyProgressionResponse {
+  range: "today" | "week" | "season";
+  progression: TrophyProgressionPoint[];
+  pushBalance: {
+    trophyDelta: number;
+    wins: number;
+    losses: number;
+  };
+}
+
+/** Tilt history event */
+export interface TiltHistoryEvent {
+  startTime: string;
+  endTime: string;
+  consecutiveLosses: number;
+  trophiesLost: number;
+}
+
+/** Tilt history response from /api/player/tilt-history (AC6) */
+export interface TiltHistoryResponse {
+  events: TiltHistoryEvent[];
+}
+
 // ── Story 2.4: Advanced Stats Types ──────────────────────────────────────────
 
 /** Card win rate result from /api/player/stats/cards (AC3) */
@@ -450,6 +513,12 @@ export const api = {
     // The sync response is complex (PlayerSyncResponse) and typed at the consumer level.
     sync: () => fetchAPI<unknown>("/player/sync", { method: "POST" }),
     getSyncState: () => fetchAPI<unknown>("/player/sync-state"),
+
+    // Story 2.5: Push tracking & tilt detection endpoints
+    dailySummary: () => fetchAPI<DailySummaryResponse>("/player/daily-summary"),
+    trophyProgression: (range: "today" | "week" | "season" = "week") =>
+      fetchAPI<TrophyProgressionResponse>(`/player/trophy-progression?range=${encodeURIComponent(range)}`),
+    tiltHistory: () => fetchAPI<TiltHistoryResponse>("/player/tilt-history"),
 
     // Story 2.4: Advanced stats endpoints
     stats: {
