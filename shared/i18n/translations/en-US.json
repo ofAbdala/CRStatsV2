@@ -701,6 +701,19 @@
       "emptyGoals": "No active goals.",
       "activeGoals": "Active goals",
       "viewPro": "View PRO features",
+      "tabs": {
+        "overview": "Overview",
+        "history": "History",
+        "decks": "Decks & Meta",
+        "progress": "Progress"
+      },
+      "filters": {
+        "today": "Today",
+        "7days": "7 Days",
+        "30days": "30 Days",
+        "60days": "60 Days",
+        "season": "Season"
+      },
       "stats": {
         "trophies": "Trophies",
         "winRate": "Win rate",
@@ -731,7 +744,8 @@
         "cycle": "Cycle",
         "control": "Control",
         "siege": "Siege",
-        "hybrid": "Hybrid"
+        "hybrid": "Hybrid",
+        "air": "Air"
       },
       "chart": {
         "trophies": "Trophies",
@@ -751,16 +765,23 @@
       "playerFallback": "Player",
       "arenaFallback": "Arena",
       "opponentFallback": "Opponent",
+      "winRate": "Win Rate",
+      "matches": "matches",
+      "wins": "wins",
+      "losses": "losses",
       "streak": "Streak",
       "noStreak": "No streak",
       "lastPlayed": "Played {time}",
       "best": "Best",
-      "tabs": {
-        "overview": "Overview",
-        "history": "History",
-        "decks": "Decks & Meta",
-        "progress": "Progress"
-      },
+      "trophies": "Trophies",
+      "date": "Date",
+      "current": "Current",
+      "currentTrophies": "Current trophies",
+      "vs": "vs",
+      "opponent": "Opponent",
+      "deckSelection": "Selection",
+      "yourDeck": "Your Deck",
+      "opponentDeck": "Opponent's Deck",
       "seasonSummary": {
         "title": "Season Summary",
         "currentTrophies": "Current Trophies",
@@ -786,12 +807,16 @@
         "ladder": "Ladder",
         "challenges": "Challenges"
       },
-      "filters": {
-        "today": "Today",
-        "7days": "7 Days",
-        "30days": "30 Days",
-        "60days": "60 Days",
-        "season": "Season"
+      "gameMode": {
+        "wins": "Wins",
+        "losses": "Losses",
+        "winRate": "Win Rate",
+        "matchCount": "{count} matches"
+      },
+      "result": {
+        "win": "Victory",
+        "loss": "Defeat",
+        "draw": "Draw"
       },
       "history": {
         "lastPush": "Last push: {count} matches, {wins}W/{losses}L, {trophies} trophies, {duration} min",
@@ -800,16 +825,6 @@
         "battleHistory": "Battle History",
         "noBattlesFound": "No battles found in this period"
       },
-      "result": {
-        "win": "Victory",
-        "loss": "Defeat",
-        "draw": "Draw"
-      },
-      "vs": "vs",
-      "opponent": "Opponent",
-      "deckSelection": "Selection",
-      "yourDeck": "Your Deck",
-      "opponentDeck": "Opponent's Deck",
       "currentDeck": {
         "title": "Current Deck",
         "noDeckEquipped": "No deck equipped"
@@ -836,12 +851,57 @@
         "playMoreToSeeProgress": "Play more matches to see progress",
         "recentBattlesNoTrophyData": "Recent battles have no trophy data"
       },
-      "current": "Current",
-      "currentTrophies": "Current trophies",
       "playVolume": {
         "title": "Play Volume ({days} days)"
       },
-      "date": "Date"
+      "playStats": {
+        "avgPerDay": "Average per Day",
+        "mostActiveDay": "Most Active Day",
+        "peakHour": "Peak Hour",
+        "matchCount": "{count} matches"
+      },
+      "weekday": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "goals": {
+        "activeGoals": "Active Goals",
+        "manageGoals": "Manage Goals",
+        "noActiveGoals": "No active goals",
+        "createGoal": "Create Goal",
+        "current": "Current",
+        "target": "Target"
+      },
+      "achievements": {
+        "general": "General Achievements",
+        "clan": "Clan Achievements",
+        "kingLevel": "King Level",
+        "totalWins": "Total Wins",
+        "totalLosses": "Total Losses",
+        "threeCrownWins": "Three Crown Wins",
+        "maxChallenge": "Max Challenge",
+        "cardsFound": "Cards Found",
+        "totalDonations": "Total Donations",
+        "donationsReceived": "Donations Received",
+        "clanWars": "Clan Wars",
+        "clanContribution": "Clan Contribution"
+      },
+      "proAnalytics": {
+        "title": "Advanced Analytics",
+        "trophyPrediction": "Trophy Prediction",
+        "nextWeek": "next week",
+        "idealDeck": "Ideal Deck",
+        "recentWinrate": "recent winrate",
+        "matchupAnalysis": "Matchup Analysis",
+        "decksDetected": "decks detected",
+        "availableOnPro": "Available on PRO plan",
+        "unlockPro": "Unlock on PRO"
+      }
     },
     "coach": {
       "subtitle": "Chat with AI Coach using real battle context.",

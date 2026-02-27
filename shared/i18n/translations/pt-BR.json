@@ -744,7 +744,8 @@
         "cycle": "Ciclo",
         "control": "Controle",
         "siege": "Cerco",
-        "hybrid": "Híbrido"
+        "hybrid": "Híbrido",
+        "air": "Aéreo"
       },
       "chart": {
         "trophies": "Troféus",
@@ -756,12 +757,151 @@
         "consistent": "Consistente"
       },
       "errors": {
-        "loadFailed": "Falha ao carregar perfil"
+        "loadFailed": "Falha ao carregar perfil",
+        "playerNotFound": "Jogador {tag} não encontrado",
+        "noTag": "Nenhuma tag vinculada"
       },
       "loading": "Carregando perfil...",
       "playerFallback": "Jogador",
       "arenaFallback": "Arena",
-      "opponentFallback": "Oponente"
+      "opponentFallback": "Oponente",
+      "winRate": "Win Rate",
+      "matches": "partidas",
+      "wins": "vitórias",
+      "losses": "derrotas",
+      "streak": "em sequência",
+      "noStreak": "Sem sequência",
+      "lastPlayed": "Jogou {time}",
+      "best": "Melhor",
+      "trophies": "Troféus",
+      "date": "Data",
+      "current": "Atual",
+      "currentTrophies": "Troféus atuais",
+      "vs": "vs",
+      "opponent": "Oponente",
+      "deckSelection": "Seleção",
+      "yourDeck": "Seu Deck",
+      "opponentDeck": "Deck do Oponente",
+      "seasonSummary": {
+        "title": "Resumo da Temporada",
+        "currentTrophies": "Troféus Atuais",
+        "bestSeason": "Melhor Temporada"
+      },
+      "recentPerformance": {
+        "title": "Desempenho Recente",
+        "lastBattles": "Últimas {count} batalhas",
+        "currentStreak": "Sequência Atual",
+        "status": "Status",
+        "winsLosses": "V/D"
+      },
+      "accountStatus": {
+        "title": "Status da Conta",
+        "plan": "Plano",
+        "totalWins": "Total de Vitórias",
+        "cardsCollected": "Cartas Coletadas"
+      },
+      "trophyProgression": {
+        "title": "Progressão de Troféus"
+      },
+      "gameModes": {
+        "ladder": "Ladder",
+        "challenges": "Desafios"
+      },
+      "gameMode": {
+        "wins": "Vitórias",
+        "losses": "Derrotas",
+        "winRate": "Win Rate",
+        "matchCount": "{count} partidas"
+      },
+      "result": {
+        "win": "Vitória",
+        "loss": "Derrota",
+        "draw": "Empate"
+      },
+      "history": {
+        "lastPush": "Último push: {count} partidas, {wins}V/{losses}D, {trophies} troféus, {duration} min",
+        "recentMatches": "Recente: {count} partidas, {wins}V/{losses}D ({winrate}%)",
+        "totalBattles": "{count} batalhas",
+        "battleHistory": "Histórico de Batalhas",
+        "noBattlesFound": "Nenhuma batalha encontrada neste período"
+      },
+      "currentDeck": {
+        "title": "Deck Atual",
+        "noDeckEquipped": "Nenhum deck equipado"
+      },
+      "mostUsedDecks": {
+        "title": "Decks Mais Usados",
+        "matches": "{count} partidas",
+        "analyzingBattles": "Analisando batalhas...",
+        "noBattlesForAnalysis": "Sem batalhas para análise"
+      },
+      "strengthsWeaknesses": {
+        "strengths": "Pontos Fortes",
+        "weaknesses": "Pontos Fracos",
+        "goodAgainst": "Bom contra: {archetype}",
+        "difficultyAgainst": "Dificuldade contra: {archetype}",
+        "matches": "{count} partidas",
+        "analysisBasedOnBattles": "Análise baseada em batalhas",
+        "playMoreForStrengths": "Jogue mais partidas para ver pontos fortes",
+        "playMoreForWeaknesses": "Jogue mais partidas para ver pontos fracos"
+      },
+      "trophyEvolution": {
+        "title": "Evolução de Troféus",
+        "noDataAvailable": "Nenhum dado de evolução disponível",
+        "playMoreToSeeProgress": "Jogue mais partidas para ver o progresso",
+        "recentBattlesNoTrophyData": "Batalhas recentes sem dados de troféus"
+      },
+      "playVolume": {
+        "title": "Volume de Jogo ({days} dias)"
+      },
+      "playStats": {
+        "avgPerDay": "Média por Dia",
+        "mostActiveDay": "Dia Mais Ativo",
+        "peakHour": "Horário de Pico",
+        "matchCount": "{count} partidas"
+      },
+      "weekday": {
+        "sun": "Dom",
+        "mon": "Seg",
+        "tue": "Ter",
+        "wed": "Qua",
+        "thu": "Qui",
+        "fri": "Sex",
+        "sat": "Sáb"
+      },
+      "goals": {
+        "activeGoals": "Metas Ativas",
+        "manageGoals": "Gerenciar Metas",
+        "noActiveGoals": "Nenhuma meta ativa",
+        "createGoal": "Criar Meta",
+        "current": "Atual",
+        "target": "Meta"
+      },
+      "achievements": {
+        "general": "Conquistas Gerais",
+        "clan": "Conquistas de Clã",
+        "kingLevel": "Nível do Rei",
+        "totalWins": "Total de Vitórias",
+        "totalLosses": "Total de Derrotas",
+        "threeCrownWins": "Vitórias em 3 Coroas",
+        "maxChallenge": "Máximo de Desafio",
+        "cardsFound": "Cartas Encontradas",
+        "totalDonations": "Doações Totais",
+        "donationsReceived": "Doações Recebidas",
+        "clanWars": "Guerras de Clã",
+        "clanContribution": "Contribuição de Clã"
+      },
+      "proAnalytics": {
+        "title": "Análises Avançadas",
+        "trophyPrediction": "Predição de Troféus",
+        "nextWeek": "próxima semana",
+        "idealDeck": "Deck Ideal",
+        "recentWinrate": "winrate recente",
+        "matchupAnalysis": "Análise de Matchup",
+        "decksDetected": "decks detectados",
+        "availableOnPro": "Disponível no plano PRO",
+        "unlockPro": "Desbloquear no PRO"
+      }
     },
     "coach": {
       "subtitle": "Converse com o Coach IA com contexto real das suas batalhas.",
