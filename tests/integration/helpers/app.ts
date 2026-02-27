@@ -504,6 +504,73 @@ export function mountDeckRoutes(
     }
   });
 
+  // GET /api/decks/meta/arena — Arena-personalized meta decks (Story 2.1)
+  router.get("/api/decks/meta/arena", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    const arenaRaw = req.query?.arena;
+    const arenaParsed = typeof arenaRaw === "string" ? Number.parseInt(arenaRaw, 10) : NaN;
+    if (!Number.isFinite(arenaParsed) || arenaParsed < 0 || arenaParsed > 100) {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "arena must be an integer between 0 and 100" });
+    }
+
+    try {
+      const decks = await storage.getArenaMetaDecks(arenaParsed, { limit: 50 });
+      res.json(decks.map((d: any) => ({
+        deckHash: d.deckHash,
+        cards: d.cards,
+        arenaId: d.arenaId,
+        winRate: d.winRate,
+        usageRate: d.usageRate,
+        threeCrownRate: d.threeCrownRate,
+        avgElixir: d.avgElixir,
+        sampleSize: d.sampleSize,
+        archetype: d.archetype ?? null,
+        limitedData: (d.sampleSize ?? 0) < 50,
+      })));
+    } catch (error) {
+      res.status(500).json({ code: "ARENA_META_DECKS_FETCH_FAILED", message: "Failed to fetch arena meta decks" });
+    }
+  });
+
+  // GET /api/decks/counter — Data-driven counter decks (Story 2.1)
+  router.get("/api/decks/counter", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    const cardRaw = typeof req.query?.card === "string" ? req.query.card.trim() : "";
+    const arenaRaw = req.query?.arena;
+    const arenaParsed = typeof arenaRaw === "string" ? Number.parseInt(arenaRaw, 10) : NaN;
+
+    if (!cardRaw || cardRaw.length > 80) {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "card is required and must be 1-80 characters" });
+    }
+    if (!Number.isFinite(arenaParsed) || arenaParsed < 0 || arenaParsed > 100) {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "arena must be an integer between 0 and 100" });
+    }
+
+    try {
+      const counterDecks = await storage.getArenaCounterDecks(arenaParsed, cardRaw.toLowerCase(), { limit: 10 });
+      const result = {
+        targetCard: cardRaw.toLowerCase(),
+        arenaId: arenaParsed,
+        limitedData: counterDecks.length === 0 || counterDecks.some((d: any) => (d.sampleSize ?? 0) < 50),
+        decks: counterDecks.map((d: any) => ({
+          deckHash: d.deckHash,
+          cards: d.cards,
+          winRateVsTarget: d.winRateVsTarget,
+          sampleSize: d.sampleSize,
+          threeCrownRate: d.threeCrownRate,
+          limitedData: (d.sampleSize ?? 0) < 50,
+        })),
+      };
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ code: "COUNTER_DECKS_FETCH_FAILED", message: "Failed to fetch counter decks" });
+    }
+  });
+
   // POST /api/decks/builder/counter
   router.post("/api/decks/builder/counter", async (req: any, res) => {
     const userId = req.auth?.userId;

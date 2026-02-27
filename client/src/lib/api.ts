@@ -164,6 +164,38 @@ export interface MetaDeckData {
   cacheStatus?: "fresh" | "stale";
 }
 
+/** Arena-personalized meta deck (Story 2.1) */
+export interface ArenaMetaDeckData {
+  deckHash: string;
+  cards: string[];
+  arenaId: number;
+  winRate: number;
+  usageRate: number;
+  threeCrownRate: number;
+  avgElixir: number | null;
+  sampleSize: number;
+  archetype: string | null;
+  limitedData: boolean;
+}
+
+/** Counter deck result from real battle data (Story 2.1) */
+export interface CounterDeckData {
+  deckHash: string;
+  cards: string[];
+  winRateVsTarget: number;
+  sampleSize: number;
+  threeCrownRate: number;
+  limitedData: boolean;
+}
+
+/** Counter decks API response (Story 2.1) */
+export interface CounterDecksResponse {
+  targetCard: string;
+  arenaId: number;
+  limitedData: boolean;
+  decks: CounterDeckData[];
+}
+
 const API_BASE = "/api";
 
 type ApiErrorDetail = { path?: string; message?: string; code?: string } | unknown;
@@ -452,6 +484,10 @@ export const api = {
       const query = params.toString();
       return fetchAPI<MetaDeckData[]>(`/decks/meta${query ? `?${query}` : ""}`);
     },
+    getArenaMetaDecks: (arenaId: number) =>
+      fetchAPI<ArenaMetaDeckData[]>(`/decks/meta/arena?arena=${encodeURIComponent(arenaId)}`),
+    getCounterDecks: (card: string, arenaId: number) =>
+      fetchAPI<CounterDecksResponse>(`/decks/counter?card=${encodeURIComponent(card)}&arena=${encodeURIComponent(arenaId)}`),
     generateCounter: (data: {
       targetCardKey: string;
       deckStyle?: "balanced" | "cycle" | "heavy";
@@ -472,6 +508,7 @@ export const api = {
         changes: { from: string; to: string }[];
         explanation: string;
         importLink: string;
+        metaContext?: { similarMetaDecks: { cards: string[]; winRateEstimate: number; games: number }[]; dataSource: string };
       }>("/decks/optimizer", { method: "POST", body: JSON.stringify(data) }),
   },
 

@@ -241,6 +241,16 @@ export function createMockStorage(overrides: Partial<IStorage> = {}): IStorage {
       return 0;
     },
     async incrementDeckSuggestionUsage() {},
+
+    // Arena Meta Decks (Story 2.1)
+    async getArenaMetaDecks() {
+      return [];
+    },
+    async replaceArenaMetaDecks() {},
+    async replaceAllArenaData() {},
+    async getArenaCounterDecks() {
+      return [];
+    },
   };
 
   return Object.assign(defaults, overrides);

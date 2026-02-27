@@ -6,11 +6,12 @@
  */
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { getUserStorage } from "../storage";
+import { getUserStorage, serviceStorage } from "../storage";
 import { requireAuth } from "../supabaseAuth";
 import { counterDeckRequestSchema, deckOptimizerRequestSchema } from "@shared/schema";
 import { generateCounterDeckSuggestion, generateDeckOptimizationSuggestion } from "../openai";
 import { COUNTER_MAP, buildClashDeckImportLink, computeAvgElixir, computeChanges, detectWinCondition, getCardIndex } from "../domain/decks";
+import { findCounterDecks } from "../domain/counterEngine";
 import {
   FREE_DECK_SUGGESTION_DAILY_LIMIT,
   getUserId,
@@ -120,9 +121,168 @@ function createMetaDecksHandler(route: string) {
   };
 }
 
+// ── In-memory response cache (TTL 1h) for arena endpoints (AC7, AC8) ─────────
+
+type CacheEntry<T> = { data: T; expiresAt: number };
+const responseCache = new Map<string, CacheEntry<unknown>>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function getCached<T>(key: string): T | null {
+  const entry = responseCache.get(key);
+  if (!entry || entry.expiresAt < Date.now()) {
+    if (entry) responseCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCache<T>(key: string, data: T): void {
+  responseCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 // ── Route definitions ──────────────────────────────────────────────────────────
 
-// New endpoint
+// GET /api/decks/meta/arena?arena={id} — Arena-personalized meta decks (Story 2.1, AC7)
+router.get("/api/decks/meta/arena", requireAuth, async (req: any, res: any) => {
+  const route = "/api/decks/meta/arena";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "supabase-auth",
+        status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const arenaRaw = req.query?.arena;
+    const arenaParsed = typeof arenaRaw === "string" ? Number.parseInt(arenaRaw, 10) : NaN;
+    if (!Number.isFinite(arenaParsed) || arenaParsed < 0 || arenaParsed > 100) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 400,
+        error: { code: "VALIDATION_ERROR", message: "arena must be an integer between 0 and 100" },
+      });
+    }
+
+    const cacheKey = `arena-meta:${arenaParsed}`;
+    const cached = getCached<unknown>(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const storage = getUserStorage(req.auth!);
+    const decks = await storage.getArenaMetaDecks(arenaParsed, { limit: 50 });
+
+    const result = decks.map((deck) => ({
+      deckHash: deck.deckHash,
+      cards: deck.cards,
+      arenaId: deck.arenaId,
+      winRate: deck.winRate,
+      usageRate: deck.usageRate,
+      threeCrownRate: deck.threeCrownRate,
+      avgElixir: deck.avgElixir,
+      sampleSize: deck.sampleSize,
+      archetype: deck.archetype ?? null,
+      limitedData: (deck.sampleSize ?? 0) < 50,
+    }));
+
+    setCache(cacheKey, result);
+    return res.json(result);
+  } catch (error) {
+    console.error("Error fetching arena meta decks:", error);
+    return sendApiError(res, {
+      route,
+      userId,
+      provider: "internal",
+      status: 500,
+      error: { code: "ARENA_META_DECKS_FETCH_FAILED", message: "Failed to fetch arena meta decks" },
+    });
+  }
+});
+
+// GET /api/decks/counter?card={name}&arena={id} — Counter decks from real data (Story 2.1, AC8)
+router.get("/api/decks/counter", requireAuth, async (req: any, res: any) => {
+  const route = "/api/decks/counter";
+  const userId = getUserId(req);
+
+  try {
+    if (!userId) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "supabase-auth",
+        status: 401,
+        error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+      });
+    }
+
+    const cardRaw = typeof req.query?.card === "string" ? req.query.card.trim() : "";
+    const arenaRaw = req.query?.arena;
+    const arenaParsed = typeof arenaRaw === "string" ? Number.parseInt(arenaRaw, 10) : NaN;
+
+    if (!cardRaw || cardRaw.length > 80) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 400,
+        error: { code: "VALIDATION_ERROR", message: "card is required and must be 1-80 characters" },
+      });
+    }
+
+    if (!Number.isFinite(arenaParsed) || arenaParsed < 0 || arenaParsed > 100) {
+      return sendApiError(res, {
+        route,
+        userId,
+        provider: "internal",
+        status: 400,
+        error: { code: "VALIDATION_ERROR", message: "arena must be an integer between 0 and 100" },
+      });
+    }
+
+    const cacheKey = `counter:${cardRaw.toLowerCase()}:${arenaParsed}`;
+    const cached = getCached<unknown>(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const counterResult = await findCounterDecks(cardRaw, arenaParsed);
+
+    const result = {
+      targetCard: counterResult.targetCard,
+      arenaId: counterResult.arenaId,
+      limitedData: counterResult.limitedData,
+      decks: counterResult.results.map((r) => ({
+        deckHash: r.deckHash,
+        cards: r.cards,
+        winRateVsTarget: r.winRateVsTarget,
+        sampleSize: r.sampleSize,
+        threeCrownRate: r.threeCrownRate,
+        limitedData: r.limitedData,
+      })),
+    };
+
+    setCache(cacheKey, result);
+    return res.json(result);
+  } catch (error) {
+    console.error("Error fetching counter decks:", error);
+    return sendApiError(res, {
+      route,
+      userId,
+      provider: "internal",
+      status: 500,
+      error: { code: "COUNTER_DECKS_FETCH_FAILED", message: "Failed to fetch counter decks" },
+    });
+  }
+});
+
+// Original endpoint (unchanged)
 router.get("/api/decks/meta", requireAuth, createMetaDecksHandler("/api/decks/meta"));
 // Backwards-compatible alias
 router.get("/api/meta/decks", requireAuth, createMetaDecksHandler("/api/meta/decks"));
@@ -467,12 +627,23 @@ router.post("/api/decks/optimizer", requireAuth, async (req: any, res: any) => {
       await storage.incrementDeckSuggestionUsage(userId, "optimizer");
     }
 
+    // AC10: Provide metaContext with actual win rates from the pipeline
+    const topMeta = metaSimilarDecks.slice(0, 3).map((d) => ({
+      cards: d.cards,
+      winRateEstimate: d.winRateEstimate,
+      games: d.games,
+    }));
+
     return res.json({
       originalDeck: { cards: currentDeck, avgElixir: avgElixirBefore },
       suggestedDeck: { cards: newDeck, avgElixir: avgElixirAfter },
       changes: computeChanges(currentDeck, newDeck),
       explanation: ai.explanation,
       importLink,
+      metaContext: {
+        similarMetaDecks: topMeta,
+        dataSource: topMeta.length > 0 ? "pipeline" : "none",
+      },
     });
   } catch (error) {
     console.error("Error optimizing deck:", error);

@@ -410,6 +410,71 @@ export type InsertMetaDeckCache = z.infer<typeof insertMetaDeckCacheSchema>;
 export type MetaDeckCache = typeof metaDecksCache.$inferSelect;
 
 // ============================================================================
+// ARENA META DECKS TABLE (Story 2.1)
+// ============================================================================
+
+export const arenaMetaDecks = pgTable(
+  "arena_meta_decks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    arenaId: integer("arena_id").notNull(),
+    deckHash: varchar("deck_hash").notNull(),
+    cards: jsonb("cards").notNull().$type<string[]>(),
+    winRate: real("win_rate").notNull(),
+    usageRate: real("usage_rate").notNull().default(0),
+    threeCrownRate: real("three_crown_rate").notNull().default(0),
+    avgElixir: real("avg_elixir"),
+    sampleSize: integer("sample_size").notNull().default(0),
+    archetype: varchar("archetype"),
+    snapshotDate: timestamp("snapshot_date", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_arena_meta_decks_arena_id").on(table.arenaId),
+    index("idx_arena_meta_decks_arena_snapshot").on(table.arenaId, table.snapshotDate),
+    uniqueIndex("uidx_arena_meta_decks_arena_deck_snapshot").on(table.arenaId, table.deckHash, table.snapshotDate),
+  ],
+);
+
+export const insertArenaMetaDeckSchema = createInsertSchema(arenaMetaDecks).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertArenaMetaDeck = z.infer<typeof insertArenaMetaDeckSchema>;
+export type ArenaMetaDeck = typeof arenaMetaDecks.$inferSelect;
+
+// ============================================================================
+// ARENA COUNTER DECKS TABLE (Story 2.1)
+// ============================================================================
+
+export const arenaCounterDecks = pgTable(
+  "arena_counter_decks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    arenaId: integer("arena_id").notNull(),
+    targetCard: varchar("target_card").notNull(),
+    deckHash: varchar("deck_hash").notNull(),
+    cards: jsonb("cards").notNull().$type<string[]>(),
+    winRateVsTarget: real("win_rate_vs_target").notNull(),
+    sampleSize: integer("sample_size").notNull().default(0),
+    threeCrownRate: real("three_crown_rate").notNull().default(0),
+    snapshotDate: timestamp("snapshot_date", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_arena_counter_decks_arena_card").on(table.arenaId, table.targetCard),
+    index("idx_arena_counter_decks_arena_snapshot").on(table.arenaId, table.snapshotDate),
+  ],
+);
+
+export const insertArenaCounterDeckSchema = createInsertSchema(arenaCounterDecks).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertArenaCounterDeck = z.infer<typeof insertArenaCounterDeckSchema>;
+export type ArenaCounterDeck = typeof arenaCounterDecks.$inferSelect;
+
+// ============================================================================
 // DECK SUGGESTIONS USAGE (FREE LIMITS)
 // ============================================================================
 
@@ -574,6 +639,15 @@ export const trainingDrillUpdateInputSchema = z
 
 export const trainingPlanUpdateInputSchema = z.object({
   status: z.enum(["active", "archived", "completed"]),
+});
+
+export const arenaMetaDecksQuerySchema = z.object({
+  arena: z.coerce.number().int().min(0).max(100),
+});
+
+export const arenaCounterDecksQuerySchema = z.object({
+  card: z.string().trim().min(1).max(80),
+  arena: z.coerce.number().int().min(0).max(100),
 });
 
 export type ProfileCreateInput = z.infer<typeof profileCreateInputSchema>;
