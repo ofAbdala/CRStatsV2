@@ -1056,5 +1056,37 @@
       "proBenefit3": "Análise avançada de decks",
       "upgradeCta": "Fazer upgrade para PRO"
     }
+  },
+  "hooks": {
+    "profile": {
+      "updateSuccessTitle": "Perfil atualizado",
+      "updateSuccessDescription": "Perfil atualizado com sucesso!",
+      "updateErrorTitle": "Erro ao atualizar perfil",
+      "updateErrorDescription": "Erro ao atualizar perfil: {message}"
+    },
+    "goals": {
+      "createSuccessTitle": "Meta criada",
+      "createSuccessDescription": "Meta criada com sucesso!",
+      "createErrorTitle": "Erro ao criar meta",
+      "createErrorDescription": "Erro ao criar meta: {message}",
+      "updateSuccessTitle": "Meta atualizada",
+      "updateSuccessDescription": "Meta atualizada com sucesso!",
+      "updateErrorTitle": "Erro ao atualizar meta",
+      "updateErrorDescription": "Erro ao atualizar meta: {message}",
+      "deleteSuccessTitle": "Meta deletada",
+      "deleteSuccessDescription": "Meta deletada com sucesso!",
+      "deleteErrorTitle": "Erro ao deletar meta",
+      "deleteErrorDescription": "Erro ao deletar meta: {message}"
+    },
+    "favorites": {
+      "addSuccessTitle": "Favorito adicionado",
+      "addSuccessDescription": "Jogador adicionado aos favoritos!",
+      "addErrorTitle": "Erro ao adicionar favorito",
+      "addErrorDescription": "Erro ao adicionar favorito: {message}",
+      "removeSuccessTitle": "Favorito removido",
+      "removeSuccessDescription": "Jogador removido dos favoritos!",
+      "removeErrorTitle": "Erro ao remover favorito",
+      "removeErrorDescription": "Erro ao remover favorito: {message}"
+    }
   }
 }

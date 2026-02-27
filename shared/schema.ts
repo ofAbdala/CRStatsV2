@@ -1,5 +1,6 @@
 import { sql, relations } from "drizzle-orm";
 import {
+  check,
   index,
   uniqueIndex,
   jsonb,
@@ -74,7 +75,11 @@ export const subscriptions = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [index("IDX_subscriptions_user_id").on(table.userId)],
+  (table) => [
+    uniqueIndex("UIDX_subscriptions_user_id").on(table.userId),
+    check("chk_subscriptions_plan", sql`${table.plan} IN ('free', 'pro')`),
+    check("chk_subscriptions_status", sql`${table.status} IN ('inactive', 'active', 'canceled', 'past_due')`),
+  ],
 );
 
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
@@ -104,7 +109,10 @@ export const goals = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [index("IDX_goals_user_id").on(table.userId)],
+  (table) => [
+    index("IDX_goals_user_id").on(table.userId),
+    check("chk_goals_type", sql`${table.type} IN ('trophies', 'streak', 'winrate', 'custom')`),
+  ],
 );
 
 export const insertGoalSchema = createInsertSchema(goals).omit({
@@ -179,9 +187,6 @@ export const userSettings = pgTable("user_settings", {
   defaultLandingPage: varchar("default_landing_page").default("dashboard"),
   showAdvancedStats: boolean("show_advanced_stats").default(false),
   notificationsEnabled: boolean("notifications_enabled").default(true),
-  notificationsTraining: boolean("notifications_training").default(true),
-  notificationsBilling: boolean("notifications_billing").default(true),
-  notificationsSystem: boolean("notifications_system").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -328,7 +333,10 @@ export const trainingPlans = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [index("IDX_training_plans_user_id").on(table.userId)],
+  (table) => [
+    index("IDX_training_plans_user_id").on(table.userId),
+    check("chk_training_plans_status", sql`${table.status} IN ('active', 'archived', 'completed')`),
+  ],
 );
 
 export const insertTrainingPlanSchema = createInsertSchema(trainingPlans).omit({
@@ -358,7 +366,10 @@ export const trainingDrills = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [index("IDX_training_drills_plan_id").on(table.planId)],
+  (table) => [
+    index("IDX_training_drills_plan_id").on(table.planId),
+    check("chk_training_drills_status", sql`${table.status} IN ('pending', 'in_progress', 'completed', 'skipped')`),
+  ],
 );
 
 export const insertTrainingDrillSchema = createInsertSchema(trainingDrills).omit({
@@ -470,9 +481,6 @@ export const settingsUpdateInputSchema = z
     defaultLandingPage: z.enum(["dashboard", "community", "goals", "coach"]).optional(),
     showAdvancedStats: z.boolean().optional(),
     notificationsEnabled: z.boolean().optional(),
-    notificationsTraining: z.boolean().optional(),
-    notificationsBilling: z.boolean().optional(),
-    notificationsSystem: z.boolean().optional(),
     notificationPreferences: settingsNotificationCategoriesSchema.optional(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {

@@ -44,9 +44,9 @@ router.get('/api/settings', requireAuth, async (req: any, res) => {
     res.json({
       ...settings,
       notificationPreferences: {
-        training: prefs?.training ?? settings.notificationsTraining ?? true,
-        billing: prefs?.billing ?? settings.notificationsBilling ?? true,
-        system: prefs?.system ?? settings.notificationsSystem ?? true,
+        training: prefs?.training ?? true,
+        billing: prefs?.billing ?? true,
+        system: prefs?.system ?? true,
       },
     });
   } catch (error) {
@@ -93,32 +93,24 @@ router.patch('/api/settings', requireAuth, async (req: any, res) => {
       });
     }
 
-    const categoryPayload = {
-      training: parsed.data.notificationPreferences?.training ?? parsed.data.notificationsTraining,
-      billing: parsed.data.notificationPreferences?.billing ?? parsed.data.notificationsBilling,
-      system: parsed.data.notificationPreferences?.system ?? parsed.data.notificationsSystem,
-    };
-
     const settingsPayload = {
       theme: parsed.data.theme,
       preferredLanguage: parsed.data.preferredLanguage,
       defaultLandingPage: parsed.data.defaultLandingPage,
       showAdvancedStats: parsed.data.showAdvancedStats,
       notificationsEnabled: parsed.data.notificationsEnabled,
-      notificationsTraining: categoryPayload.training,
-      notificationsBilling: categoryPayload.billing,
-      notificationsSystem: categoryPayload.system,
     };
 
     let settings = await storage.updateUserSettings(userId, settingsPayload);
 
+    const categoryPayload = parsed.data.notificationPreferences;
     const hasCategoryOverride =
-      categoryPayload.training !== undefined ||
-      categoryPayload.billing !== undefined ||
-      categoryPayload.system !== undefined;
+      categoryPayload?.training !== undefined ||
+      categoryPayload?.billing !== undefined ||
+      categoryPayload?.system !== undefined;
 
     let prefs = await storage.getNotificationPreferences(userId);
-    if (hasCategoryOverride) {
+    if (hasCategoryOverride && categoryPayload) {
       prefs = await storage.upsertNotificationPreferences(userId, categoryPayload);
 
       if (parsed.data.notificationsEnabled === undefined) {
@@ -133,9 +125,9 @@ router.patch('/api/settings', requireAuth, async (req: any, res) => {
     res.json({
       ...settings,
       notificationPreferences: {
-        training: prefs?.training ?? settings?.notificationsTraining ?? true,
-        billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
-        system: prefs?.system ?? settings?.notificationsSystem ?? true,
+        training: prefs?.training ?? true,
+        billing: prefs?.billing ?? true,
+        system: prefs?.system ?? true,
       },
     });
   } catch (error) {

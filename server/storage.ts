@@ -300,27 +300,18 @@ export class DatabaseStorage implements IStorage {
         defaultLandingPage: "dashboard",
         showAdvancedStats: false,
         notificationsEnabled: true,
-        notificationsTraining: true,
-        notificationsBilling: true,
-        notificationsSystem: true,
       })
       .onConflictDoNothing();
 
-    const [existingSubscription] = await tx
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.userId, userId))
-      .orderBy(desc(subscriptions.createdAt))
-      .limit(1);
-
-    if (!existingSubscription) {
-      await tx.insert(subscriptions).values({
+    await tx
+      .insert(subscriptions)
+      .values({
         userId,
         plan: "free",
         status: "inactive",
         cancelAtPeriodEnd: false,
-      });
-    }
+      })
+      .onConflictDoNothing();
 
     await tx
       .insert(notificationPreferences)
@@ -428,28 +419,19 @@ export class DatabaseStorage implements IStorage {
 
   async createSubscription(subscriptionData: InsertSubscription): Promise<Subscription> {
     return this.runAsUser(async (conn) => {
-      const [existing] = await conn
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, subscriptionData.userId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
-
-      if (existing) {
-        const [updated] = await conn
-          .update(subscriptions)
-          .set({
+      const [result] = await conn
+        .insert(subscriptions)
+        .values(subscriptionData)
+        .onConflictDoUpdate({
+          target: subscriptions.userId,
+          set: {
             ...subscriptionData,
             updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.id, existing.id))
-          .returning();
+          },
+        })
+        .returning();
 
-        return updated;
-      }
-
-      const [created] = await conn.insert(subscriptions).values(subscriptionData).returning();
-      return created;
+      return result;
     });
   }
 

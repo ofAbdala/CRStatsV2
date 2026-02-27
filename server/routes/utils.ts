@@ -129,22 +129,12 @@ export function getClashErrorCode(status: number) {
 
 export async function isNotificationAllowed(storage: IStorage, userId: string, category: NotificationCategory) {
   const prefs = await storage.getNotificationPreferences(userId);
-  if (prefs) {
-    return prefs[category];
-  }
-
-  const settings = await storage.getUserSettings(userId);
-  if (!settings) {
+  if (!prefs) {
+    // No preferences row exists yet -- allow by default
     return true;
   }
 
-  if (settings.notificationsEnabled === false) {
-    return false;
-  }
-
-  if (category === "training") return settings.notificationsTraining ?? true;
-  if (category === "billing") return settings.notificationsBilling ?? true;
-  return settings.notificationsSystem ?? true;
+  return prefs[category] ?? true;
 }
 
 export async function createNotificationIfAllowed(

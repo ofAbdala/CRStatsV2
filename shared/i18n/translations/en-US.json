@@ -1136,5 +1136,37 @@
       "proBenefit3": "Advanced deck analysis",
       "upgradeCta": "Upgrade to PRO"
     }
+  },
+  "hooks": {
+    "profile": {
+      "updateSuccessTitle": "Profile updated",
+      "updateSuccessDescription": "Profile updated successfully!",
+      "updateErrorTitle": "Profile update error",
+      "updateErrorDescription": "Error updating profile: {message}"
+    },
+    "goals": {
+      "createSuccessTitle": "Goal created",
+      "createSuccessDescription": "Goal created successfully!",
+      "createErrorTitle": "Goal creation error",
+      "createErrorDescription": "Error creating goal: {message}",
+      "updateSuccessTitle": "Goal updated",
+      "updateSuccessDescription": "Goal updated successfully!",
+      "updateErrorTitle": "Goal update error",
+      "updateErrorDescription": "Error updating goal: {message}",
+      "deleteSuccessTitle": "Goal deleted",
+      "deleteSuccessDescription": "Goal deleted successfully!",
+      "deleteErrorTitle": "Goal deletion error",
+      "deleteErrorDescription": "Error deleting goal: {message}"
+    },
+    "favorites": {
+      "addSuccessTitle": "Favorite added",
+      "addSuccessDescription": "Player added to favorites!",
+      "addErrorTitle": "Add favorite error",
+      "addErrorDescription": "Error adding favorite: {message}",
+      "removeSuccessTitle": "Favorite removed",
+      "removeSuccessDescription": "Player removed from favorites!",
+      "removeErrorTitle": "Remove favorite error",
+      "removeErrorDescription": "Error removing favorite: {message}"
+    }
   }
 }

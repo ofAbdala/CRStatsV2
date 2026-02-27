@@ -168,12 +168,11 @@ router.get('/api/notification-preferences', requireAuth, async (req: any, res) =
     const storage = getUserStorage(req.auth!);
     await storage.bootstrapUserData(userId);
     const prefs = await storage.getNotificationPreferences(userId);
-    const settings = await storage.getUserSettings(userId);
 
     res.json({
-      training: prefs?.training ?? settings?.notificationsTraining ?? true,
-      billing: prefs?.billing ?? settings?.notificationsBilling ?? true,
-      system: prefs?.system ?? settings?.notificationsSystem ?? true,
+      training: prefs?.training ?? true,
+      billing: prefs?.billing ?? true,
+      system: prefs?.system ?? true,
     });
   } catch (error) {
     console.error("Error fetching notification preferences:", error);
@@ -223,13 +222,6 @@ router.patch('/api/notification-preferences', requireAuth, async (req: any, res)
     }
 
     const updatedPrefs = await storage.upsertNotificationPreferences(userId, parsed.data);
-
-    await storage.updateUserSettings(userId, {
-      notificationsTraining: updatedPrefs.training,
-      notificationsBilling: updatedPrefs.billing,
-      notificationsSystem: updatedPrefs.system,
-      notificationsEnabled: updatedPrefs.training || updatedPrefs.billing || updatedPrefs.system,
-    });
 
     res.json({
       training: updatedPrefs.training,

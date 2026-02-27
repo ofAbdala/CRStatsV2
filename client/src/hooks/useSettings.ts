@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { toast } from 'sonner';
-import { detectLocale, t } from "@shared/i18n";
+import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/hooks/use-locale';
 
 export interface NotificationPreferences {
   training: boolean;
@@ -16,23 +16,7 @@ export interface UserSettingsResponse {
   defaultLandingPage?: string;
   showAdvancedStats?: boolean;
   notificationsEnabled?: boolean;
-  notificationsTraining?: boolean;
-  notificationsBilling?: boolean;
-  notificationsSystem?: boolean;
   notificationPreferences?: NotificationPreferences;
-}
-
-function resolveLocale() {
-  if (typeof window === "undefined") {
-    return "pt-BR" as const;
-  }
-
-  const localStorageLocale = window.localStorage.getItem("locale");
-  if (localStorageLocale === "pt-BR" || localStorageLocale === "en-US") {
-    return localStorageLocale;
-  }
-
-  return detectLocale(window.navigator.language);
 }
 
 export function useSettings() {
@@ -51,36 +35,46 @@ export function useNotificationPreferences() {
 
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { t } = useLocale();
 
   return useMutation({
     mutationFn: (data: Partial<UserSettingsResponse>) => api.settings.update(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
-      const locale = resolveLocale();
-      toast.success(t("settings.toast.updateSuccess", locale));
+      toast({
+        title: t("settings.toast.updateSuccess"),
+      });
     },
     onError: (error: Error) => {
-      const locale = resolveLocale();
-      toast.error(t("settings.toast.updateError", locale, { message: error.message }));
+      toast({
+        variant: 'destructive',
+        title: t("settings.toast.updateError", { message: error.message }),
+      });
     },
   });
 }
 
 export function useUpdateNotificationPreferences() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { t } = useLocale();
 
   return useMutation({
     mutationFn: (data: Partial<NotificationPreferences>) => api.notificationPreferences.update(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
-      const locale = resolveLocale();
-      toast.success(t("settings.toast.preferencesUpdateSuccess", locale));
+      toast({
+        title: t("settings.toast.preferencesUpdateSuccess"),
+      });
     },
     onError: (error: Error) => {
-      const locale = resolveLocale();
-      toast.error(t("settings.toast.preferencesUpdateError", locale, { message: error.message }));
+      toast({
+        variant: 'destructive',
+        title: t("settings.toast.preferencesUpdateError", { message: error.message }),
+      });
     },
   });
 }

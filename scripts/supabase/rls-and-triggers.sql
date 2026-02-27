@@ -81,9 +81,6 @@ begin
     default_landing_page,
     show_advanced_stats,
     notifications_enabled,
-    notifications_training,
-    notifications_billing,
-    notifications_system,
     created_at,
     updated_at
   )
@@ -94,18 +91,14 @@ begin
     'dashboard',
     false,
     true,
-    true,
-    true,
-    true,
     now(),
     now()
   )
   on conflict (user_id) do nothing;
 
-  if not exists (select 1 from public.subscriptions where user_id = v_user_id) then
-    insert into public.subscriptions (user_id, plan, status, cancel_at_period_end)
-    values (v_user_id, 'free', 'inactive', false);
-  end if;
+  insert into public.subscriptions (user_id, plan, status, cancel_at_period_end)
+  values (v_user_id, 'free', 'inactive', false)
+  on conflict (user_id) do nothing;
 
   insert into public.notification_preferences (user_id, training, billing, system, created_at, updated_at)
   values (v_user_id, true, true, true, now(), now())
