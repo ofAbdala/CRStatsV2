@@ -9,8 +9,7 @@ import { computeTiltState } from "../domain/syncRules";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-export const FREE_DAILY_LIMIT = 5;
-export const FREE_DECK_SUGGESTION_DAILY_LIMIT = 2;
+export { FREE_DAILY_LIMIT, FREE_DECK_SUGGESTION_DAILY_LIMIT } from "../../shared/constants/limits";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
