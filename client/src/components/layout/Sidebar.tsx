@@ -58,9 +58,8 @@ export function Sidebar({ isPro, className }: SidebarProps) {
     }, [pathname]);
 
     const navigation = [
-        { key: "nav.dashboard", href: "/home", icon: LayoutDashboard }, // Renamed path to /home conceptually, code uses /dashboard or /home? Vision says /home. Let's use /dashboard for now to match current router, alias later? Or change to /home. Plan says "Rename: Conceptually /home". I will stick to /dashboard for now to avoid breaking router immediately, or I should update router. I'll use /dashboard in link but maybe label "Home".
-        // Wait, Vision 3.1 says "HOME (rota: /home)". I should probably update router.ts later. For now, let's use /home and I will update router.
-        { key: "nav.push", href: "/push", icon: Zap }, // New Push route
+        { key: "nav.dashboard", href: "/home", icon: LayoutDashboard },
+        { key: "nav.push", href: "/push", icon: Zap },
         { key: "nav.coach", href: "/coach", icon: MessageSquare },
         { key: "nav.decks", href: "/decks", icon: Layers },
         { key: "nav.training", href: "/training", icon: Target, pro: true },
