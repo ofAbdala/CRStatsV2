@@ -1,4 +1,3 @@
-import { type ComponentType } from "react";
 import { Redirect } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocale } from "@/hooks/use-locale";
@@ -33,18 +32,4 @@ export function PrivateRoute({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
-}
-
-/**
- * Higher-order component that wraps a page component with `PrivateRoute`.
- * Returns a component suitable for the `component` prop of wouter's `<Route>`.
- */
-export function withPrivateRoute(PageComponent: ComponentType) {
-  return function PrivatePageWrapper() {
-    return (
-      <PrivateRoute>
-        <PageComponent />
-      </PrivateRoute>
-    );
-  };
 }
