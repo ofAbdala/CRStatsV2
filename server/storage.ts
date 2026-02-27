@@ -44,6 +44,12 @@ import {
   type InsertTrainingDrill,
   type MetaDeckCache,
   type InsertMetaDeckCache,
+  arenaMetaDecks,
+  arenaCounterDecks,
+  type ArenaMetaDeck,
+  type InsertArenaMetaDeck,
+  type ArenaCounterDeck,
+  type InsertArenaCounterDeck,
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
@@ -235,6 +241,17 @@ export interface IStorage {
   // Deck suggestions usage (FREE limits)
   countDeckSuggestionsToday(userId: string, type: "counter" | "optimizer"): Promise<number>;
   incrementDeckSuggestionUsage(userId: string, type: "counter" | "optimizer"): Promise<void>;
+
+  // Arena Meta Decks (Story 2.1)
+  getArenaMetaDecks(arenaId: number, options?: { limit?: number }): Promise<ArenaMetaDeck[]>;
+  replaceArenaMetaDecks(arenaId: number, decks: InsertArenaMetaDeck[]): Promise<void>;
+  replaceAllArenaData(
+    metaDecks: InsertArenaMetaDeck[],
+    counterDecks: InsertArenaCounterDeck[],
+  ): Promise<void>;
+
+  // Arena Counter Decks (Story 2.1)
+  getArenaCounterDecks(arenaId: number, targetCard: string, options?: { limit?: number }): Promise<ArenaCounterDeck[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1237,6 +1254,95 @@ export class DatabaseStorage implements IStorage {
         suggestionType: type,
       });
     });
+  }
+
+  // ── Arena Meta Decks (Story 2.1) ──────────────────────────────────────────
+
+  async getArenaMetaDecks(arenaId: number, options?: { limit?: number }): Promise<ArenaMetaDeck[]> {
+    const limit = typeof options?.limit === "number" && Number.isFinite(options.limit) ? Math.max(1, Math.min(100, options.limit)) : 50;
+
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(arenaMetaDecks)
+        .where(eq(arenaMetaDecks.arenaId, arenaId))
+        .orderBy(desc(arenaMetaDecks.winRate))
+        .limit(limit),
+    );
+  }
+
+  async replaceArenaMetaDecks(arenaId: number, decks: InsertArenaMetaDeck[]): Promise<void> {
+    const normalizedDecks = Array.isArray(decks) ? decks : [];
+
+    const exec = async (conn: any) => {
+      await conn.delete(arenaMetaDecks).where(eq(arenaMetaDecks.arenaId, arenaId));
+      if (normalizedDecks.length > 0) {
+        await conn.insert(arenaMetaDecks).values(normalizedDecks);
+      }
+    };
+
+    if (!this.auth) {
+      await db.transaction(async (tx) => exec(tx));
+      return;
+    }
+    await this.runAsUser(exec);
+  }
+
+  async replaceAllArenaData(
+    metaDecks: InsertArenaMetaDeck[],
+    counterDecks: InsertArenaCounterDeck[],
+  ): Promise<void> {
+    const exec = async (conn: any) => {
+      // Clear all existing data
+      await conn.delete(arenaMetaDecks);
+      await conn.delete(arenaCounterDecks);
+
+      // Insert new data in batches to avoid parameter limits
+      const META_BATCH_SIZE = 100;
+      for (let i = 0; i < metaDecks.length; i += META_BATCH_SIZE) {
+        const batch = metaDecks.slice(i, i + META_BATCH_SIZE);
+        if (batch.length > 0) {
+          await conn.insert(arenaMetaDecks).values(batch);
+        }
+      }
+
+      const COUNTER_BATCH_SIZE = 100;
+      for (let i = 0; i < counterDecks.length; i += COUNTER_BATCH_SIZE) {
+        const batch = counterDecks.slice(i, i + COUNTER_BATCH_SIZE);
+        if (batch.length > 0) {
+          await conn.insert(arenaCounterDecks).values(batch);
+        }
+      }
+    };
+
+    if (!this.auth) {
+      await db.transaction(async (tx) => exec(tx));
+      return;
+    }
+    await this.runAsUser(exec);
+  }
+
+  async getArenaCounterDecks(
+    arenaId: number,
+    targetCard: string,
+    options?: { limit?: number },
+  ): Promise<ArenaCounterDeck[]> {
+    const limit = typeof options?.limit === "number" && Number.isFinite(options.limit) ? Math.max(1, Math.min(50, options.limit)) : 10;
+    const cardKey = targetCard.trim().toLowerCase();
+
+    return this.runAsUser((conn) =>
+      conn
+        .select()
+        .from(arenaCounterDecks)
+        .where(
+          and(
+            eq(arenaCounterDecks.arenaId, arenaId),
+            eq(arenaCounterDecks.targetCard, cardKey),
+          ),
+        )
+        .orderBy(desc(arenaCounterDecks.winRateVsTarget))
+        .limit(limit),
+    );
   }
 }
 

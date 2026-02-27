@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import PageErrorState from "@/components/PageErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,8 +21,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocale } from "@/hooks/use-locale";
+import { api, type ArenaMetaDeckData } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errorMessages";
-import { AlertCircle, Copy, Loader2, Target } from "lucide-react";
+import { AlertCircle, AlertTriangle, Copy, Loader2, Target } from "lucide-react";
 
 import { DeckDisplay } from "./DeckDisplay";
 import { MetaCardsView, MetaEvolutionsView, MetaHeroesView, MetaTowerTroopsView } from "./MetaCardStatsTable";
@@ -230,6 +232,194 @@ function MetaPopularDecksView({
   );
 }
 
+// ── ArenaMetaDeckCard ────────────────────────────────────────────────────────
+
+function ArenaMetaDeckCard({
+  deck,
+  index,
+  onCopyDeck,
+}: {
+  deck: ArenaMetaDeckData;
+  index: number;
+  onCopyDeck: (deck: ArenaMetaDeckData) => void;
+}) {
+  const { t } = useLocale();
+
+  const winRateText = Number.isFinite(deck.winRate) ? `${(deck.winRate * 100).toFixed(1)}%` : UNKNOWN_VALUE;
+  const usageRateText = Number.isFinite(deck.usageRate) ? `${(deck.usageRate * 100).toFixed(1)}%` : UNKNOWN_VALUE;
+  const avgElixirText =
+    typeof deck.avgElixir === "number" && Number.isFinite(deck.avgElixir)
+      ? deck.avgElixir.toFixed(1)
+      : UNKNOWN_VALUE;
+
+  return (
+    <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Badge variant="secondary" className="px-2">
+                #{index + 1}
+              </Badge>
+              <Target className="w-4 h-4" />
+              <span className="truncate">{deck.archetype || t("decks.meta.deckFallback")}</span>
+              {deck.limitedData ? (
+                <Badge variant="outline" className="text-yellow-600 border-yellow-600/30">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Limited Data
+                </Badge>
+              ) : null}
+            </CardTitle>
+
+            <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+              <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
+                <p className="text-muted-foreground">{t("decks.meta.avgElixir")}</p>
+                <p className="font-medium">{avgElixirText}</p>
+              </div>
+              <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
+                <p className="text-muted-foreground">{t("decks.meta.winRate")}</p>
+                <p className="font-medium text-green-500">{winRateText}</p>
+              </div>
+              <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
+                <p className="text-muted-foreground">Usage</p>
+                <p className="font-medium">{usageRateText}</p>
+              </div>
+              <div className="rounded-md border border-border/50 bg-muted/20 px-2 py-1">
+                <p className="text-muted-foreground">{t("decks.meta.sampleSize")}</p>
+                <p className="font-medium">{deck.sampleSize}</p>
+              </div>
+            </div>
+          </div>
+
+          <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={() => onCopyDeck(deck)}>
+            <Copy className="w-3.5 h-3.5 mr-2" />
+            {t("decks.meta.copyDeck")}
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <DeckDisplay
+          cards={(deck.cards || []).slice(0, 8)}
+          keyPrefix={deck.deckHash}
+          size="lg"
+          showLevel={false}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── ArenaMetaDecksView ──────────────────────────────────────────────────────
+
+function ArenaMetaDecksView({
+  arenaDecks,
+  isLoading,
+  isError,
+  error,
+  onRetry,
+  onCopyDeck,
+}: {
+  arenaDecks: ArenaMetaDeckData[];
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  onRetry: () => void;
+  onCopyDeck: (deck: ArenaMetaDeckData) => void;
+}) {
+  const { t } = useLocale();
+  const [sort, setSort] = useState<MetaDeckSort>("popularity");
+
+  const sortedDecks = useMemo(() => {
+    const sorted = [...arenaDecks];
+    sorted.sort((a, b) => {
+      if (sort === "win-rate") {
+        return (b.winRate ?? 0) - (a.winRate ?? 0);
+      }
+      // popularity: highest usage rate first
+      return (b.usageRate ?? 0) - (a.usageRate ?? 0);
+    });
+    return sorted;
+  }, [arenaDecks, sort]);
+
+  const hasLimitedData = arenaDecks.some((d) => d.limitedData);
+
+  if (isLoading) {
+    return (
+      <Card className="border-border/50 bg-card/50">
+        <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading arena meta decks...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <PageErrorState
+        title="Failed to load arena meta decks"
+        description={getApiErrorMessage(error, t, "pages.decks.metaErrorDescription")}
+        error={error}
+        onRetry={onRetry}
+      />
+    );
+  }
+
+  if (arenaDecks.length === 0) {
+    return (
+      <Card className="border-border/50 bg-card/50">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          No arena-specific meta data available yet. Data is collected daily.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {hasLimitedData ? (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Some decks have limited sample sizes. Results may be less reliable.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Card className="border-border/50 bg-card/50">
+        <CardContent className="py-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">{t("decks.meta.filters.sort")}</Label>
+              <Select
+                value={sort}
+                onValueChange={(value) => {
+                  if (isMetaDeckSort(value)) setSort(value);
+                }}
+              >
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder={t("decks.meta.filters.sortByPopularity")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="popularity">{t("decks.meta.filters.sortByPopularity")}</SelectItem>
+                  <SelectItem value="win-rate">{t("decks.meta.filters.sortByWinRate")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {sortedDecks.map((deck, index) => (
+          <ArenaMetaDeckCard key={deck.deckHash} deck={deck} index={index} onCopyDeck={onCopyDeck} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main export: MetaDecksTab ────────────────────────────────────────────────
 
 export type MetaDecksTabProps = {
@@ -239,16 +429,29 @@ export type MetaDecksTabProps = {
   isError: boolean;
   error: unknown;
   onRetry: () => void;
+  arenaId: number;
 };
 
-export function MetaDecksTab({ metaDecks, hasStaleCache, isLoading, isError, error, onRetry }: MetaDecksTabProps) {
+export function MetaDecksTab({ metaDecks, hasStaleCache, isLoading, isError, error, onRetry, arenaId }: MetaDecksTabProps) {
   const { t } = useLocale();
   const { toast } = useToast();
   const [innerTab, setInnerTab] = useState<MetaInnerTab>("decks");
 
-  const metaCardRows = useMemo(() => buildMetaCardRows(metaDecks), [metaDecks]);
+  // Fetch arena-personalized meta decks (Story 2.1, AC3/AC7)
+  const arenaDecksQuery = useQuery({
+    queryKey: ["arena-meta-decks", arenaId],
+    queryFn: () => api.decks.getArenaMetaDecks(arenaId),
+    staleTime: 60 * 60 * 1000, // 1 hour (matches server cache TTL)
+  });
 
-  const handleCopyDeck = async (deck: MetaDeck) => {
+  const arenaDecks = arenaDecksQuery.data || [];
+  const hasArenaData = arenaDecks.length > 0;
+
+  // Use arena decks when available, fall back to global meta decks
+  const effectiveMetaDecks = hasArenaData ? [] : metaDecks;
+  const metaCardRows = useMemo(() => buildMetaCardRows(effectiveMetaDecks), [effectiveMetaDecks]);
+
+  const handleCopyDeck = async (deck: MetaDeck | ArenaMetaDeckData) => {
     const list = buildCardListText((deck.cards || []).slice(0, 8));
 
     try {
@@ -291,47 +494,54 @@ export function MetaDecksTab({ metaDecks, hasStaleCache, isLoading, isError, err
         </TabsList>
       </Tabs>
 
-      {hasStaleCache ? (
+      {hasStaleCache && !hasArenaData ? (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{t("pages.decks.staleCache")}</AlertDescription>
         </Alert>
       ) : null}
 
-      {isLoading ? (
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {t("pages.decks.loadingMetaDecks")}
-          </CardContent>
-        </Card>
-      ) : isError ? (
-        <PageErrorState
-          title={t("pages.decks.metaErrorTitle")}
-          description={getApiErrorMessage(error, t, "pages.decks.metaErrorDescription")}
-          error={error}
-          onRetry={onRetry}
-        />
-      ) : metaDecks.length === 0 ? (
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            {t("pages.decks.emptyMetaDecks")}
-          </CardContent>
-        </Card>
+      {innerTab === "decks" ? (
+        hasArenaData || arenaDecksQuery.isLoading || arenaDecksQuery.isError ? (
+          <ArenaMetaDecksView
+            arenaDecks={arenaDecks}
+            isLoading={arenaDecksQuery.isLoading}
+            isError={arenaDecksQuery.isError}
+            error={arenaDecksQuery.error}
+            onRetry={() => arenaDecksQuery.refetch()}
+            onCopyDeck={handleCopyDeck}
+          />
+        ) : isLoading ? (
+          <Card className="border-border/50 bg-card/50">
+            <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {t("pages.decks.loadingMetaDecks")}
+            </CardContent>
+          </Card>
+        ) : isError ? (
+          <PageErrorState
+            title={t("pages.decks.metaErrorTitle")}
+            description={getApiErrorMessage(error, t, "pages.decks.metaErrorDescription")}
+            error={error}
+            onRetry={onRetry}
+          />
+        ) : metaDecks.length === 0 ? (
+          <Card className="border-border/50 bg-card/50">
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              {t("pages.decks.emptyMetaDecks")}
+            </CardContent>
+          </Card>
+        ) : (
+          <MetaPopularDecksView metaDecks={metaDecks} onCopyDeck={handleCopyDeck} />
+        )
+      ) : innerTab === "cards" ? (
+        <MetaCardsView rows={metaCardRows} />
+      ) : innerTab === "evolutions" ? (
+        <MetaEvolutionsView rows={metaCardRows} />
+      ) : innerTab === "heroes" ? (
+        <MetaHeroesView rows={metaCardRows} />
       ) : (
-        <>
-          {innerTab === "decks" ? (
-            <MetaPopularDecksView metaDecks={metaDecks} onCopyDeck={handleCopyDeck} />
-          ) : innerTab === "cards" ? (
-            <MetaCardsView rows={metaCardRows} />
-          ) : innerTab === "evolutions" ? (
-            <MetaEvolutionsView rows={metaCardRows} />
-          ) : innerTab === "heroes" ? (
-            <MetaHeroesView rows={metaCardRows} />
-          ) : (
-            <MetaTowerTroopsView rows={metaCardRows} />
-          )}
-        </>
+        <MetaTowerTroopsView rows={metaCardRows} />
       )}
     </div>
   );

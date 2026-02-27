@@ -75,6 +75,33 @@ export type MetaCardRow = {
 
 export const UNKNOWN_VALUE = "-";
 
+/** Arena definitions for the arena selector (Story 2.1) */
+export const ARENA_OPTIONS = [
+  { id: 10, name: "Hog Mountain" },
+  { id: 11, name: "Electro Valley" },
+  { id: 12, name: "Spooky Town" },
+  { id: 13, name: "Rascal's Hideout" },
+  { id: 14, name: "Serenity Peak" },
+  { id: 15, name: "Miner's Mine" },
+  { id: 16, name: "Executioner's Kitchen" },
+  { id: 17, name: "Royal Crypt" },
+  { id: 18, name: "Silent Sanctuary" },
+  { id: 19, name: "Dragon Spa" },
+  { id: 20, name: "Legendary Arena" },
+  { id: 54, name: "Legendary Arena (Top)" },
+] as const;
+
+export type ArenaId = (typeof ARENA_OPTIONS)[number]["id"];
+
+export function isArenaId(value: number): value is ArenaId {
+  return ARENA_OPTIONS.some((a) => a.id === value);
+}
+
+export function getArenaName(id: number): string {
+  const arena = ARENA_OPTIONS.find((a) => a.id === id);
+  return arena?.name ?? `Arena ${id}`;
+}
+
 export const PROBLEM_CARDS = [
   "Mega Knight",
   "Witch",

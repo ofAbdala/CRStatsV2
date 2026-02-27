@@ -7,6 +7,7 @@
 import { Router } from "express";
 import { runRetention } from "./retention";
 import { runMetaRefresh } from "./metaRefresh";
+import { runMetaPipeline } from "./metaPipeline";
 import { logger } from "../logger";
 
 const router = Router();
@@ -83,6 +84,32 @@ router.get("/api/cron/meta-refresh", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: "Meta refresh job failed",
+      durationMs,
+    });
+  }
+});
+
+// GET /api/cron/meta-pipeline — arena-personalized meta deck pipeline (Story 2.1, daily at 04:00 UTC)
+router.get("/api/cron/meta-pipeline", async (req, res) => {
+  if (!verifyCronAuth(req, res)) return;
+
+  const startMs = Date.now();
+  try {
+    logger.info("Cron: meta pipeline job started");
+    const result = await runMetaPipeline();
+    const durationMs = Date.now() - startMs;
+
+    logger.info("Cron: meta pipeline job completed", { durationMs, ...result.stats });
+    return res.json({ ok: true, durationMs, stats: result.stats });
+  } catch (error) {
+    const durationMs = Date.now() - startMs;
+    logger.error("Cron: meta pipeline job failed", {
+      error: error instanceof Error ? error.message : String(error),
+      durationMs,
+    });
+    return res.status(500).json({
+      ok: false,
+      error: "Meta pipeline job failed",
       durationMs,
     });
   }
