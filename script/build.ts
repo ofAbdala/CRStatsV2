@@ -2,8 +2,9 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
+// Server deps to BUNDLE (inline) into dist/index.cjs.
+// This reduces openat(2) syscalls on cold start in Vercel serverless.
+// Deps NOT in this list are kept as externals (resolved from node_modules).
 const allowlist = [
   "@google/generative-ai",
   "axios",

@@ -88,4 +88,39 @@ router.get("/api/cron/meta-refresh", async (req, res) => {
   }
 });
 
+// GET /api/cron/meta-pipeline — full meta deck pipeline (daily, Story 2.1)
+// This endpoint is the scheduled trigger for the complete meta deck analysis
+// pipeline. The actual pipeline logic is implemented in Story 2.1.
+// Vercel Cron calls this at 04:00 UTC daily.
+router.get("/api/cron/meta-pipeline", async (req, res) => {
+  if (!verifyCronAuth(req, res)) return;
+
+  const startMs = Date.now();
+  try {
+    logger.info("Cron: meta pipeline job started");
+
+    // TODO(Story 2.1): Replace with actual pipeline call.
+    // import { runMetaPipeline } from "./metaPipeline";
+    // const results = await runMetaPipeline();
+    //
+    // For now, delegate to the existing meta-refresh as a placeholder.
+    await runMetaRefresh();
+
+    const durationMs = Date.now() - startMs;
+    logger.info("Cron: meta pipeline job completed", { durationMs });
+    return res.json({ ok: true, durationMs, note: "placeholder — pending Story 2.1 implementation" });
+  } catch (error) {
+    const durationMs = Date.now() - startMs;
+    logger.error("Cron: meta pipeline job failed", {
+      error: error instanceof Error ? error.message : String(error),
+      durationMs,
+    });
+    return res.status(500).json({
+      ok: false,
+      error: "Meta pipeline job failed",
+      durationMs,
+    });
+  }
+});
+
 export default router;

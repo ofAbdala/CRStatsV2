@@ -28,9 +28,20 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
   const enableViteInDevelopment = options?.enableViteInDevelopment ?? true;
 
   // CORS configuration (TD-006)
+  // Supports multiple origins via comma-separated CORS_ORIGIN env var.
+  // Defaults to production domain; dev adds localhost origins automatically.
+  const corsOrigins = (process.env.CORS_ORIGIN || "https://crstats.app")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  if (process.env.NODE_ENV !== "production") {
+    corsOrigins.push("http://localhost:5000", "http://localhost:5173");
+  }
+
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN || "https://crstats.app",
+      origin: corsOrigins,
       credentials: true,
     }),
   );
@@ -141,9 +152,14 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
     });
   });
 
-  if (process.env.NODE_ENV === "production") {
+  // On Vercel, static assets are served directly by the CDN/edge — the
+  // serverless function only handles /api/* routes.  serveStatic is only
+  // needed when running the built app as a standalone Node process.
+  const isVercel = process.env.VERCEL === "1";
+
+  if (process.env.NODE_ENV === "production" && !isVercel) {
     serveStatic(app);
-  } else if (enableViteInDevelopment) {
+  } else if (process.env.NODE_ENV !== "production" && enableViteInDevelopment) {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }

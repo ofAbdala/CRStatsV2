@@ -1,15 +1,31 @@
 {
   "version": 2,
   "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
   "functions": {
     "api/index.ts": {
+      "memory": 512,
+      "maxDuration": 30,
       "includeFiles": "dist/**"
     }
   },
-  "routes": [
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
     {
-      "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
     }
   ],
   "crons": [
@@ -20,6 +36,10 @@
     {
       "path": "/api/cron/meta-refresh",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/meta-pipeline",
+      "schedule": "0 4 * * *"
     }
   ]
 }
