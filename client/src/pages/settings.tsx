@@ -32,22 +32,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
-
-function formatDate(value: string | null | undefined, locale: "pt-BR" | "en-US") {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
-}
-
-function formatMoneyFromCents(amountInCents: number, currency: string, locale: "pt-BR" | "en-US") {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format((amountInCents || 0) / 100);
-}
+import { formatDate, formatMoneyFromCents } from "@/lib/formatters";
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();

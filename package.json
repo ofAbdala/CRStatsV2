@@ -12,7 +12,8 @@
     "test:critical": "node --import tsx --test server/domain/syncRules.test.ts server/domain/battleHistory.test.ts server/domain/stripeCheckout.test.ts shared/contracts/playerSyncPayload.test.ts",
     "audit:data": "tsx scripts/audit-data-authenticity.ts",
     "audit:data:strict": "tsx scripts/audit-data-authenticity.ts --strict",
-    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "supabase:apply": "tsx scripts/supabase/apply-sql.ts"
   },
   "dependencies": {

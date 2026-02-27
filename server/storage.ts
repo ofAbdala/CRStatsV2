@@ -269,178 +269,101 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async bootstrapUserData(userId: string): Promise<BootstrapResult> {
-    if (!this.auth) {
-      return db.transaction(async (tx) => {
-        const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
-        const fallbackDisplayName =
-          [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-          user?.email?.split("@")[0] ||
-          "Player";
+  /**
+   * Shared bootstrap logic used by both the RLS and no-RLS paths (TD-025).
+   * Extracted to eliminate ~85 lines of duplication.
+   */
+  private async _bootstrapInTransaction(tx: any, userId: string): Promise<BootstrapResult> {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    const fallbackDisplayName =
+      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+      user?.email?.split("@")[0] ||
+      "Player";
 
-        await tx
-          .insert(profiles)
-          .values({
-            userId,
-            displayName: fallbackDisplayName,
-            region: "BR",
-            language: "pt",
-            role: "user",
-          })
-          .onConflictDoNothing();
+    await tx
+      .insert(profiles)
+      .values({
+        userId,
+        displayName: fallbackDisplayName,
+        region: "BR",
+        language: "pt",
+        role: "user",
+      })
+      .onConflictDoNothing();
 
-        await tx
-          .insert(userSettings)
-          .values({
-            userId,
-            theme: "dark",
-            preferredLanguage: "pt",
-            defaultLandingPage: "dashboard",
-            showAdvancedStats: false,
-            notificationsEnabled: true,
-            notificationsTraining: true,
-            notificationsBilling: true,
-            notificationsSystem: true,
-          })
-          .onConflictDoNothing();
+    await tx
+      .insert(userSettings)
+      .values({
+        userId,
+        theme: "dark",
+        preferredLanguage: "pt",
+        defaultLandingPage: "dashboard",
+        showAdvancedStats: false,
+        notificationsEnabled: true,
+        notificationsTraining: true,
+        notificationsBilling: true,
+        notificationsSystem: true,
+      })
+      .onConflictDoNothing();
 
-        const [existingSubscription] = await tx
-          .select()
-          .from(subscriptions)
-          .where(eq(subscriptions.userId, userId))
-          .orderBy(desc(subscriptions.createdAt))
-          .limit(1);
+    const [existingSubscription] = await tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
 
-        if (!existingSubscription) {
-          await tx.insert(subscriptions).values({
-            userId,
-            plan: "free",
-            status: "inactive",
-            cancelAtPeriodEnd: false,
-          });
-        }
-
-        await tx
-          .insert(notificationPreferences)
-          .values({
-            userId,
-            training: true,
-            billing: true,
-            system: true,
-          })
-          .onConflictDoNothing();
-
-        const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
-        const [settings] = await tx.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
-        const [subscription] = await tx
-          .select()
-          .from(subscriptions)
-          .where(eq(subscriptions.userId, userId))
-          .orderBy(desc(subscriptions.createdAt))
-          .limit(1);
-        const [prefs] = await tx
-          .select()
-          .from(notificationPreferences)
-          .where(eq(notificationPreferences.userId, userId))
-          .limit(1);
-
-        if (!profile || !settings || !subscription || !prefs) {
-          throw new Error("Failed to bootstrap canonical user data");
-        }
-
-        return {
-          profile,
-          settings,
-          subscription,
-          notificationPreferences: prefs,
-        };
+    if (!existingSubscription) {
+      await tx.insert(subscriptions).values({
+        userId,
+        plan: "free",
+        status: "inactive",
+        cancelAtPeriodEnd: false,
       });
     }
 
-    return this.runAsUser(async (tx) => {
-      const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
-      const fallbackDisplayName =
-        [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-        user?.email?.split("@")[0] ||
-        "Player";
+    await tx
+      .insert(notificationPreferences)
+      .values({
+        userId,
+        training: true,
+        billing: true,
+        system: true,
+      })
+      .onConflictDoNothing();
 
-      await tx
-        .insert(profiles)
-        .values({
-          userId,
-          displayName: fallbackDisplayName,
-          region: "BR",
-          language: "pt",
-          role: "user",
-        })
-        .onConflictDoNothing();
+    const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+    const [settings] = await tx.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+    const [subscription] = await tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    const [prefs] = await tx
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId))
+      .limit(1);
 
-      await tx
-        .insert(userSettings)
-        .values({
-          userId,
-          theme: "dark",
-          preferredLanguage: "pt",
-          defaultLandingPage: "dashboard",
-          showAdvancedStats: false,
-          notificationsEnabled: true,
-          notificationsTraining: true,
-          notificationsBilling: true,
-          notificationsSystem: true,
-        })
-        .onConflictDoNothing();
+    if (!profile || !settings || !subscription || !prefs) {
+      throw new Error("Failed to bootstrap canonical user data");
+    }
 
-      const [existingSubscription] = await tx
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+    return {
+      profile,
+      settings,
+      subscription,
+      notificationPreferences: prefs,
+    };
+  }
 
-      if (!existingSubscription) {
-        await tx.insert(subscriptions).values({
-          userId,
-          plan: "free",
-          status: "inactive",
-          cancelAtPeriodEnd: false,
-        });
-      }
+  async bootstrapUserData(userId: string): Promise<BootstrapResult> {
+    if (!this.auth) {
+      return db.transaction(async (tx) => this._bootstrapInTransaction(tx, userId));
+    }
 
-      await tx
-        .insert(notificationPreferences)
-        .values({
-          userId,
-          training: true,
-          billing: true,
-          system: true,
-        })
-        .onConflictDoNothing();
-
-      const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
-      const [settings] = await tx.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
-      const [subscription] = await tx
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
-      const [prefs] = await tx
-        .select()
-        .from(notificationPreferences)
-        .where(eq(notificationPreferences.userId, userId))
-        .limit(1);
-
-      if (!profile || !settings || !subscription || !prefs) {
-        throw new Error("Failed to bootstrap canonical user data");
-      }
-
-      return {
-        profile,
-        settings,
-        subscription,
-        notificationPreferences: prefs,
-      };
-    });
+    return this.runAsUser(async (tx) => this._bootstrapInTransaction(tx, userId));
   }
 
   async getProfile(userId: string): Promise<Profile | undefined> {

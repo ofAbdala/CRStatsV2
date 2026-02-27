@@ -1,14 +1,19 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { logger } from "./logger";
 
 const hasOpenAIConfig =
   Boolean(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL) &&
   Boolean(process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
 
+/** Timeout in milliseconds for OpenAI API requests (AC9). */
+const OPENAI_TIMEOUT_MS = 15_000;
+
 const openai = hasOpenAIConfig
   ? new OpenAI({
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      timeout: OPENAI_TIMEOUT_MS,
     })
   : null;
 
@@ -209,19 +214,26 @@ function fallbackTrainingPlan(analysis: PushAnalysisResult): GeneratedTrainingPl
   };
 }
 
+function isTimeoutError(error: unknown): boolean {
+  if (error instanceof Error && error.name === "APIConnectionTimeoutError") return true;
+  if (error instanceof Error && error.message.includes("timed out")) return true;
+  return false;
+}
+
 function logOpenAIError(operation: string, error: unknown, context?: ProviderLogContext) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(
-    JSON.stringify({
-      provider: context?.provider || "openai",
-      operation,
-      route: context?.route,
-      userId: context?.userId || "anonymous",
-      requestId: context?.requestId,
-      message,
-      at: new Date().toISOString(),
-    }),
-  );
+  const isTimeout = isTimeoutError(error);
+
+  logger.error(isTimeout ? "OpenAI API timeout" : "OpenAI API error", {
+    provider: context?.provider || "openai",
+    operation,
+    route: context?.route,
+    userId: context?.userId || "anonymous",
+    requestId: context?.requestId,
+    message,
+    ...(isTimeout ? { timeoutMs: OPENAI_TIMEOUT_MS } : {}),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
 }
 
 export async function generateCoachResponse(

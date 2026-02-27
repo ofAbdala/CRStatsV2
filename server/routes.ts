@@ -38,9 +38,7 @@ import { FREE_BATTLE_LIMIT, clampHistoryDays, clampHistoryLimit } from "./domain
 import { validateCheckoutPriceId } from "./domain/stripeCheckout";
 import { COUNTER_MAP, buildClashDeckImportLink, computeAvgElixir, computeChanges, detectArchetype, detectWinCondition, getCardIndex } from "./domain/decks";
 import { refreshMetaDecksCacheIfStale } from "./domain/metaDecksRefresh";
-
-const FREE_DAILY_LIMIT = 5;
-const FREE_DECK_SUGGESTION_DAILY_LIMIT = 2;
+import { FREE_DAILY_LIMIT, FREE_DECK_SUGGESTION_DAILY_LIMIT } from "@shared/constants/limits";
 
 type ApiProvider = "internal" | "supabase-auth" | "clash-royale" | "stripe" | "openai";
 

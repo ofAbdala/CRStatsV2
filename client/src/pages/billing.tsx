@@ -22,6 +22,7 @@ import { Crown, ExternalLink, Loader2, ReceiptText } from "lucide-react";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
 import { getYearlySavingsPercent } from "@shared/pricing";
+import { formatDate, formatMoneyFromCents } from "@/lib/formatters";
 
 interface SubscriptionResponse {
   plan?: string;
@@ -41,22 +42,6 @@ interface BillingInvoice {
   periodEnd: string | null;
   hostedInvoiceUrl: string | null;
   invoicePdf: string | null;
-}
-
-function formatDate(value: string | null | undefined, locale: "pt-BR" | "en-US") {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(locale, { year: "numeric", month: "2-digit", day: "2-digit" });
-}
-
-function formatMoneyFromCents(amountInCents: number, currency: string, locale: "pt-BR" | "en-US") {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format((amountInCents || 0) / 100);
 }
 
 export default function BillingPage() {

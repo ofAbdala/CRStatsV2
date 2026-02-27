@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { randomUUID } from "crypto";
+import { logger, createRequestLogger } from "./logger";
 
 declare module "http" {
   interface IncomingMessage {
@@ -12,15 +13,12 @@ declare module "http" {
   }
 }
 
+/**
+ * Legacy helper kept for backward compatibility with call-sites that
+ * import `log` from `./app`.  New code should use `logger` from `./logger`.
+ */
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info(message, { source });
 }
 
 export async function createApp(options?: { enableViteInDevelopment?: boolean }) {
@@ -46,6 +44,7 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
     }),
   );
 
+  // --- Request ID assignment (TD-057) ---
   app.use((req, res, next) => {
     const headerValue = req.headers["x-request-id"];
     const requestId =
@@ -71,9 +70,20 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
 
   app.use(express.urlencoded({ extended: false }));
 
+  // --- Request logging middleware (TD-057 / AC6, AC8) ---
   app.use((req, res, next) => {
     const start = Date.now();
     const path = req.path;
+    const requestId: string = (req as any).requestId;
+    const reqLogger = createRequestLogger(requestId);
+
+    // Attach logger to request so downstream handlers can use it
+    (req as any).log = reqLogger;
+
+    if (path.startsWith("/api")) {
+      reqLogger.info("request start", { method: req.method, path });
+    }
+
     let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
     const originalResJson = res.json;
@@ -85,16 +95,13 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
     res.on("finish", () => {
       const duration = Date.now() - start;
       if (path.startsWith("/api")) {
-        let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-        const requestId = (req as any).requestId;
-        if (requestId) {
-          logLine += ` [requestId=${requestId}]`;
-        }
-        if (capturedJsonResponse) {
-          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-        }
-
-        log(logLine);
+        reqLogger.info("request end", {
+          method: req.method,
+          path,
+          status: res.statusCode,
+          durationMs: duration,
+          ...(capturedJsonResponse ? { responseBody: capturedJsonResponse } : {}),
+        });
       }
     });
 
@@ -103,30 +110,30 @@ export async function createApp(options?: { enableViteInDevelopment?: boolean })
 
   await registerRoutes(httpServer, app);
 
+  // --- Global error handler ---
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     const code = err.code || (status >= 500 ? "INTERNAL_SERVER_ERROR" : "REQUEST_ERROR");
+    const requestId: string | undefined = (req as any).requestId;
 
     res.status(status).json({
       code,
       message,
       details: err.details,
-      requestId: (req as any).requestId,
+      requestId,
     });
 
-    console.error(
-      JSON.stringify({
-        route: req.path,
-        userId: (req as any)?.auth?.userId ?? "anonymous",
-        provider: "internal",
-        status,
-        code,
-        message,
-        requestId: (req as any).requestId,
-      }),
-    );
-    console.error("Unhandled application error:", err);
+    const reqLogger = requestId ? createRequestLogger(requestId) : logger;
+    reqLogger.error("unhandled application error", {
+      route: req.path,
+      userId: (req as any)?.auth?.userId ?? "anonymous",
+      provider: "internal",
+      status,
+      code,
+      message,
+      stack: err.stack,
+    });
   });
 
   if (process.env.NODE_ENV === "production") {
