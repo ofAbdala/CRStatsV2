@@ -5,6 +5,7 @@
  *   POST /api/coach/push-analysis, GET /api/coach/push-analysis/latest
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { getUserStorage } from "../storage";
 import { requireAuth } from "../supabaseAuth";
 import { coachChatInputSchema } from "@shared/schema";
@@ -30,8 +31,19 @@ import { gatherPlayerContext } from "./coachContext";
 
 const router = Router();
 
+// Per-route rate limiter for AI coach endpoints (TD-005 Phase 2)
+// 10 requests per minute per authenticated user
+const aiCoachLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.auth?.userId || req.ip,
+  message: { code: "RATE_LIMIT_EXCEEDED", message: "Rate limit exceeded for AI coach endpoints. Please wait before sending more requests." },
+});
+
 // POST /api/coach/chat
-router.post('/api/coach/chat', requireAuth, async (req: any, res) => {
+router.post('/api/coach/chat', requireAuth, aiCoachLimiter, async (req: any, res) => {
   const route = "/api/coach/chat";
   const userId = getUserId(req);
 

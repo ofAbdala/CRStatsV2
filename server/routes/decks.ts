@@ -5,6 +5,7 @@
  *   POST /api/decks/builder/counter, POST /api/decks/optimizer
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { getUserStorage } from "../storage";
 import { requireAuth } from "../supabaseAuth";
 import { counterDeckRequestSchema, deckOptimizerRequestSchema } from "@shared/schema";
@@ -20,6 +21,17 @@ import {
 } from "./utils";
 
 const router = Router();
+
+// Per-route rate limiter for AI deck builder endpoints (TD-005 Phase 2)
+// 10 requests per minute per authenticated user
+const aiDeckLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.auth?.userId || req.ip,
+  message: { code: "RATE_LIMIT_EXCEEDED", message: "Rate limit exceeded for AI deck builder endpoints. Please wait before sending more requests." },
+});
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
@@ -124,7 +136,7 @@ router.get("/api/decks/meta", requireAuth, createMetaDecksHandler("/api/decks/me
 router.get("/api/meta/decks", requireAuth, createMetaDecksHandler("/api/meta/decks"));
 
 // POST /api/decks/builder/counter
-router.post("/api/decks/builder/counter", requireAuth, async (req: any, res: any) => {
+router.post("/api/decks/builder/counter", requireAuth, aiDeckLimiter, async (req: any, res: any) => {
   const route = "/api/decks/builder/counter";
   const userId = getUserId(req);
 

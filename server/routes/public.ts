@@ -5,13 +5,25 @@
  *   GET /api/public/player/:tag, GET /api/public/clan/:tag
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { getPlayerByTag, getPlayerBattles, getCards, getClanByTag, getClanMembers } from "../clashRoyaleApi";
 import { getUserId, sendApiError, getClashErrorCode } from "./utils";
 
 const router = Router();
 
+// Per-route rate limiter for public Clash API proxy endpoints (TD-005 Phase 2)
+// 30 requests per minute per IP
+const publicProxyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || "unknown",
+  message: { code: "RATE_LIMIT_EXCEEDED", message: "Rate limit exceeded for public API. Please wait before making more requests." },
+});
+
 // GET /api/clash/player/:tag
-router.get('/api/clash/player/:tag', async (req: any, res) => {
+router.get('/api/clash/player/:tag', publicProxyLimiter, async (req: any, res) => {
   const route = "/api/clash/player/:tag";
   const userId = getUserId(req);
 
@@ -46,7 +58,7 @@ router.get('/api/clash/player/:tag', async (req: any, res) => {
 });
 
 // GET /api/clash/player/:tag/battles
-router.get('/api/clash/player/:tag/battles', async (req: any, res) => {
+router.get('/api/clash/player/:tag/battles', publicProxyLimiter, async (req: any, res) => {
   const route = "/api/clash/player/:tag/battles";
   const userId = getUserId(req);
 
@@ -81,7 +93,7 @@ router.get('/api/clash/player/:tag/battles', async (req: any, res) => {
 });
 
 // GET /api/clash/cards
-router.get('/api/clash/cards', async (req: any, res) => {
+router.get('/api/clash/cards', publicProxyLimiter, async (req: any, res) => {
   const route = "/api/clash/cards";
   const userId = getUserId(req);
 
@@ -115,7 +127,7 @@ router.get('/api/clash/cards', async (req: any, res) => {
 });
 
 // GET /api/public/player/:tag
-router.get('/api/public/player/:tag', async (req, res) => {
+router.get('/api/public/player/:tag', publicProxyLimiter, async (req, res) => {
   try {
     const { tag } = req.params;
     const playerResult = await getPlayerByTag(tag);
@@ -142,7 +154,7 @@ router.get('/api/public/player/:tag', async (req, res) => {
 });
 
 // GET /api/public/clan/:tag
-router.get('/api/public/clan/:tag', async (req, res) => {
+router.get('/api/public/clan/:tag', publicProxyLimiter, async (req, res) => {
   try {
     const { tag } = req.params;
     const clanResult = await getClanByTag(tag);

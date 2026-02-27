@@ -1,12 +1,13 @@
-import { type ComponentType, useEffect } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { type ComponentType } from "react";
+import { Route, Switch } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import { LocaleProvider, useLocale } from "@/hooks/use-locale";
+import { LocaleProvider } from "@/hooks/use-locale";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PrivateRoute } from "@/components/auth/PrivateRoute";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import NotFoundPage from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
@@ -25,6 +26,8 @@ import MePage from "@/pages/me";
 import NotificationsPage from "@/pages/notifications";
 import GoalsPage from "@/pages/goals";
 import PushPage from "@/pages/push";
+
+// ── Error boundary wrappers ─────────────────────────────────────────────────
 
 function withLocalBoundary(component: ComponentType, contextKey: string) {
   return function ComponentWithBoundary() {
@@ -46,74 +49,66 @@ const NotificationsWithBoundary = withLocalBoundary(NotificationsPage, "notifica
 const GoalsWithBoundary = withLocalBoundary(GoalsPage, "goals");
 const PushWithBoundary = withLocalBoundary(PushPage, "push");
 
-function RedirectToAuth() {
-  const [, setLocation] = useLocation();
+// ── Private route wrappers ──────────────────────────────────────────────────
+// Each private page is defined exactly once (TD-021).  The `PrivateRoute`
+// wrapper handles auth checking and redirects unauthenticated users to `/auth`.
 
-  useEffect(() => {
-    setLocation("/auth");
-  }, [setLocation]);
+function PrivateDashboard() { return <PrivateRoute><DashboardWithBoundary /></PrivateRoute>; }
+function PrivatePush() { return <PrivateRoute><PushWithBoundary /></PrivateRoute>; }
+function PrivateCoach() { return <PrivateRoute><CoachWithBoundary /></PrivateRoute>; }
+function PrivateTraining() { return <PrivateRoute><TrainingWithBoundary /></PrivateRoute>; }
+function PrivateDecks() { return <PrivateRoute><DecksPage /></PrivateRoute>; }
+function PrivateCommunity() { return <PrivateRoute><CommunityPage /></PrivateRoute>; }
+function PrivateGoals() { return <PrivateRoute><GoalsWithBoundary /></PrivateRoute>; }
+function PrivateSettings() { return <PrivateRoute><SettingsPage /></PrivateRoute>; }
+function PrivateProfile() { return <PrivateRoute><ProfilePage /></PrivateRoute>; }
+function PrivateOnboarding() { return <PrivateRoute><OnboardingPage /></PrivateRoute>; }
+function PrivateBilling() { return <PrivateRoute><BillingWithBoundary /></PrivateRoute>; }
+function PrivateMe() { return <PrivateRoute><MeWithBoundary /></PrivateRoute>; }
+function PrivateNotifications() { return <PrivateRoute><NotificationsWithBoundary /></PrivateRoute>; }
 
-  return null;
+// ── Home route ──────────────────────────────────────────────────────────────
+// The root route shows the dashboard for authenticated users or the landing
+// page for visitors.  This is the only route that varies by auth state at
+// the route definition level.
+
+function HomePage() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <DashboardWithBoundary /> : <LandingPage />;
 }
 
+// ── Router ──────────────────────────────────────────────────────────────────
+
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const { t } = useLocale();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{t("common.loading")}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <Switch>
-      <Route path="/" component={isAuthenticated ? DashboardWithBoundary : LandingPage} />
+      {/* Public routes */}
+      <Route path="/" component={HomePage} />
       <Route path="/p/:tag" component={PublicProfilePage} />
       <Route path="/auth" component={AuthPage} />
 
-      {isAuthenticated ? (
-        <>
-          <Route path="/dashboard" component={DashboardWithBoundary} />
-          <Route path="/push" component={PushWithBoundary} />
-          <Route path="/coach" component={CoachWithBoundary} />
-          <Route path="/training" component={TrainingWithBoundary} />
-          <Route path="/decks" component={DecksPage} />
-          <Route path="/community" component={CommunityPage} />
-          <Route path="/goals" component={GoalsWithBoundary} />
-          <Route path="/settings" component={SettingsPage} />
-          <Route path="/profile" component={ProfilePage} />
-          <Route path="/onboarding" component={OnboardingPage} />
-          <Route path="/billing" component={BillingWithBoundary} />
-          <Route path="/me" component={MeWithBoundary} />
-          <Route path="/notifications" component={NotificationsWithBoundary} />
-        </>
-      ) : (
-        <>
-          <Route path="/dashboard" component={RedirectToAuth} />
-          <Route path="/push" component={RedirectToAuth} />
-          <Route path="/coach" component={RedirectToAuth} />
-          <Route path="/training" component={RedirectToAuth} />
-          <Route path="/decks" component={RedirectToAuth} />
-          <Route path="/community" component={RedirectToAuth} />
-          <Route path="/goals" component={RedirectToAuth} />
-          <Route path="/settings" component={RedirectToAuth} />
-          <Route path="/profile" component={RedirectToAuth} />
-          <Route path="/onboarding" component={RedirectToAuth} />
-          <Route path="/billing" component={RedirectToAuth} />
-          <Route path="/me" component={RedirectToAuth} />
-          <Route path="/notifications" component={RedirectToAuth} />
-        </>
-      )}
+      {/* Private routes — each defined exactly once */}
+      <Route path="/dashboard" component={PrivateDashboard} />
+      <Route path="/push" component={PrivatePush} />
+      <Route path="/coach" component={PrivateCoach} />
+      <Route path="/training" component={PrivateTraining} />
+      <Route path="/decks" component={PrivateDecks} />
+      <Route path="/community" component={PrivateCommunity} />
+      <Route path="/goals" component={PrivateGoals} />
+      <Route path="/settings" component={PrivateSettings} />
+      <Route path="/profile" component={PrivateProfile} />
+      <Route path="/onboarding" component={PrivateOnboarding} />
+      <Route path="/billing" component={PrivateBilling} />
+      <Route path="/me" component={PrivateMe} />
+      <Route path="/notifications" component={PrivateNotifications} />
+
+      {/* Fallback */}
       <Route component={NotFoundPage} />
     </Switch>
   );
 }
+
+// ── App ─────────────────────────────────────────────────────────────────────
 
 function App() {
   return (

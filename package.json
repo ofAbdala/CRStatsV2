@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:critical": "node --import tsx --test server/domain/syncRules.test.ts server/domain/battleHistory.test.ts server/domain/stripeCheckout.test.ts shared/contracts/playerSyncPayload.test.ts",
+    "test:e2e": "npx playwright test",
     "audit:data": "tsx scripts/audit-data-authenticity.ts",
     "audit:data:strict": "tsx scripts/audit-data-authenticity.ts --strict",
     "db:generate": "drizzle-kit generate",
@@ -84,6 +85,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.4",

@@ -10,3 +10,8 @@ vite.config.ts.*
 .env.*
 !.env.example
 .vercel
+
+# Playwright
+tests/e2e/.auth/
+test-results/
+playwright-report/
