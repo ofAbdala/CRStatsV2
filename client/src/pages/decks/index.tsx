@@ -105,10 +105,10 @@ export default function DecksPage() {
               }
             }}
           >
-            <TabsList>
-              <TabsTrigger value="meta">{t("decks.meta.title") || "Meta"}</TabsTrigger>
-              <TabsTrigger value="counter">{t("decks.counter.title") || "Counter"}</TabsTrigger>
-              <TabsTrigger value="optimizer">{t("nav.decks") || "Optimizer"}</TabsTrigger>
+            <TabsList className="h-auto">
+              <TabsTrigger value="meta" className="min-h-[44px]">{t("decks.meta.title") || "Meta"}</TabsTrigger>
+              <TabsTrigger value="counter" className="min-h-[44px]">{t("decks.counter.title") || "Counter"}</TabsTrigger>
+              <TabsTrigger value="optimizer" className="min-h-[44px]">{t("nav.decks") || "Optimizer"}</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -122,7 +122,7 @@ export default function DecksPage() {
                 if (Number.isFinite(parsed)) setSelectedArena(parsed);
               }}
             >
-              <SelectTrigger className="w-[200px] h-9">
+              <SelectTrigger className="w-[200px] h-11 min-h-[44px]">
                 <SelectValue placeholder="Select Arena" />
               </SelectTrigger>
               <SelectContent>

@@ -63,11 +63,11 @@ function DefaultBoundaryFallback({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={onRetry}>
+              <Button variant="outline" size="sm" className="min-h-[44px]" onClick={onRetry}>
                 <RotateCcw className="w-4 h-4 mr-2" />
                 {t("errorBoundary.retry")}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>
+              <Button variant="ghost" size="sm" className="min-h-[44px]" onClick={() => window.location.reload()}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 {t("errorBoundary.reload")}
               </Button>

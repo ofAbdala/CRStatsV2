@@ -8,7 +8,7 @@ import { MiniGraph } from "@/components/home/MiniGraph";
 import { LastMatches } from "@/components/home/LastMatches";
 import { DailyInsight } from "@/components/home/DailyInsight";
 import { buildTrophyChartData } from "@/lib/analytics/trophyChart";
-import { Loader2 } from "lucide-react";
+import { DashboardSkeleton } from "@/components/skeletons";
 
 export default function DashboardPage() {
   const { t, locale } = useLocale();
@@ -86,10 +86,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-muted-foreground">{t("common.loading")}</p>
-        </div>
+        <DashboardSkeleton />
       </DashboardLayout>
     );
   }
@@ -99,7 +96,7 @@ export default function DashboardPage() {
       <div className="space-y-6">
         {/* Header Section */}
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("home.welcome", { name: player?.name || "Player" })}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground">{t("home.welcome", { name: player?.name || "Player" })}</h1>
           <p className="text-muted-foreground">{t("home.subtitle")}</p>
         </div>
 

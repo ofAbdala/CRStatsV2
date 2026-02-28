@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
-import { cn } from "@/lib/utils";
+import { BottomNav } from "./BottomNav";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -33,12 +32,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         Skip to content
       </a>
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar -- hidden on mobile */}
       <aside className="hidden md:block w-64 fixed inset-y-0 z-50">
         <Sidebar isPro={isPro} />
       </aside>
 
-      {/* Mobile Sidebar (Sheet) */}
+      {/* Mobile Sidebar (Sheet) -- triggered from Topbar hamburger */}
       <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
         <SheetContent side="left" className="p-0 w-64 border-r border-sidebar-border bg-sidebar">
           <Sidebar isPro={isPro} />
@@ -47,18 +46,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main Content Area */}
       <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
+        {/* Mobile top bar with hamburger */}
         <Topbar
           isMobile={true}
           onMobileMenuClick={() => setIsMobileOpen(true)}
         />
 
-        <main id="main-content" className="flex-1 p-4 md:p-6 lg:p-8 animate-fade-in custom-scrollbar overflow-y-auto">
+        <main
+          id="main-content"
+          className="flex-1 p-4 md:p-6 lg:p-8 pb-20 md:pb-8 animate-fade-in custom-scrollbar overflow-y-auto"
+        >
           <div className="max-w-7xl mx-auto w-full space-y-6">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation -- visible on mobile only */}
+      <BottomNav />
     </div>
   );
 }
-

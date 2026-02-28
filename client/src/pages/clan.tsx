@@ -81,7 +81,7 @@ export default function ClanPage() {
 
         {/* Clan header */}
         <div>
-          <h1 className="text-3xl font-display font-bold">{clan.name || "Unknown Clan"}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold">{clan.name || "Unknown Clan"}</h1>
           <p className="text-muted-foreground">{clan.tag} {clan.description ? ` - ${clan.description}` : ""}</p>
         </div>
 

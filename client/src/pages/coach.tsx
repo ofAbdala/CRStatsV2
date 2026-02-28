@@ -200,7 +200,7 @@ export default function CoachPage() {
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-display font-bold flex items-center gap-2">
               <Sparkles className="w-6 h-6 text-primary" />
               {t("coach.title")}
             </h1>
@@ -264,7 +264,7 @@ export default function CoachPage() {
               <CardTitle className="text-lg">{t("pages.coach.chatTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <ScrollArea className="h-[55vh] pr-3">
+              <ScrollArea className="h-[40vh] md:h-[55vh] pr-3">
                 <div className="space-y-3" role="log" aria-live="polite" aria-label="Chat messages">
                   {messages.map((message) => (
                     <div
@@ -309,7 +309,7 @@ export default function CoachPage() {
                   placeholder={t("pages.coach.inputPlaceholder")}
                   disabled={chatMutation.isPending || limitReached}
                 />
-                <Button type="submit" size="icon" disabled={chatMutation.isPending || limitReached || !input.trim()}>
+                <Button type="submit" size="icon" className="min-h-[44px] min-w-[44px]" disabled={chatMutation.isPending || limitReached || !input.trim()}>
                   <Send className="w-4 h-4" />
                 </Button>
               </form>

@@ -136,7 +136,7 @@ export default function GoalsPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">
+            <h1 className="text-2xl md:text-3xl font-display font-bold">
               {t("pages.dashboard.goalsTitle")}
             </h1>
             <p className="text-muted-foreground">

@@ -126,7 +126,7 @@ export function CounterDeckBuilder({ arenaId }: { arenaId: number }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold">{t("decks.counter.title")}</h1>
+        <h1 className="text-2xl md:text-3xl font-display font-bold">{t("decks.counter.title")}</h1>
         <p className="text-muted-foreground">{t("decks.counter.subtitle")}</p>
       </div>
 

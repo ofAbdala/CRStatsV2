@@ -481,7 +481,7 @@ export function MetaDecksTab({ metaDecks, hasStaleCache, isLoading, isError, err
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t("decks.meta.title")}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold">{t("decks.meta.title")}</h1>
           <p className="text-muted-foreground">{t("decks.meta.subtitle")}</p>
         </div>
       </div>

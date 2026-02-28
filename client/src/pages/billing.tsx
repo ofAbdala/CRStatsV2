@@ -177,7 +177,7 @@ export default function BillingPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t("pages.billing.title")}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold">{t("pages.billing.title")}</h1>
           <p className="text-muted-foreground">{t("pages.billing.subtitle")}</p>
         </div>
 

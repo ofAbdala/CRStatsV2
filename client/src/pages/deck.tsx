@@ -59,7 +59,7 @@ export default function DeckPage() {
         </Link>
 
         <div>
-          <h1 className="text-3xl font-display font-bold">Shared Deck</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold">Shared Deck</h1>
           <p className="text-muted-foreground">
             {data.cards.length} cards &middot; Avg Elixir: {data.avgElixir.toFixed(1)}
           </p>

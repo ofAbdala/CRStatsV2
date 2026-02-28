@@ -74,6 +74,7 @@
     "winRate": "Taxa de Vitória"
   },
   "nav": {
+    "home": "Início",
     "dashboard": "Dashboard",
     "coach": "Coach IA",
     "training": "Treinos",

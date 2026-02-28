@@ -6,7 +6,9 @@ import { PushTimeline } from "@/components/push/PushTimeline";
 import { PushAnalysisCard, PushAnalysisCardData } from "@/components/PushAnalysisCard";
 import { groupBattlesIntoPushes, PushSession } from "@/lib/pushUtils";
 import { useLocale } from "@/hooks/use-locale";
-import { Loader2 } from "lucide-react";
+import { Zap } from "lucide-react";
+import { ContentSkeleton } from "@/components/skeletons";
+import { EmptyState } from "@/components/EmptyState";
 import { api } from "@/lib/api";
 
 export default function PushPage() {
@@ -59,24 +61,22 @@ export default function PushPage() {
     if (isLoading) {
         return (
             <DashboardLayout>
-                <div className="flex items-center justify-center h-[50vh]">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                </div>
+                <ContentSkeleton rows={3} />
             </DashboardLayout>
         );
     }
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col h-[calc(100vh-100px)] gap-4">
+            <div className="space-y-4">
                 <div>
-                    <h1 className="text-3xl font-display font-bold text-foreground">{t("pages.push.title")}</h1>
+                    <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground">{t("pages.push.title")}</h1>
                     <p className="text-muted-foreground">{t("pages.push.subtitle")}</p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                     {/* Left Sidebar: Session List */}
-                    <div className="lg:col-span-1 border rounded-lg bg-card/30 overflow-hidden flex flex-col">
+                    <div className="lg:col-span-1 border rounded-lg bg-card/30 overflow-hidden flex flex-col max-h-[300px] lg:max-h-[calc(100vh-200px)]">
                         <div className="p-3 border-b bg-muted/20 font-bold text-sm">
                             {t("pages.push.recentSessions")}
                         </div>
@@ -88,11 +88,11 @@ export default function PushPage() {
                     </div>
 
                     {/* Main Content */}
-                    <div className="lg:col-span-3 space-y-4 overflow-y-auto">
+                    <div className="lg:col-span-3 space-y-4">
                         {selectedSession && (
                             <>
                                 {/* Timeline/Graph */}
-                                <div className="h-[300px]">
+                                <div className="h-[250px] md:h-[300px]">
                                     <PushTimeline session={selectedSession} />
                                 </div>
 
@@ -104,9 +104,11 @@ export default function PushPage() {
                         )}
 
                         {!selectedSession && (
-                            <div className="flex h-full items-center justify-center text-muted-foreground">
-                                {t("pages.push.selectSession")}
-                            </div>
+                            <EmptyState
+                                icon={Zap}
+                                title={t("pages.push.selectSession")}
+                                description={sessions.length === 0 ? t("common.loading") : t("pages.push.selectSession")}
+                            />
                         )}
                     </div>
                 </div>

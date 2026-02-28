@@ -74,6 +74,7 @@
     "winRate": "Win Rate"
   },
   "nav": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "coach": "AI Coach",
     "training": "Training",

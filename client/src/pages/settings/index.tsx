@@ -21,12 +21,12 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("settings.pageTitle")}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground">{t("settings.pageTitle")}</h1>
           <p className="text-muted-foreground">{t("settings.pageSubtitle")}</p>
         </div>
 
         <Tabs defaultValue="account" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[640px]">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[640px] h-auto">
             <TabsTrigger value="account">{t("settings.tabs.account")}</TabsTrigger>
             <TabsTrigger value="billing">{t("settings.tabs.billing")}</TabsTrigger>
             <TabsTrigger value="preferences">{t("settings.tabs.preferences")}</TabsTrigger>

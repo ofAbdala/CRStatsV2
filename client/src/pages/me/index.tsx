@@ -2,7 +2,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Trophy, Crown, TrendingUp, Clock, Swords, Loader2, AlertCircle, Flame, Award } from "lucide-react";
+import { Trophy, Crown, TrendingUp, Clock, Swords, AlertCircle, Flame, Award } from "lucide-react";
+import { ProfileSkeleton } from "@/components/skeletons";
 import { cn } from "@/lib/utils";
 import { getArenaImageUrl } from "@/lib/clashIcons";
 import { useMeData } from "./useMeData";
@@ -19,12 +20,7 @@ export default function MePage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]" role="status" aria-label={t('pages.me.loading')}>
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">{t('pages.me.loading')}</p>
-          </div>
-        </div>
+        <ProfileSkeleton />
       </DashboardLayout>
     );
   }
@@ -47,9 +43,9 @@ export default function MePage() {
           <div className="relative p-6 md:p-8">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div className="flex-1">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center">
-                    <Swords className="w-8 h-8 text-primary" />
+                <div className="flex items-center gap-3 md:gap-4 mb-4">
+                  <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+                    <Swords className="w-6 h-6 md:w-8 md:h-8 text-primary" />
                   </div>
                   <div>
                     <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground" data-testid="header-player-name">
@@ -66,7 +62,7 @@ export default function MePage() {
                     <span className="text-sm text-muted-foreground">{player.clan.name}</span>
                     {player.clan.badgeId && (
                       <img src={`https://cdn.royaleapi.com/static/img/badge/${player.clan.badgeId}.png`} alt="Clan Badge" className="w-5 h-5"
-                        loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        width={20} height={20} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     )}
                   </div>
                 )}
@@ -92,10 +88,10 @@ export default function MePage() {
                   <TiltAnalysis tiltAnalysis={tiltAnalysis} t={t} />
                 </div>
               </div>
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-background/50 border border-border/50" data-testid="header-arena">
+              <div className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl bg-background/50 border border-border/50" data-testid="header-arena">
                 {player?.arena?.id && (
                   <img src={getArenaImageUrl(player.arena.id)} alt={player.arena.name} className="w-16 h-16 md:w-20 md:h-20 object-contain"
-                    onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }} />
+                    width={80} height={80} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }} />
                 )}
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">

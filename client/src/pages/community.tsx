@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, Users, Loader2, AlertCircle, Shield, Hash, Search } from "lucide-react";
+import { RankingRowSkeleton } from "@/components/skeletons";
+import { EmptyState } from "@/components/EmptyState";
 import { api } from "@/lib/api";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
@@ -117,12 +119,12 @@ export default function CommunityPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t("pages.community.title")}</h1>
+          <h1 className="text-2xl md:text-3xl font-display font-bold">{t("pages.community.title")}</h1>
           <p className="text-muted-foreground">{t("pages.community.subtitle")}</p>
         </div>
 
         <Tabs defaultValue="players" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[520px]">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[520px] h-auto">
             <TabsTrigger value="players">{t("pages.community.tabs.players")}</TabsTrigger>
             <TabsTrigger value="clans">{t("pages.community.tabs.clans")}</TabsTrigger>
             <TabsTrigger value="decks">Top Decks</TabsTrigger>
@@ -172,9 +174,10 @@ export default function CommunityPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {playerRankingsQuery.isLoading ? (
-                  <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("pages.community.loadingPlayers")}
+                  <div className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <RankingRowSkeleton key={i} />
+                    ))}
                   </div>
                 ) : playerRankingsQuery.isError ? (
                   <PageErrorState
@@ -184,26 +187,30 @@ export default function CommunityPage() {
                     onRetry={() => playerRankingsQuery.refetch()}
                   />
                 ) : players.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">{t("pages.community.emptyPlayers")}</p>
+                  <EmptyState
+                    icon={Trophy}
+                    title={t("pages.community.emptyPlayers")}
+                    description={t("pages.community.emptyPlayers")}
+                  />
                 ) : (
                   players.slice(0, 50).map((player) => (
-                    <div key={player.tag} className="flex items-center justify-between rounded-lg border border-border/40 p-3">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">#{player.rank}</Badge>
-                        <Avatar className="w-9 h-9 border border-border/50">
+                    <div key={player.tag} className="flex items-center justify-between rounded-lg border border-border/40 p-3 gap-2">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <Badge variant="outline" className="shrink-0">#{player.rank}</Badge>
+                        <Avatar className="w-9 h-9 border border-border/50 shrink-0 hidden sm:flex">
                           <AvatarFallback>{player.name?.slice(0, 2)?.toUpperCase() || "PL"}</AvatarFallback>
                         </Avatar>
-                        <div>
+                        <div className="min-w-0">
                           <Link href={`/p/${normalizeTagForPath(player.tag)}`}>
-                            <p className="font-medium hover:underline cursor-pointer">{player.name}</p>
+                            <p className="font-medium hover:underline cursor-pointer truncate">{player.name}</p>
                           </Link>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground truncate">
                             {player.tag}
-                            {player.clan?.name ? ` • ${player.clan.name}` : ""}
+                            {player.clan?.name ? ` \u2022 ${player.clan.name}` : ""}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <p className="font-semibold">{player.trophies}</p>
                         <p className="text-xs text-muted-foreground">{t("pages.community.trophiesLabel")}</p>
                       </div>
@@ -224,9 +231,10 @@ export default function CommunityPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {clanRankingsQuery.isLoading ? (
-                  <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("pages.community.loadingClans")}
+                  <div className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <RankingRowSkeleton key={i} />
+                    ))}
                   </div>
                 ) : clanRankingsQuery.isError ? (
                   <PageErrorState
@@ -236,29 +244,34 @@ export default function CommunityPage() {
                     onRetry={() => clanRankingsQuery.refetch()}
                   />
                 ) : clans.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">{t("pages.community.emptyClans")}</p>
+                  <EmptyState
+                    icon={Users}
+                    title={t("pages.community.emptyClans")}
+                    description={t("pages.community.emptyClans")}
+                  />
                 ) : (
                   clans.slice(0, 30).map((clan) => (
-                    <div key={clan.tag} className="flex items-center justify-between rounded-lg border border-border/40 p-3">
-                      <div>
-                        <div className="flex items-center gap-2">
+                    <div key={clan.tag} className="flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border border-border/40 p-3 gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline">#{clan.rank}</Badge>
-                          <p className="font-medium">{clan.name}</p>
-                          <Badge variant="secondary">{clan.tag}</Badge>
+                          <p className="font-medium truncate">{clan.name}</p>
+                          <Badge variant="secondary" className="text-xs">{clan.tag}</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {t("pages.community.clanScoreLine", { score: clan.clanScore, members: clan.members })}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Link href={`/clan/${normalizeTagForPath(clan.tag)}`}>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" className="min-h-[44px]">
                             View Clan
                           </Button>
                         </Link>
                         <Button
                           variant="outline"
                           size="sm"
+                          className="min-h-[44px]"
                           onClick={() => setSelectedClanTag(clan.tag)}
                         >
                           {t("pages.community.viewMembers")}

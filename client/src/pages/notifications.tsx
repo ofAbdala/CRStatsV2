@@ -45,7 +45,7 @@ export default function NotificationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-display font-bold">{t("notifications.title")}</h1>
+            <h1 className="text-2xl md:text-3xl font-display font-bold">{t("notifications.title")}</h1>
             <p className="text-muted-foreground">
               {t("notifications.subtitle", { count: notifications.length })}
             </p>
