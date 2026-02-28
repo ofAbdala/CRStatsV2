@@ -32,6 +32,8 @@ const NotificationsPage = lazy(() => import("@/pages/notifications"));
 const GoalsPage = lazy(() => import("@/pages/goals"));
 const PushPage = lazy(() => import("@/pages/push"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
+const ClanPage = lazy(() => import("@/pages/clan"));
+const DeckPage = lazy(() => import("@/pages/deck"));
 
 // ── Suspense loading fallback ───────────────────────────────────────────────
 // Shown while lazy-loaded chunks are being fetched (AC6).
@@ -74,6 +76,8 @@ const CommunityWithBoundary = withLocalBoundary(CommunityPage, "community");
 const SettingsWithBoundary = withLocalBoundary(SettingsPage, "settings");
 const OnboardingWithBoundary = withLocalBoundary(OnboardingPage, "onboarding");
 const ProfileWithBoundary = withLocalBoundary(ProfilePage, "profile");
+const ClanWithBoundary = withLocalBoundary(ClanPage, "clan");
+const DeckWithBoundary = withLocalBoundary(DeckPage, "deck");
 
 // ── Private route wrappers ──────────────────────────────────────────────────
 // Each private page is defined exactly once (TD-021).  The `PrivateRoute`
@@ -113,6 +117,8 @@ function Router() {
         {/* Public routes */}
         <Route path="/" component={HomePage} />
         <Route path="/p/:tag" component={PublicProfilePage} />
+        <Route path="/clan/:tag" component={ClanWithBoundary} />
+        <Route path="/deck/:encoded" component={DeckWithBoundary} />
         <Route path="/auth" component={AuthPage} />
 
         {/* Private routes -- each defined exactly once */}

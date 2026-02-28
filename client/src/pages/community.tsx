@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 import { useLocale } from "@/hooks/use-locale";
 import { getApiErrorMessage } from "@/lib/errorMessages";
 import { parseClashTag } from "@shared/clashTag";
+import TopDecksSection from "@/components/TopDecksSection";
 
 interface RankingPlayer {
   rank: number;
@@ -121,9 +122,10 @@ export default function CommunityPage() {
         </div>
 
         <Tabs defaultValue="players" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 lg:w-[420px]">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[520px]">
             <TabsTrigger value="players">{t("pages.community.tabs.players")}</TabsTrigger>
             <TabsTrigger value="clans">{t("pages.community.tabs.clans")}</TabsTrigger>
+            <TabsTrigger value="decks">Top Decks</TabsTrigger>
           </TabsList>
 
           <TabsContent value="players" className="mt-4">
@@ -248,13 +250,20 @@ export default function CommunityPage() {
                           {t("pages.community.clanScoreLine", { score: clan.clanScore, members: clan.members })}
                         </p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedClanTag(clan.tag)}
-                      >
-                        {t("pages.community.viewMembers")}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/clan/${normalizeTagForPath(clan.tag)}`}>
+                          <Button variant="outline" size="sm">
+                            View Clan
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedClanTag(clan.tag)}
+                        >
+                          {t("pages.community.viewMembers")}
+                        </Button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -332,6 +341,10 @@ export default function CommunityPage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="decks" className="mt-4">
+            <TopDecksSection />
           </TabsContent>
         </Tabs>
       </div>

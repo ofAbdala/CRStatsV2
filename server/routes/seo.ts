@@ -1,11 +1,13 @@
 /**
  * SEO routes — server-rendered HTML pages for search engine crawling.
  * Story 2.3: SEO Dynamic Pages & Public Profiles
+ * Story 2.7: Deck share page
  *
  * Routes:
  *   GET /meta/:arenaSlug     — Arena meta deck page (AC1, AC2, AC3)
  *   GET /counter/:cardSlug   — Counter deck page (AC4, AC5, AC6)
  *   GET /player/:tag         — Public player profile (AC7, AC8)
+ *   GET /deck/:encodedDeck   — Shared deck page (Story 2.7, AC7)
  *   GET /sitemap.xml         — Auto-generated sitemap (AC10)
  *   GET /robots.txt          — Crawling rules (AC11)
  */
@@ -13,7 +15,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { getArenaBySlug, ARENA_CATALOG, getCardBySlug } from "../seo/constants";
 import { fetchArenaMetaDecks, fetchCounterDecks, fetchPlayerProfile, buildSitemapXml, buildRobotsTxt } from "../seo/data";
-import { renderArenaMetaPage, renderCounterPage, renderPlayerPage, render404Page } from "../seo/templates";
+import { renderArenaMetaPage, renderCounterPage, renderPlayerPage, renderDeckSharePage, render404Page } from "../seo/templates";
+import { isValidEncodedDeck, decodeDeck } from "../domain/deckShare";
 import { logger } from "../logger";
 
 const router = Router();
@@ -121,6 +124,48 @@ router.get("/counter/:cardSlug", seoLimiter, async (req, res) => {
   } catch (error) {
     logger.error("SEO: Error rendering counter page", {
       cardSlug: req.params.cardSlug,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).type("html").send(render404Page("An error occurred while loading this page. Please try again later."));
+  }
+});
+
+// ── GET /deck/:encodedDeck (Story 2.7 — Deck Share) ──────────────────────────
+
+router.get("/deck/:encodedDeck", seoLimiter, async (req, res) => {
+  try {
+    const { encodedDeck } = req.params;
+
+    if (!isValidEncodedDeck(encodedDeck)) {
+      res.status(400).type("html").send(render404Page("Invalid deck link. The URL may be corrupted or malformed."));
+      return;
+    }
+
+    const cards = decodeDeck(encodedDeck);
+    if (!cards || cards.length !== 8) {
+      res.status(400).type("html").send(render404Page("Could not decode deck. The link may be invalid."));
+      return;
+    }
+
+    const avgElixir = cards.reduce((sum, c) => sum + (c.elixirCost || 0), 0) / cards.length;
+    const cardIds = cards.map((c) => c.id).filter(Boolean);
+    const copyLink = cardIds.length === 8
+      ? `https://link.clashroyale.com/deck/en?deck=${encodeURIComponent(cardIds.join(";"))}`
+      : null;
+
+    const html = renderDeckSharePage({
+      encodedDeck,
+      cards: cards.map((c) => ({ name: c.name, id: c.id, elixirCost: c.elixirCost })),
+      avgElixir: Number(avgElixir.toFixed(1)),
+      copyLink,
+      communityStats: null, // Will be populated when meta pipeline integrates
+    });
+
+    setSeoHeaders(res, 3600);
+    res.type("html").send(html);
+  } catch (error) {
+    logger.error("SEO: Error rendering deck share page", {
+      encodedDeck: req.params.encodedDeck,
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).type("html").send(render404Page("An error occurred while loading this page. Please try again later."));

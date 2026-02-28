@@ -265,6 +265,41 @@ export function createMockStorage(overrides: Partial<IStorage> = {}): IStorage {
       return [];
     },
     async clearCardPerformance() {},
+
+    // Follow operations (Story 2.7)
+    async followUser(followerId, followingId) {
+      return { id: "follow-new", followerId, followingId, createdAt: new Date() } as any;
+    },
+    async unfollowUser() {},
+    async getFollowing() {
+      return [];
+    },
+    async getFollowers() {
+      return [];
+    },
+    async getFollowingCount() {
+      return 0;
+    },
+    async getFollowersCount() {
+      return 0;
+    },
+    async isFollowing() {
+      return false;
+    },
+
+    // Deck Vote operations (Story 2.7)
+    async voteDeck(userId, deckHash, battleId) {
+      return { id: "vote-new", userId, deckHash, battleId, createdAt: new Date() } as any;
+    },
+    async hasVotedDeck() {
+      return false;
+    },
+    async getDeckVoteCount() {
+      return 0;
+    },
+    async getTopVotedDecks() {
+      return [];
+    },
   };
 
   return Object.assign(defaults, overrides);

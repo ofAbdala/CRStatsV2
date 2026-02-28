@@ -20,6 +20,9 @@ export const FREE_META_QUERY_DAILY_LIMIT = 5;
 /** Maximum number of deck optimizer requests a free user can make per day. */
 export const FREE_OPTIMIZER_DAILY_LIMIT = 5;
 
+/** Maximum number of follows for a free user (Story 2.7). */
+export const FREE_FOLLOW_LIMIT = 50;
+
 // ── Feature gating matrix per tier ──────────────────────────────────────────
 
 export interface TierLimits {
@@ -27,6 +30,7 @@ export interface TierLimits {
   counterQueries: number;    // 0 = unlimited
   coachMessages: number;     // 0 = unlimited
   optimizerQueries: number;  // 0 = unlimited
+  maxFollows: number;        // 0 = unlimited (Story 2.7)
   pushAnalysis: boolean;
   trainingPlans: boolean;
   advancedAnalytics: boolean;
@@ -40,6 +44,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
     counterQueries: 5,
     coachMessages: 5,
     optimizerQueries: 5,
+    maxFollows: 50,
     pushAnalysis: false,
     trainingPlans: false,
     advancedAnalytics: false,
@@ -51,6 +56,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
     counterQueries: 0,    // unlimited
     coachMessages: 0,     // unlimited
     optimizerQueries: 0,  // unlimited
+    maxFollows: 0,        // unlimited
     pushAnalysis: true,
     trainingPlans: false,
     advancedAnalytics: false,
@@ -62,6 +68,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
     counterQueries: 0,    // unlimited
     coachMessages: 0,     // unlimited
     optimizerQueries: 0,  // unlimited
+    maxFollows: 0,        // unlimited
     pushAnalysis: true,
     trainingPlans: true,
     advancedAnalytics: true,

@@ -150,6 +150,14 @@ export async function getClanMembers(tag: string) {
   return clashRoyaleRequest(`/clans/${encodeTag(tag)}/members`);
 }
 
+export async function getClanWarLog(tag: string) {
+  return clashRoyaleRequest(`/clans/${encodeTag(tag)}/warlog`);
+}
+
+export async function getClanCurrentWar(tag: string) {
+  return clashRoyaleRequest(`/clans/${encodeTag(tag)}/currentwar`);
+}
+
 export async function getTopPlayersInLocation(locationId: string = "global", limit: number = 50) {
   const rankings = await getPlayerRankings(locationId);
 

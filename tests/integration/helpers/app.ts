@@ -1028,3 +1028,136 @@ export function mountCommunityRoutes(
 
   app.use(router);
 }
+
+/**
+ * Follow routes -- mirrors server/routes/community.ts (Story 2.7 follow endpoints)
+ */
+export function mountFollowRoutes(app: express.Express, storage: IStorage) {
+  const router = Router();
+
+  // POST /api/follow/:userId
+  router.post("/api/follow/:userId", async (req: any, res) => {
+    const followerId = req.auth?.userId;
+    if (!followerId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    const { userId: targetUserId } = req.params;
+    if (!targetUserId || targetUserId === followerId) {
+      return res.status(400).json({ code: "INVALID_TARGET", message: "Cannot follow yourself" });
+    }
+
+    try {
+      const currentCount = await storage.getFollowingCount(followerId);
+      const sub = await storage.getSubscription(followerId);
+      const isPro = sub?.plan === "pro" || sub?.plan === "elite";
+      if (!isPro && currentCount >= 50) {
+        return res.status(403).json({ code: "FOLLOW_LIMIT_REACHED", message: "Follow limit reached. Upgrade to PRO for unlimited follows." });
+      }
+
+      const follow = await storage.followUser(followerId, targetUserId);
+      res.json({ success: true, follow });
+    } catch (error) {
+      res.status(500).json({ code: "FOLLOW_FAILED", message: "Failed to follow user" });
+    }
+  });
+
+  // DELETE /api/follow/:userId
+  router.delete("/api/follow/:userId", async (req: any, res) => {
+    const followerId = req.auth?.userId;
+    if (!followerId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      await storage.unfollowUser(followerId, req.params.userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ code: "UNFOLLOW_FAILED", message: "Failed to unfollow user" });
+    }
+  });
+
+  // GET /api/follow/following
+  router.get("/api/follow/following", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      const following = await storage.getFollowing(userId);
+      const count = await storage.getFollowingCount(userId);
+      res.json({ following, count });
+    } catch (error) {
+      res.status(500).json({ code: "FOLLOWING_FETCH_FAILED", message: "Failed to fetch following list" });
+    }
+  });
+
+  // GET /api/follow/status/:userId
+  router.get("/api/follow/status/:userId", async (req: any, res) => {
+    const followerId = req.auth?.userId;
+    if (!followerId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    try {
+      const isFollowing = await storage.isFollowing(followerId, req.params.userId);
+      res.json({ isFollowing });
+    } catch (error) {
+      res.status(500).json({ code: "FOLLOW_STATUS_FAILED", message: "Failed to check follow status" });
+    }
+  });
+
+  app.use(router);
+}
+
+/**
+ * Top Decks routes -- mirrors community top-decks and deck vote endpoints (Story 2.7)
+ */
+export function mountTopDecksRoutes(app: express.Express, storage: IStorage) {
+  const router = Router();
+
+  // GET /api/community/top-decks
+  router.get("/api/community/top-decks", async (req: any, res) => {
+    try {
+      const arenaRaw = typeof req.query?.arena === "string" ? Number.parseInt(req.query.arena, 10) : null;
+      const arenaId = Number.isFinite(arenaRaw) ? arenaRaw : null;
+      const period = (req.query.period as string) || "week";
+
+      const topVoted = await storage.getTopVotedDecks({ limit: 20 });
+      res.json({
+        arenaId,
+        period,
+        decks: topVoted.map((d: any, idx: number) => ({
+          rank: idx + 1,
+          deckHash: d.deckHash,
+          cards: d.deckHash.split("|").filter(Boolean),
+          winRate: 0,
+          usageRate: 0,
+          threeCrownRate: 0,
+          avgElixir: null,
+          sampleSize: 0,
+          archetype: null,
+          votes: d.votes,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ code: "TOP_DECKS_FETCH_FAILED", message: "Failed to fetch top decks" });
+    }
+  });
+
+  // POST /api/deck/vote/:deckHash
+  router.post("/api/deck/vote/:deckHash", async (req: any, res) => {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ code: "UNAUTHORIZED", message: "Unauthorized" });
+
+    const { deckHash } = req.params;
+    const { battleId } = req.body || {};
+
+    if (!battleId || typeof battleId !== "string") {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "battleId is required" });
+    }
+
+    try {
+      await storage.voteDeck(userId, deckHash, battleId);
+      const totalVotes = await storage.getDeckVoteCount(deckHash);
+      res.json({ success: true, totalVotes });
+    } catch (error) {
+      res.status(500).json({ code: "DECK_VOTE_FAILED", message: "Failed to vote for deck" });
+    }
+  });
+
+  app.use(router);
+}

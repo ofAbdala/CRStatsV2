@@ -56,10 +56,16 @@ import {
   type InsertBattleStatsCache,
   type CardPerformance,
   type InsertCardPerformance,
+  follows,
+  deckVotes,
+  type Follow,
+  type InsertFollow,
+  type DeckVote,
+  type InsertDeckVote,
 } from "@shared/schema";
 import { db } from "./db";
 import { pool } from "./db";
-import { eq, and, desc, gte, lt, notInArray, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lt, notInArray, sql, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { SupabaseAuthContext } from "./supabaseAuth";
@@ -270,6 +276,21 @@ export interface IStorage {
   upsertCardPerformance(rows: InsertCardPerformance[]): Promise<void>;
   getCardPerformance(userId: string, options?: { season?: number }): Promise<CardPerformance[]>;
   clearCardPerformance(userId: string): Promise<void>;
+
+  // Follow operations (Story 2.7)
+  followUser(followerId: string, followingId: string): Promise<Follow>;
+  unfollowUser(followerId: string, followingId: string): Promise<void>;
+  getFollowing(userId: string, options?: { limit?: number; offset?: number }): Promise<Follow[]>;
+  getFollowers(userId: string, options?: { limit?: number; offset?: number }): Promise<Follow[]>;
+  getFollowingCount(userId: string): Promise<number>;
+  getFollowersCount(userId: string): Promise<number>;
+  isFollowing(followerId: string, followingId: string): Promise<boolean>;
+
+  // Deck Vote operations (Story 2.7)
+  voteDeck(userId: string, deckHash: string, battleId: string): Promise<DeckVote>;
+  hasVotedDeck(userId: string, deckHash: string): Promise<boolean>;
+  getDeckVoteCount(deckHash: string): Promise<number>;
+  getTopVotedDecks(options?: { limit?: number }): Promise<Array<{ deckHash: string; votes: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1491,6 +1512,150 @@ export class DatabaseStorage implements IStorage {
     await this.runAsUser((conn) =>
       conn.delete(cardPerformance).where(eq(cardPerformance.userId, userId)),
     );
+  }
+
+  // ── Follow operations (Story 2.7) ───────────────────────────────────────────
+
+  async followUser(followerId: string, followingId: string): Promise<Follow> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .insert(follows)
+        .values({ followerId, followingId })
+        .onConflictDoNothing()
+        .returning();
+      if (!row) {
+        // Already following — return existing
+        const [existing] = await conn
+          .select()
+          .from(follows)
+          .where(and(eq(follows.followerId, followerId), eq(follows.followingId, followingId)))
+          .limit(1);
+        return existing!;
+      }
+      return row;
+    });
+  }
+
+  async unfollowUser(followerId: string, followingId: string): Promise<void> {
+    await this.runAsUser(async (conn) => {
+      await conn
+        .delete(follows)
+        .where(and(eq(follows.followerId, followerId), eq(follows.followingId, followingId)));
+    });
+  }
+
+  async getFollowing(userId: string, options?: { limit?: number; offset?: number }): Promise<Follow[]> {
+    const queryLimit = options?.limit ?? 50;
+    const queryOffset = options?.offset ?? 0;
+    return this.runAsUser(async (conn) => {
+      return conn
+        .select()
+        .from(follows)
+        .where(eq(follows.followerId, userId))
+        .orderBy(desc(follows.createdAt))
+        .limit(queryLimit)
+        .offset(queryOffset);
+    });
+  }
+
+  async getFollowers(userId: string, options?: { limit?: number; offset?: number }): Promise<Follow[]> {
+    const queryLimit = options?.limit ?? 50;
+    const queryOffset = options?.offset ?? 0;
+    return this.runAsUser(async (conn) => {
+      return conn
+        .select()
+        .from(follows)
+        .where(eq(follows.followingId, userId))
+        .orderBy(desc(follows.createdAt))
+        .limit(queryLimit)
+        .offset(queryOffset);
+    });
+  }
+
+  async getFollowingCount(userId: string): Promise<number> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .select({ value: count() })
+        .from(follows)
+        .where(eq(follows.followerId, userId));
+      return row?.value ?? 0;
+    });
+  }
+
+  async getFollowersCount(userId: string): Promise<number> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .select({ value: count() })
+        .from(follows)
+        .where(eq(follows.followingId, userId));
+      return row?.value ?? 0;
+    });
+  }
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .select({ id: follows.id })
+        .from(follows)
+        .where(and(eq(follows.followerId, followerId), eq(follows.followingId, followingId)))
+        .limit(1);
+      return Boolean(row);
+    });
+  }
+
+  // ── Deck Vote operations (Story 2.7) ────────────────────────────────────────
+
+  async voteDeck(userId: string, deckHash: string, battleId: string): Promise<DeckVote> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .insert(deckVotes)
+        .values({ userId, deckHash, battleId })
+        .onConflictDoNothing()
+        .returning();
+      if (!row) {
+        const [existing] = await conn
+          .select()
+          .from(deckVotes)
+          .where(and(eq(deckVotes.userId, userId), eq(deckVotes.deckHash, deckHash)))
+          .limit(1);
+        return existing!;
+      }
+      return row;
+    });
+  }
+
+  async hasVotedDeck(userId: string, deckHash: string): Promise<boolean> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .select({ id: deckVotes.id })
+        .from(deckVotes)
+        .where(and(eq(deckVotes.userId, userId), eq(deckVotes.deckHash, deckHash)))
+        .limit(1);
+      return Boolean(row);
+    });
+  }
+
+  async getDeckVoteCount(deckHash: string): Promise<number> {
+    return this.runAsUser(async (conn) => {
+      const [row] = await conn
+        .select({ value: count() })
+        .from(deckVotes)
+        .where(eq(deckVotes.deckHash, deckHash));
+      return row?.value ?? 0;
+    });
+  }
+
+  async getTopVotedDecks(options?: { limit?: number }): Promise<Array<{ deckHash: string; votes: number }>> {
+    const queryLimit = options?.limit ?? 20;
+    return this.runAsUser(async (conn) => {
+      const rows = await conn
+        .select({ deckHash: deckVotes.deckHash, votes: count() })
+        .from(deckVotes)
+        .groupBy(deckVotes.deckHash)
+        .orderBy(desc(count()))
+        .limit(queryLimit);
+      return rows.map((r: any) => ({ deckHash: r.deckHash, votes: r.votes }));
+    });
   }
 }
 

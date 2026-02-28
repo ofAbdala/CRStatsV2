@@ -562,6 +562,58 @@ export type InsertCardPerformance = z.infer<typeof insertCardPerformanceSchema>;
 export type CardPerformance = typeof cardPerformance.$inferSelect;
 
 // ============================================================================
+// FOLLOWS TABLE (Story 2.7)
+// ============================================================================
+
+export const follows = pgTable(
+  "follows",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    followerId: varchar("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    followingId: varchar("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uidx_follows_follower_following").on(table.followerId, table.followingId),
+    index("idx_follows_follower_id").on(table.followerId),
+    index("idx_follows_following_id").on(table.followingId),
+  ],
+);
+
+export const insertFollowSchema = createInsertSchema(follows).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertFollow = z.infer<typeof insertFollowSchema>;
+export type Follow = typeof follows.$inferSelect;
+
+// ============================================================================
+// DECK VOTES TABLE (Story 2.7)
+// ============================================================================
+
+export const deckVotes = pgTable(
+  "deck_votes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    deckHash: varchar("deck_hash").notNull(),
+    battleId: varchar("battle_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uidx_deck_votes_user_deck").on(table.userId, table.deckHash),
+    index("idx_deck_votes_deck_hash").on(table.deckHash),
+  ],
+);
+
+export const insertDeckVoteSchema = createInsertSchema(deckVotes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDeckVote = z.infer<typeof insertDeckVoteSchema>;
+export type DeckVote = typeof deckVotes.$inferSelect;
+
+// ============================================================================
 // REQUEST ZOD SCHEMAS FOR ROUTES
 // ============================================================================
 
@@ -763,6 +815,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   trainingPlans: many(trainingPlans),
   battleStatsCache: many(battleStatsCache),
   cardPerformance: many(cardPerformance),
+  followers: many(follows, { relationName: "following" }),
+  following: many(follows, { relationName: "follower" }),
+  deckVotes: many(deckVotes),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -864,6 +919,26 @@ export const battleStatsCacheRelations = relations(battleStatsCache, ({ one }) =
 export const cardPerformanceRelations = relations(cardPerformance, ({ one }) => ({
   user: one(users, {
     fields: [cardPerformance.userId],
+    references: [users.id],
+  }),
+}));
+
+export const followsRelations = relations(follows, ({ one }) => ({
+  follower: one(users, {
+    fields: [follows.followerId],
+    references: [users.id],
+    relationName: "follower",
+  }),
+  following: one(users, {
+    fields: [follows.followingId],
+    references: [users.id],
+    relationName: "following",
+  }),
+}));
+
+export const deckVotesRelations = relations(deckVotes, ({ one }) => ({
+  user: one(users, {
+    fields: [deckVotes.userId],
     references: [users.id],
   }),
 }));

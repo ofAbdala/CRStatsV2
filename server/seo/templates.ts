@@ -693,6 +693,93 @@ export function renderPlayerPage(input: PlayerPageInput): string {
   );
 }
 
+// ── Deck share page (Story 2.7) ──────────────────────────────────────────────
+
+export interface DeckSharePageInput {
+  encodedDeck: string;
+  cards: Array<{ name: string; id: number; elixirCost: number }>;
+  avgElixir: number;
+  copyLink: string | null;
+  communityStats?: {
+    winRate?: number;
+    usageCount?: number;
+    threeCrownRate?: number;
+  } | null;
+}
+
+export function renderDeckSharePage(input: DeckSharePageInput): string {
+  const { encodedDeck, cards, avgElixir, copyLink, communityStats } = input;
+  const now = new Date().toISOString().split("T")[0];
+  const cardNames = cards.map((c) => c.name).join(", ");
+  const title = `Shared Deck - ${cards.slice(0, 3).map((c) => c.name).join(", ")}... - CRStats`;
+  const description = `Clash Royale deck: ${cardNames}. Average elixir: ${avgElixir}. Copy this deck to your game and view community stats.`;
+  const canonicalUrl = `/deck/${encodedDeck}`;
+  const keywords = `Clash Royale, deck, shared deck, ${cardNames}`;
+
+  const statsHtml = communityStats
+    ? `
+    <div class="stats-grid">
+      ${communityStats.winRate != null ? `<div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value ${winRateClass(communityStats.winRate)}">${formatPercentRaw(communityStats.winRate)}</div></div>` : ""}
+      ${communityStats.usageCount != null ? `<div class="stat-card"><div class="stat-label">Games Played</div><div class="stat-value">${formatNumber(communityStats.usageCount)}</div></div>` : ""}
+      ${communityStats.threeCrownRate != null ? `<div class="stat-card"><div class="stat-label">3-Crown Rate</div><div class="stat-value">${formatPercent(communityStats.threeCrownRate)}</div></div>` : ""}
+      <div class="stat-card"><div class="stat-label">Avg Elixir</div><div class="stat-value">${avgElixir.toFixed(1)}</div></div>
+    </div>`
+    : `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Avg Elixir</div><div class="stat-value">${avgElixir.toFixed(1)}</div></div>
+      <div class="stat-card"><div class="stat-label">Cards</div><div class="stat-value">8</div></div>
+    </div>`;
+
+  const body = `
+    <div class="breadcrumb">
+      <a href="/">Home</a>
+      <span>/</span>
+      Shared Deck
+    </div>
+
+    <h1>Shared Clash Royale Deck</h1>
+    <p class="subtitle">Deck shared via CRStats &mdash; ${now}</p>
+
+    <div class="info-box">
+      <div class="deck-cards" style="font-size: 1rem; gap: 0.5rem;">
+        ${buildCardTags(cards.map((c) => c.name))}
+      </div>
+    </div>
+
+    ${statsHtml}
+
+    ${copyLink ? `
+    <div style="margin: 1.5rem 0;">
+      <a href="${escapeHtml(copyLink)}" style="display: inline-block; background: var(--accent); color: white; padding: 0.75rem 1.5rem; border-radius: var(--radius); font-weight: 600; font-size: 0.95rem; text-decoration: none;">
+        Copy Deck to Game
+      </a>
+    </div>` : ""}
+
+    <h2>Deck Composition</h2>
+    <table class="deck-table">
+      <thead>
+        <tr>
+          <th>Card</th>
+          <th>Elixir</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cards.map((c) => `
+        <tr>
+          <td>${escapeHtml(c.name)}</td>
+          <td>${c.elixirCost}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+
+  return buildPageShell(
+    { title, description, canonicalUrl, keywords, dateModified: now },
+    { name: title, description, url: canonicalUrl, dateModified: now },
+    body,
+  );
+}
+
 // ── 404 page ────────────────────────────────────────────────────────────────
 
 export function render404Page(message: string): string {

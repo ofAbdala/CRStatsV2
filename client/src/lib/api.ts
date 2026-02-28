@@ -324,6 +324,76 @@ export interface MatchupsResponse {
   matchups: MatchupData[];
 }
 
+// ── Story 2.7: Community & Social Types ──────────────────────────────────────
+
+/** Clan data from /api/clan/:tag (AC1, AC2, AC3) */
+export interface ClanData {
+  clan: {
+    name?: string;
+    tag?: string;
+    description?: string;
+    clanScore?: number;
+    clanWarTrophies?: number;
+    members?: number;
+    requiredTrophies?: number;
+    type?: string;
+    badgeId?: number;
+  };
+  memberList: Array<{
+    name: string;
+    tag: string;
+    role?: string;
+    trophies?: number;
+    lastSeen?: string;
+    arena?: { name?: string };
+    expLevel?: number;
+  }>;
+  topMembers: Array<{
+    name: string;
+    tag: string;
+    trophies?: number;
+    role?: string;
+  }>;
+  warLog: unknown[];
+}
+
+/** Follow list response */
+export interface FollowingResponse {
+  following: Array<{
+    id: string;
+    followerId: string;
+    followingId: string;
+    createdAt?: string;
+  }>;
+  count: number;
+}
+
+/** Deck share data from /api/deck/share/:encoded */
+export interface DeckShareData {
+  cards: Array<{ name: string; id: number; elixirCost: number }>;
+  avgElixir: number;
+  encodedDeck: string;
+  copyLink: string | null;
+}
+
+/** Top decks response from /api/community/top-decks (AC10) */
+export interface TopDecksResponse {
+  arenaId: number | null;
+  period: string;
+  decks: Array<{
+    rank: number;
+    deckHash: string;
+    cards: string[];
+    winRate: number;
+    usageRate: number;
+    threeCrownRate: number;
+    avgElixir: number | null;
+    sampleSize: number;
+    archetype: string | null;
+    votes: number;
+  }>;
+}
+
 const API_BASE = "/api";
 
 type ApiErrorDetail = { path?: string; message?: string; code?: string } | unknown;
@@ -682,6 +752,37 @@ export const api = {
       fetchAPI<RankingResponse>(`/community/player-rankings?locationId=${encodeURIComponent(locationId)}`),
     getClanRankings: (locationId: string = "global") =>
       fetchAPI<RankingResponse>(`/community/clan-rankings?locationId=${encodeURIComponent(locationId)}`),
+    getTopDecks: (options?: { arena?: number; period?: string }) => {
+      const params = new URLSearchParams();
+      if (typeof options?.arena === "number") params.set("arena", String(options.arena));
+      if (options?.period) params.set("period", options.period);
+      const query = params.toString();
+      return fetchAPI<TopDecksResponse>(`/community/top-decks${query ? `?${query}` : ""}`);
+    },
+  },
+
+  clan: {
+    get: (tag: string) => fetchAPI<ClanData>(`/clan/${encodeURIComponent(tag)}`),
+  },
+
+  follow: {
+    follow: (userId: string) =>
+      fetchAPI<{ success: boolean }>(`/follow/${encodeURIComponent(userId)}`, { method: "POST" }),
+    unfollow: (userId: string) =>
+      fetchAPI<{ success: boolean }>(`/follow/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+    getFollowing: () => fetchAPI<FollowingResponse>("/follow/following"),
+    isFollowing: (userId: string) =>
+      fetchAPI<{ isFollowing: boolean }>(`/follow/status/${encodeURIComponent(userId)}`),
+  },
+
+  deckShare: {
+    get: (encodedDeck: string) =>
+      fetchAPI<DeckShareData>(`/deck/share/${encodeURIComponent(encodedDeck)}`),
+    vote: (deckHash: string, battleId: string) =>
+      fetchAPI<{ success: boolean; totalVotes: number }>(`/deck/vote/${encodeURIComponent(deckHash)}`, {
+        method: "POST",
+        body: JSON.stringify({ battleId }),
+      }),
   },
 
   public: {
